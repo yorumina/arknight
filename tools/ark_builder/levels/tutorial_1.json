@@ -1,0 +1,43 @@
+﻿{
+  "name": "tutorial_1",
+  "width": 16,
+  "height": 10,
+  "tiles": [
+    ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"],
+    ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"],
+    ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"],
+    ["empty", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "empty"],
+    ["spawn", "road", "road", "road", "road", "road", "road", "road", "road", "road", "road", "road", "road", "road", "road", "goal"],
+    ["empty", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "empty"],
+    ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"],
+    ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"],
+    ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"],
+    ["empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "empty"]
+  ],
+  "routes": {
+    "main": [
+      {"x": 0, "y": 4, "wait": 0.0},
+      {"x": 1, "y": 4, "wait": 0.0},
+      {"x": 2, "y": 4, "wait": 0.0},
+      {"x": 3, "y": 4, "wait": 0.0},
+      {"x": 4, "y": 4, "wait": 1.0},
+      {"x": 5, "y": 4, "wait": 0.0},
+      {"x": 6, "y": 4, "wait": 0.0},
+      {"x": 7, "y": 4, "wait": 0.0},
+      {"x": 8, "y": 4, "wait": 0.0},
+      {"x": 9, "y": 4, "wait": 0.0},
+      {"x": 10, "y": 4, "wait": 0.0},
+      {"x": 11, "y": 4, "wait": 0.0},
+      {"x": 12, "y": 4, "wait": 0.0},
+      {"x": 13, "y": 4, "wait": 0.0},
+      {"x": 14, "y": 4, "wait": 0.0},
+      {"x": 15, "y": 4, "wait": 0.0}
+    ]
+  },
+  "enemies": {
+    "slug": {"hp": 100.0, "speed": 1.2}
+  },
+  "waves": [
+    {"enemy": "slug", "route": "main", "count": 8, "start": 0.0, "interval": 1.5}
+  ]
+}
