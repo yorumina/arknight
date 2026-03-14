@@ -1,0 +1,9 @@
+{
+  "id": "暴徒",
+  "enemy_id": "17",
+  "hp": 1700.0,
+  "speed": 1.1,
+  "damage": 350.0,
+  "attackIntervalMs": 2200.0,
+  "canAttackOperator": true
+}

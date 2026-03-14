@@ -1,0 +1,9 @@
+{
+  "id": "拾荒者",
+  "enemy_id": "21",
+  "hp": 5000.0,
+  "speed": 0.8,
+  "damage": 500.0,
+  "attackIntervalMs": 2800.0,
+  "canAttackOperator": false
+}

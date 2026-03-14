@@ -1,0 +1,17 @@
+{
+  "id": "Vanguard",
+  "name": "Vanguard",
+  "class": "vanguard",
+  "cost": 8,
+  "hp": 1500.0,
+  "damage": 400.0,
+  "def": 300.0,
+  "attackIntervalMs": 1050.0,
+  "blockCount": 1,
+  "magicResistance": 0,
+  "deployType": "ground",
+  "isVanguard": true,
+  "maxSp": 0.0,
+  "initialSp": 0.0,
+  "skillDuration": 0.0
+}

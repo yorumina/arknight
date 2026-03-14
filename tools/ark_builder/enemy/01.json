@@ -1,0 +1,9 @@
+{
+  "id": "獵狗",
+  "enemy_id": "01",
+  "hp": 820.0,
+  "speed": 1.9,
+  "damage": 220.0,
+  "attackIntervalMs": 1500.0,
+  "canAttackOperator": true
+}

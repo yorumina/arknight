@@ -1,0 +1,9 @@
+{
+  "id": "獵狗pro",
+  "enemy_id": "02",
+  "hp": 1700.0,
+  "speed": 1.9,
+  "damage": 400.0,
+  "attackIntervalMs": 1500.0,
+  "canAttackOperator": true
+}

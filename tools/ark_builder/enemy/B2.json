@@ -1,0 +1,9 @@
+{
+  "id": "源石蟲·α",
+  "enemy_id": "B2",
+  "hp": 1050.0,
+  "speed": 1.0,
+  "damage": 250.0,
+  "attackIntervalMs": 2000.0,
+  "canAttackOperator": true
+}
