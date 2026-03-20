@@ -21,3 +21,54 @@
 - 113820028 張浤奕
 
 > 專案開發階段與完整計畫可參考 [Proposal.md](Proposal.md) 了解時程分配細節。
+
+## 如何執行 Demo
+
+1. 下載專案（含 submodule）
+```bash
+git clone --recurse-submodules <your-repo-url>
+cd Arknight
+```
+如果你已經 clone 過，請補抓 submodule：
+```bash
+git submodule update --init --recursive
+```
+
+2. 準備環境
+- CMake 3.16+
+- 可用 C++17 編譯器（MSVC / Clang / GCC）
+
+3. 建置 Demo
+```bash
+cmake -S PTSD -B PTSD/build -DCMAKE_BUILD_TYPE=Debug
+cmake --build PTSD/build --target Example
+```
+
+4. 執行 Demo
+- Linux / macOS:
+```bash
+./PTSD/build/Example
+```
+- Windows:
+```powershell
+.\PTSD\build\Example.exe
+```
+
+## Demo 操作
+- `滑鼠左鍵`：部署幹員
+- `1`：選 Vanguard（只能放置於地面）
+- `2`：選 Sniper（只能放置於高台）
+- `SPACE`：開始關卡
+- `R`：重開 Demo
+- `ESC`：離開
+
+## 關卡來源
+Demo 會優先載入下列關卡：
+1. `tools/ark_builder/levels/test.json`
+2. `tools/ark_builder/levels/tutorial_1.json`
+
+可用 `ArknightBuilder` 編輯與驗證關卡：
+```bash
+cmake --build PTSD/build --target ArknightBuilder
+./PTSD/build/ArknightBuilder validate tools/ark_builder/levels/tutorial_1.json
+```
