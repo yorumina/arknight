@@ -4,6 +4,14 @@ project(Arknight)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Disable SDL2_image heavy dependencies to prevent git fetch hangs
+set(SDL2IMAGE_WEBP OFF CACHE BOOL "" FORCE)
+set(SDL2IMAGE_AVIF OFF CACHE BOOL "" FORCE)
+set(SDL2IMAGE_TIF OFF CACHE BOOL "" FORCE)
+
+# Use system freetype instead of vendored (empty git submodule)
+set(SDL2TTF_VENDORED OFF CACHE BOOL "" FORCE)
+
 # Add the PTSD submodule
 add_subdirectory(PTSD)
 

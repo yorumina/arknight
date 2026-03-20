@@ -48,6 +48,21 @@ void App::Start() {
     InitializeStage();
     ResetDemo();
     m_CurrentState = State::UPDATE;
+
+    m_ModelVanguard = std::make_shared<Util::Animation>(
+        std::vector<std::string>{
+            ASSETS_DIR "/sprites/cat/cat-0.bmp",
+            ASSETS_DIR "/sprites/cat/cat-1.bmp",
+            ASSETS_DIR "/sprites/cat/cat-2.bmp",
+            ASSETS_DIR "/sprites/cat/cat-3.bmp",
+            ASSETS_DIR "/sprites/cat/cat-4.bmp",
+            ASSETS_DIR "/sprites/cat/cat-5.bmp",
+            ASSETS_DIR "/sprites/cat/cat-6.bmp",
+            ASSETS_DIR "/sprites/cat/cat-7.bmp",
+        }, true, 100, true, 0);
+    // You can swap this for any other model available
+    m_ModelGuard = std::make_shared<Util::Image>(ASSETS_DIR "/sprites/giraffe.png");
+    m_ModelEnemy = std::make_shared<Util::Image>(ASSETS_DIR "/sprites/giraffe.png");
 }
 
 void App::Update() {
@@ -76,16 +91,11 @@ void App::Update() {
     // GetCursorPosition() returns PTSD coordinates:
     //   x = pixels from screen center (right = positive)
     //   y = pixels from screen center (up = positive)
-    // ToScreenPosition does: screenX = ptsdX - ptsdY + W/2
-    //                         screenY = H/2 - (ptsdX + ptsdY)*0.5
-    // So the inverse isometric unproject:  rawX = isoScreenX-from-center, rawY = isoScreenY-from-center-up
-    //   ptsdX = (rawX + 2*rawY) / 2
-    //   ptsdY = (2*rawY - rawX) / 2
+    // ToScreenPosition does: screenX = ptsdX + W/2
+    //                         screenY = H/2 - ptsdY
+    // So the inverse unproject: ptsdX = rawX, ptsdY = rawY
     const auto raw = Util::Input::GetCursorPosition();
-    glm::vec2 ptsdCursor{
-        (raw.x + 2.0F * raw.y) * 0.5F,
-        (2.0F * raw.y - raw.x) * 0.5F
-    };
+    glm::vec2 ptsdCursor{ raw.x, raw.y };
 
     if (!m_GameOver && !m_MissionClear) {
         if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_RB) && !m_IsDeploying) {
@@ -103,6 +113,10 @@ void App::Update() {
                         // Release blocked enemies
                         for (auto& e : m_Enemies) {
                             if (e.blockedByOperatorId == it->id) e.blockedByOperatorId = -1;
+                        }
+                        // Cleanup animation instance
+                        if (static_cast<std::size_t>(it->typeIndex) < m_OperatorAnims.size()) {
+                            m_OperatorAnims[it->typeIndex].activeInstances.erase(it->id);
                         }
                         m_Operators.erase(it);
                         break;
@@ -224,6 +238,7 @@ void App::ResetDemo() {
     m_Enemies.clear();
     m_Operators.clear();
     m_Beams.clear();
+    for (auto& pack : m_OperatorAnims) pack.activeInstances.clear();
 }
 
 void App::InitializeStage() {
@@ -237,6 +252,72 @@ void App::InitializeStage() {
         };
     }
     if (!LoadStageFromJsonModule()) BuildFallbackStage();
+    LoadOperatorAnimations();
+}
+
+void App::LoadOperatorAnimations() {
+    m_OperatorAnims.clear();
+    m_OperatorAnims.resize(m_OperatorTemplates.size());
+
+    // Helper: load a sequence of PNG frames from a directory as an Animation
+    auto loadAnimFromDir = [](const std::string& dirPath, bool loop) -> std::shared_ptr<Util::Animation> {
+        if (!std::filesystem::exists(dirPath) || !std::filesystem::is_directory(dirPath)) return nullptr;
+        std::vector<std::string> frames;
+        for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".png") {
+                frames.push_back(entry.path().string());
+            }
+        }
+        if (frames.empty()) return nullptr;
+        std::sort(frames.begin(), frames.end());
+        return std::make_shared<Util::Animation>(frames, true, 41, loop, 0); // ~24 FPS
+    };
+
+    // Helper: case-insensitive substring match for directory names
+    auto toLower = [](std::string s) {
+        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+        return s;
+    };
+
+    // For each operator, scan its sprite folder for animation directories
+    for (std::size_t i = 0; i < m_OperatorTemplates.size(); ++i) {
+        const auto& op = m_OperatorTemplates[i];
+        std::string opSpriteDir = std::string(ASSETS_DIR) + "/sprites/operators/" + op.id;
+        
+        if (!std::filesystem::exists(opSpriteDir)) continue;
+
+        // Scan all subdirectories and match them by keywords in their name
+        for (const auto& entry : std::filesystem::directory_iterator(opSpriteDir)) {
+            if (!entry.is_directory()) continue;
+            std::string dirName = toLower(entry.path().filename().string());
+            
+            // Match by keyword: order matters (check "skillloop"/"skill" before "start")
+            if (dirName.find("default") != std::string::npos) {
+                if (!m_OperatorAnims[i].def)
+                    m_OperatorAnims[i].def = loadAnimFromDir(entry.path().string(), true);
+            } else if (dirName.find("start") != std::string::npos 
+                       && dirName.find("skill") == std::string::npos) {
+                if (!m_OperatorAnims[i].start)
+                    m_OperatorAnims[i].start = loadAnimFromDir(entry.path().string(), false);
+            } else if (dirName.find("attack") != std::string::npos) {
+                // Prefer "attackloop" or "attack" over "attackbegin"/"attackend"
+                if (dirName.find("begin") != std::string::npos || dirName.find("end") != std::string::npos) {
+                    // Skip begin/end variants – the loop/main clip is far more useful
+                    if (!m_OperatorAnims[i].attack)
+                        m_OperatorAnims[i].attack = loadAnimFromDir(entry.path().string(), false);
+                } else {
+                    m_OperatorAnims[i].attack = loadAnimFromDir(entry.path().string(), false);
+                }
+            } else if (dirName.find("skill") != std::string::npos) {
+                // "skillloop" or "skill" (prefer loop for the main skill anim)
+                if (dirName.find("loop") != std::string::npos || !m_OperatorAnims[i].skill)
+                    m_OperatorAnims[i].skill = loadAnimFromDir(entry.path().string(), true);
+            } else if (dirName.find("die") != std::string::npos) {
+                if (!m_OperatorAnims[i].die)
+                    m_OperatorAnims[i].die = loadAnimFromDir(entry.path().string(), false);
+            }
+        }
+    }
 }
 
 bool App::LoadStageFromJsonModule() {
@@ -551,8 +632,59 @@ void App::UpdateOperators(float dtMs) {
     const float dtSec = dtMs / 1000.0F;
 
     for (auto& op : m_Operators) {
-        if (op.hp <= 0) continue;
+        if (op.hp <= 0) {
+            if (op.animState != Ark::Operator::AnimState::DIE) {
+                op.animState = Ark::Operator::AnimState::DIE;
+                if (m_OperatorAnims[op.typeIndex].die) {
+                    m_OperatorAnims[op.typeIndex].activeInstances[op.id] = std::make_shared<Util::Animation>(
+                        m_OperatorAnims[op.typeIndex].die->GetFrames(), true, 41, false, 0);
+                }
+            }
+            // Keep updating death animation until gone
+            auto& inst = m_OperatorAnims[op.typeIndex].activeInstances[op.id];
+            if (inst) inst->Update();
+            continue;
+        }
+
         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
+        auto& pack = m_OperatorAnims[op.typeIndex];
+
+        // Initialize state if missing
+        if (pack.activeInstances.find(op.id) == pack.activeInstances.end()) {
+            if (pack.start) {
+                op.animState = Ark::Operator::AnimState::START;
+                pack.activeInstances[op.id] = std::make_shared<Util::Animation>(pack.start->GetFrames(), true, 41, false, 0);
+            } else if (pack.def) {
+                op.animState = Ark::Operator::AnimState::DEFAULT;
+                pack.activeInstances[op.id] = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+            } else {
+                op.animState = Ark::Operator::AnimState::DEFAULT;
+            }
+        }
+
+        auto& animInst = pack.activeInstances[op.id];
+        
+        // State transitions
+        if (animInst) {
+            if (op.animState == Ark::Operator::AnimState::START && animInst->GetState() == Util::Animation::State::ENDED) {
+                op.animState = Ark::Operator::AnimState::DEFAULT;
+                if (pack.def) animInst = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+            } else if (op.animState == Ark::Operator::AnimState::ATTACK && animInst->GetState() == Util::Animation::State::ENDED) {
+                op.animState = Ark::Operator::AnimState::DEFAULT;
+                if (pack.def) animInst = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+            }
+            
+            // Skill state tracking
+            if (op.skillActive && op.animState != Ark::Operator::AnimState::SKILL && pack.skill) {
+                op.animState = Ark::Operator::AnimState::SKILL;
+                animInst = std::make_shared<Util::Animation>(pack.skill->GetFrames(), true, 41, true, 0);
+            } else if (!op.skillActive && op.animState == Ark::Operator::AnimState::SKILL) {
+                op.animState = Ark::Operator::AnimState::DEFAULT;
+                if (pack.def) animInst = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+            }
+
+            animInst->Update();
+        }
 
         // Myrtle talent: all vanguards regen 33 HP/s
         if (myrtleOnField && opType.isVanguard)
@@ -564,6 +696,10 @@ void App::UpdateOperators(float dtMs) {
             if (op.skillTimerMs <= 0.0F) { op.skillActive = false; op.sp = 0; }
         } else if (opType.maxSp > 0) {
             op.sp = std::min(opType.maxSp, op.sp + 1.0F * dtSec);
+            if (op.sp >= opType.maxSp && (opType.name == "Bagpipe" || opType.name == "風笛")) {
+                op.skillActive = true;
+                op.skillTimerMs = opType.skillDuration;
+            }
         }
 
         op.cooldownMs = std::max(0.0F, op.cooldownMs - dtMs);
@@ -644,6 +780,15 @@ void App::UpdateOperators(float dtMs) {
         }
         
         op.cooldownMs = opType.attackIntervalMs;
+        
+        // Trigger attack animation wrapper
+        if (op.animState != Ark::Operator::AnimState::SKILL) { // Skill animations override attack
+            op.animState = Ark::Operator::AnimState::ATTACK;
+            auto& pack2 = m_OperatorAnims[op.typeIndex];
+            if (pack2.attack) {
+                pack2.activeInstances[op.id] = std::make_shared<Util::Animation>(pack2.attack->GetFrames(), true, 41, false, 0);
+            }
+        }
     }
 }
 
@@ -669,12 +814,12 @@ void App::DrawScene(const glm::vec2& cursor) {
 
     draw->AddRectFilled({0,0},{W,H}, COLOR_BG);
 
-    // Board background quad
+    // Board background
     ImVec2 b1 = ToScreenPosition({layout.topLeftX, layout.topLeftY});
-    ImVec2 b2 = ToScreenPosition({layout.topLeftX + m_StageWidth  * layout.cellSize, layout.topLeftY});
     ImVec2 b3 = ToScreenPosition({layout.topLeftX + m_StageWidth  * layout.cellSize, layout.topLeftY - m_StageHeight * layout.cellSize});
-    ImVec2 b4 = ToScreenPosition({layout.topLeftX, layout.topLeftY - m_StageHeight * layout.cellSize});
-    draw->AddQuadFilled(b1, b2, b3, b4, COLOR_BOARD);
+    
+    // Slight padding around Board
+    draw->AddRectFilled({b1.x - 10, b1.y - 10}, {b3.x + 10, b3.y + 10}, COLOR_BOARD, layout.cellSize * 0.2F);
 
     DrawGrid();
     DrawBeams();
@@ -710,22 +855,29 @@ void App::DrawGrid() {
             ImVec2 p3 = ToScreenPosition({r,b});
             ImVec2 p4 = ToScreenPosition({l,b});
 
-            // Highground: draw a slight elevated box to give height illusion
+            // Nice rounded tiles for aesthetic look
+            float padding = layout.cellSize * 0.05F; // space between tiles
+            ImVec2 topL = {p1.x + padding, p1.y + padding};
+            ImVec2 botR = {p3.x - padding, p3.y - padding};
+            float round = layout.cellSize * 0.15F;
+
+            // Highground: draw a slight elevated box with a drop shadow illusion
             if (tile == TileType::HIGHGROUND) {
                 float hOff = layout.cellSize * 0.15F;
-                ImVec2 q1 = {p1.x, p1.y - hOff};
-                ImVec2 q2 = {p2.x, p2.y - hOff};
-                ImVec2 q3 = {p3.x, p3.y - hOff};
-                ImVec2 q4 = {p4.x, p4.y - hOff};
-                // Side faces (darker)
-                ImU32 sideColor = IM_COL32(80, 64, 38, 255);
-                draw->AddQuadFilled(p1, q1, q2, p2, sideColor); // front-left
-                draw->AddQuadFilled(p2, q2, q3, p3, IM_COL32(60,48,28,255)); // front-right
-                draw->AddQuadFilled(q1, q2, q3, q4, COLOR_HIGHGROUND); // top
-                draw->AddQuad(q1, q2, q3, q4, COLOR_GRID, 1.5F);
+                ImVec2 dropL = {topL.x, topL.y + hOff};
+                ImVec2 dropR = {botR.x, botR.y + hOff};
+                
+                // Shadow / Side
+                draw->AddRectFilled(dropL, dropR, IM_COL32(40, 32, 19, 255), round);
+                // Top face
+                draw->AddRectFilled(topL, botR, COLOR_HIGHGROUND, round);
+                
+                // Highlight border for nice art style
+                draw->AddRect(topL, botR, IM_COL32(255,255,255,30), round, 0, 1.5F);
             } else {
-                draw->AddQuadFilled(p1, p2, p3, p4, c);
-                draw->AddQuad(p1, p2, p3, p4, COLOR_GRID, 1.5F);
+                draw->AddRectFilled(topL, botR, c, round);
+                // Light border
+                draw->AddRect(topL, botR, COLOR_GRID, round, 0, 1.0F);
             }
         }
     }
@@ -775,13 +927,31 @@ void App::DrawOperators(const BoardLayout& layout) {
             draw->AddLine(p1b, p1, IM_COL32(80,64,38,200), 2.0F);
             draw->AddLine(p2b, p2, IM_COL32(80,64,38,200), 2.0F);
         }
-        draw->AddQuadFilled(p1, p2, p3, p4, opType.color);
-        draw->AddQuad(p1, p2, p3, p4, IM_COL32(255,255,255,60), 1.5F);
 
-        // Label
-        const std::string sym(1, opType.name[0]);
-        const auto ts = ImGui::CalcTextSize(sym.c_str());
-        draw->AddText({center.x - ts.x*0.5F, center.y - ts.y*0.5F}, IM_COL32(12,14,19,255), sym.c_str());
+        // Get per-operator animation texture
+        GLuint tex = 0;
+        if (static_cast<std::size_t>(op.typeIndex) < m_OperatorAnims.size()) {
+            auto& pack = m_OperatorAnims[op.typeIndex];
+            auto it = pack.activeInstances.find(op.id);
+            if (it != pack.activeInstances.end() && it->second) {
+                tex = it->second->GetTextureId();
+            }
+        }
+
+        if (tex != 0) {
+            float imgS = layout.cellSize * 0.8F;
+            draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)), 
+                           {center.x - imgS, center.y - imgS}, 
+                           {center.x + imgS, center.y + imgS});
+        } else {
+            draw->AddQuadFilled(p1, p2, p3, p4, opType.color);
+            draw->AddQuad(p1, p2, p3, p4, IM_COL32(255,255,255,60), 1.5F);
+
+            // Label
+            const std::string sym(1, opType.name[0]);
+            const auto ts = ImGui::CalcTextSize(sym.c_str());
+            draw->AddText({center.x - ts.x*0.5F, center.y - ts.y*0.5F}, IM_COL32(12,14,19,255), sym.c_str());
+        }
 
         // Direction arrow
         glm::vec2 dirOff = glm::vec2(op.direction.x, op.direction.y) * 0.5F;
@@ -821,8 +991,15 @@ void App::DrawEnemies(const BoardLayout& layout) {
         if (!e.alive) continue;
         const auto c = ToScreenPosition(ToPtsdPosition(e.boardPos));
         const float r = layout.cellSize * 0.20F;
-        draw->AddCircleFilled(c, r, e.color, 28);
-        draw->AddCircle(c, r, IM_COL32(255,255,255,100), 28, 1.0F);
+        if (m_ModelEnemy && m_ModelEnemy->GetTextureId() != 0) {
+            float imgR = layout.cellSize * 0.4F;
+            draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_ModelEnemy->GetTextureId())),
+                           {c.x - imgR, c.y - imgR},
+                           {c.x + imgR, c.y + imgR});
+        } else {
+            draw->AddCircleFilled(c, r, e.color, 28);
+            draw->AddCircle(c, r, IM_COL32(255,255,255,100), 28, 1.0F);
+        }
 
         const float hpR    = e.maxHp > 0 ? std::clamp(e.hp/e.maxHp, 0.0F, 1.0F) : 0.0F;
         const float barHW  = layout.cellSize * 0.24F;
@@ -845,8 +1022,10 @@ void App::DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const Bo
         float l = layout.topLeftX + hoverCell->x * layout.cellSize;
         float t = layout.topLeftY - hoverCell->y * layout.cellSize;
         float r = l + layout.cellSize, b = t - layout.cellSize;
-        draw->AddQuadFilled(ToScreenPosition({l,t}),ToScreenPosition({r,t}),
-                            ToScreenPosition({r,b}),ToScreenPosition({l,b}), pv);
+        
+        ImVec2 p1 = ToScreenPosition({l,t});
+        ImVec2 p3 = ToScreenPosition({r,b});
+        draw->AddRectFilled(p1, p3, pv, layout.cellSize * 0.15F);
     }
 
     if (m_IsDeploying) {
@@ -867,10 +1046,11 @@ void App::DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const Bo
             float l = layout.topLeftX + tc.x * layout.cellSize;
             float tp= layout.topLeftY - tc.y * layout.cellSize;
             float r = l + layout.cellSize, b = tp - layout.cellSize;
-            draw->AddQuadFilled(ToScreenPosition({l,tp}),ToScreenPosition({r,tp}),
-                                ToScreenPosition({r,b}),ToScreenPosition({l,b}), IM_COL32(255,120,120,80));
-            draw->AddQuad(ToScreenPosition({l,tp}),ToScreenPosition({r,tp}),
-                          ToScreenPosition({r,b}),ToScreenPosition({l,b}), IM_COL32(255,150,150,180), 1.0F);
+
+            ImVec2 p1 = ToScreenPosition({l,tp});
+            ImVec2 p3 = ToScreenPosition({r,b});
+            draw->AddRectFilled(p1, p3, IM_COL32(255,120,120,80), layout.cellSize*0.1F);
+            draw->AddRect(p1, p3, IM_COL32(255,150,150,180), layout.cellSize*0.1F, 0, 1.0F);
         }
         glm::vec2 dOff = glm::vec2(m_DeployingDirection) * 0.5F;
         draw->AddLine(ToScreenPosition(ToPtsdPosition(ToBoardCenter(m_DeployingCell))),
@@ -1032,14 +1212,14 @@ glm::vec2 App::ToPtsdPosition(const glm::vec2& boardPos) const {
             layout.topLeftY - boardPos.y * layout.cellSize};
 }
 
-// Standard isometric projection (60° top-down):
-//   screenX = (ptsdX - ptsdY) + W/2
-//   screenY = H/2 - (ptsdX + ptsdY) * 0.5
+// Standard orthogonal 2D top-down:
+//   screenX = ptsdX + W/2
+//   screenY = H/2 - ptsdY
 ImVec2 App::ToScreenPosition(const glm::vec2& p) const {
     const float W = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
     const float H = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
-    return { (p.x - p.y) + W * 0.5F,
-              H * 0.5F - (p.x + p.y) * 0.5F };
+    return { p.x + W * 0.5F,
+             H * 0.5F - p.y };
 }
 
 Ark::BoardLayout App::GetBoardLayout() const {
@@ -1053,13 +1233,11 @@ Ark::BoardLayout App::GetBoardLayout() const {
     const float cols = static_cast<float>(std::max(1, m_StageWidth));
     const float rows = static_cast<float>(std::max(1, m_StageHeight));
 
-    // For isometric, actual screen footprint is wider and shorter, so scale accordingly
-    // Each tile is a diamond with diagonal 1:0.5 ratio ; screen width per tile ~ cellSize * sqrt(2)
-    // We choose cellSize such that the board fits:
-    const float cellSizeRaw = std::floor(std::min(availW / (cols + rows), availH / (cols + rows) * 2.0F));
+    // For orthogonal, the board is simply cols x rows in size.
+    const float cellSizeRaw = std::floor(std::min(availW / cols, availH / rows));
 
     BoardLayout layout;
-    layout.cellSize = std::clamp(cellSizeRaw, 24.0F, 64.0F);
+    layout.cellSize = std::clamp(cellSizeRaw, 24.0F, 96.0F);
 
     // Board center in ptsd space is at origin. Board spans from col 0..cols, row 0..rows (board space)
     // Translated to ptsd: topLeft board corner at (topLeftX, topLeftY)

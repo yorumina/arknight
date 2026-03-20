@@ -3,11 +3,14 @@
 
 #include "pch.hpp" // IWYU pragma: export
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "Ark/ArkTypes.hpp"
+#include "Util/Animation.hpp"
+#include "Util/Image.hpp"
 
 class App {
 public:
@@ -116,6 +119,24 @@ private:
     std::vector<Ark::Enemy>      m_Enemies;
     std::vector<Ark::Operator>   m_Operators;
     std::vector<Ark::AttackBeam> m_Beams;
+
+    // ── Models ─────────────────────────────────────────────────────
+    struct OperatorAnimPack {
+        std::shared_ptr<Util::Animation> start;
+        std::shared_ptr<Util::Animation> def;
+        std::shared_ptr<Util::Animation> attack;
+        std::shared_ptr<Util::Animation> skill;
+        std::shared_ptr<Util::Animation> die;
+        // Tracking active animations for currently deployed operators
+        std::map<int, std::shared_ptr<Util::Animation>> activeInstances; 
+    };
+    std::vector<OperatorAnimPack> m_OperatorAnims;
+
+    std::shared_ptr<Util::Animation> m_ModelVanguard;
+    std::shared_ptr<Util::Image>     m_ModelGuard;
+    std::shared_ptr<Util::Image>     m_ModelEnemy;
+
+    void LoadOperatorAnimations();
 };
 
 #endif

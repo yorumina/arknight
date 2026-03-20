@@ -70,6 +70,9 @@ struct Operator {
     float sp = 0;
     bool skillActive = false;
     float skillTimerMs = 0;
+
+    enum class AnimState { START, DEFAULT, ATTACK, SKILL, DIE };
+    AnimState animState = AnimState::START;
 };
 
 // ── Misc ──────────────────────────────────────────────────────
