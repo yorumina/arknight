@@ -20,18 +20,18 @@ git submodule update --init --recursive
 
 3. 建置 Demo
 ```bash
-cmake -S PTSD -B PTSD/build -DCMAKE_BUILD_TYPE=Debug
-cmake --build PTSD/build --target Example
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --target Arknight
 ```
 
 4. 執行 Demo
 - Windows:
 ```powershell
-.\PTSD\build\Example.exe
+.\build\Arknight.exe
 ```
 - Linux/macOS:
 ```bash
-./PTSD/build/Example
+./build/Arknight
 ```
 
 ## Demo 操作
@@ -49,6 +49,6 @@ Demo 會優先載入下列關卡：
 
 可用 `ArknightBuilder` 編輯與驗證關卡：
 ```bash
-cmake --build PTSD/build --target ArknightBuilder
-PTSD/build/ArknightBuilder validate tools/ark_builder/levels/test.json
+cmake --build build --target ArknightBuilder
+build/ArknightBuilder validate tools/ark_builder/levels/test.json
 ```

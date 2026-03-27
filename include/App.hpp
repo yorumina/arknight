@@ -12,6 +12,10 @@
 #include "Util/Animation.hpp"
 #include "Util/Image.hpp"
 
+// 60-degree top-down oblique view: Y foreshortening factor
+// Used by Camera.cpp (projection) and App.cpp (cursor inverse mapping)
+constexpr float PERSPECTIVE_Y_SCALE = 0.5F; // cos(60°)
+
 class App {
 public:
     enum class State { START, UPDATE, END };
@@ -37,6 +41,7 @@ private:
     void UpdateEnemies(float deltaTimeSec);
     void UpdateOperators(float deltaTimeMs);
     void UpdateBeams(float deltaTimeMs);
+    void UpdateRedeployCooldowns(float deltaTimeMs);
     void SpawnEnemy(const Ark::WavePlan& plan);
     void CleanupDefeatedEnemies();
 
@@ -60,6 +65,10 @@ private:
     bool IsDeployableTile(Ark::TileType tile, Ark::DeployType deployType) const;
     int  FindRouteIndex(const std::string& routeId) const;
     int  FindEnemyTemplateIndex(const std::string& enemyId) const;
+
+    // ── Operator availability ─────────────────────────────────────
+    bool IsOperatorTypeOnField(int typeIndex) const;
+    bool IsOperatorTypeAvailable(int typeIndex) const;
 
     std::optional<glm::ivec2> ToCell(const glm::vec2& ptsdPos) const;
     glm::vec2  ToBoardCenter(const glm::ivec2& cell) const;
@@ -119,6 +128,10 @@ private:
     std::vector<Ark::Enemy>      m_Enemies;
     std::vector<Ark::Operator>   m_Operators;
     std::vector<Ark::AttackBeam> m_Beams;
+
+    // ── Redeploy cooldown (per operator type index, in ms) ────────
+    // After retreat or death, 90 seconds before redeployment
+    std::map<int, float> m_OperatorRedeployCooldownMs;
 
     // ── Models ─────────────────────────────────────────────────────
     struct OperatorAnimPack {

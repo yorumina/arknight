@@ -25,6 +25,11 @@ set(ARKNIGHT_SRC
     src/GiraffeText.cpp
     src/main.cpp
     src/Ark/StageLoader.cpp
+    src/Ark/Camera.cpp
+    src/Ark/EnemySystem.cpp
+    src/Ark/OperatorSystem.cpp
+    src/Ark/Renderer.cpp
+    src/Ark/GameLogic.cpp
 )
 
 add_executable(Arknight
