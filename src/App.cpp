@@ -1,13 +1,13 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// App.cpp  – Arknights clone   (main lifecycle & input handling)
+// ?????????????????????????????????????????????????????????????????????????????
+// App.cpp  ??Arknights clone   (main lifecycle & input handling)
 //
 // Implementation is split across multiple files:
-//   Camera.cpp        – Projection & coordinate mapping
-//   EnemySystem.cpp   – Enemy spawning, movement & AI
-//   OperatorSystem.cpp– Operator combat, skills & deployment helpers
-//   Renderer.cpp      – All drawing / rendering code
-//   GameLogic.cpp     – Wave management, game state, stage init
-// ─────────────────────────────────────────────────────────────────────────────
+//   Camera.cpp        ??Projection & coordinate mapping
+//   EnemySystem.cpp   ??Enemy spawning, movement & AI
+//   OperatorSystem.cpp??Operator combat, skills & deployment helpers
+//   Renderer.cpp      ??All drawing / rendering code
+//   GameLogic.cpp     ??Wave management, game state, stage init
+// ?????????????????????????????????????????????????????????????????????????????
 #include "App.hpp"
 
 #include <algorithm>
@@ -26,9 +26,9 @@ constexpr int   MAX_OPS          = 12;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
 } // namespace
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 // LIFECYCLE
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 void App::Start() {
     InitializeStage();
     ResetDemo();
@@ -56,6 +56,7 @@ void App::Update() {
         return;
     }
     if (Util::Input::IsKeyDown(Util::Keycode::R)) ResetDemo();
+    const float dt = std::clamp(Util::Time::GetDeltaTimeMs(), 0.0F, 100.0F);
 
     // Operator selection (hotkeys)
     for (int i = 0; i < static_cast<int>(m_OperatorTemplates.size()); ++i) {
@@ -73,14 +74,10 @@ void App::Update() {
         StartWave();
     }
 
-    // GetCursorPosition() returns PTSD coordinates:
-    //   x = pixels from screen center (right = positive)
-    //   y = pixels from screen center (up = positive)
-    // ToScreenPosition does: screenX = ptsdX + W/2
-    //                        screenY = H/2 - ptsdY * PERSPECTIVE_Y_SCALE
-    // Inverse: ptsdX = rawX, ptsdY = rawY / PERSPECTIVE_Y_SCALE
     const auto raw = Util::Input::GetCursorPosition();
-    glm::vec2 ptsdCursor{ raw.x, raw.y / PERSPECTIVE_Y_SCALE };
+    const glm::vec2 rawCursor{raw.x, raw.y};
+    UpdateCameraControls(dt, rawCursor);
+    const glm::vec2 ptsdCursor = RawCursorToPtsd(rawCursor);
 
     if (!m_GameOver && !m_MissionClear) {
         if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_RB) && !m_IsDeploying) {
@@ -90,7 +87,7 @@ void App::Update() {
                     if (it->cell == *cell) {
                         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(it->typeIndex));
                         // Retreat refund
-                        if (opType.name == "Bagpipe" || opType.name == "風笛") {
+                        if (opType.name == "Bagpipe" || opType.name == "憸函?") {
                             m_DP = std::min(m_MaxDP, m_DP + static_cast<float>(opType.cost)); 
                         } else {
                             m_DP = std::min(m_MaxDP, m_DP + std::floor(static_cast<float>(opType.cost) / 2.0F)); 
@@ -126,7 +123,7 @@ void App::Update() {
                                 op.skillActive  = true;
                                 op.skillTimerMs = opType.skillDuration;
                                 op.sp           = 0;
-                                if (opType.name == "Myrtle" || opType.name == "桃金娘") {
+                                if (opType.name == "Myrtle" || opType.name == "獢?憡?) {
                                     m_DP = std::min(m_MaxDP, m_DP + 6.0F);
                                 }
                                 handled = true;
@@ -176,12 +173,12 @@ void App::Update() {
                 
                 // Talent: Bagpipe Vanguard SP Buff
                 bool hasBagpipe = std::any_of(m_OperatorTemplates.begin(), m_OperatorTemplates.end(),
-                    [](const OperatorTemplate& t) { return t.name == "Bagpipe" || t.name == "風笛"; });
+                    [](const OperatorTemplate& t) { return t.name == "Bagpipe" || t.name == "憸函?"; });
                 
                 if (hasBagpipe && opType.isVanguard) {
                     newOp.sp += 10.0F;
                 }
-                if (opType.name == "Bagpipe" || opType.name == "風笛") {
+                if (opType.name == "Bagpipe" || opType.name == "憸函?") {
                     newOp.sp += 4.0F; // Bagpipe deployment SP bonus
                 }
                 newOp.sp = std::min(newOp.sp, opType.maxSp);
@@ -192,7 +189,6 @@ void App::Update() {
         }
     }
 
-    const float dt = std::clamp(Util::Time::GetDeltaTimeMs(), 0.0F, 100.0F);
     UpdateGame(dt);
     DrawScene(ptsdCursor);
 }

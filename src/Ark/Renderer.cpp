@@ -1,6 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Renderer.cpp  –  All drawing / rendering code
-// ─────────────────────────────────────────────────────────────────────────────
+// Renderer.cpp - All drawing / rendering code
 #include "App.hpp"
 #include "config.hpp"
 
@@ -10,7 +8,7 @@
 
 using namespace Ark;
 
-// ─── colour constants ────────────────────────────────────────────────────────
+// Color constants
 namespace {
 constexpr ImU32 COLOR_BG        = IM_COL32( 16,  19,  26, 255);
 constexpr ImU32 COLOR_BOARD     = IM_COL32( 28,  34,  46, 255);
@@ -28,18 +26,24 @@ constexpr int   MAX_OPS         = 12;
 constexpr float BEAM_DURATION_MS = 120.0F;
 } // namespace
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DRAW
-// ─────────────────────────────────────────────────────────────────────────────
+// Draw
 void App::DrawScene(const glm::vec2& cursor) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const float W = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
     const float H = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
     const auto layout = GetBoardLayout();
+    const bool hasStageBackground = (m_StageBackground && m_StageBackground->GetTextureId() != 0);
 
-    draw->AddRectFilled({0,0},{W,H}, COLOR_BG);
+    if (hasStageBackground) {
+        const int alpha = static_cast<int>(255.0F * std::clamp(m_StageBackgroundAlpha, 0.0F, 1.0F));
+        draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_StageBackground->GetTextureId())),
+                       {0, 0}, {W, H}, {0, 0}, {1, 1}, IM_COL32(255, 255, 255, alpha));
+        draw->AddRectFilled({0,0},{W,H}, IM_COL32(0, 0, 0, 20));
+    } else {
+        draw->AddRectFilled({0,0},{W,H}, COLOR_BG);
+    }
 
-    // Board background – four corners through perspective transform
+    // Board background ??four corners through perspective transform
     float bL = layout.topLeftX - 10.0F / layout.cellSize;
     float bR = layout.topLeftX + m_StageWidth * layout.cellSize + 10.0F / layout.cellSize;
     float bT = layout.topLeftY + 10.0F / layout.cellSize;
@@ -48,7 +52,11 @@ void App::DrawScene(const glm::vec2& cursor) {
     ImVec2 bp2 = ToScreenPosition({bR, bT});
     ImVec2 bp3 = ToScreenPosition({bR, bB});
     ImVec2 bp4 = ToScreenPosition({bL, bB});
-    draw->AddQuadFilled(bp1, bp2, bp3, bp4, COLOR_BOARD);
+    if (!hasStageBackground) {
+        draw->AddQuadFilled(bp1, bp2, bp3, bp4, COLOR_BOARD);
+    } else {
+        draw->AddQuad(bp1, bp2, bp3, bp4, IM_COL32(255, 255, 255, 35), 1.0F);
+    }
 
     DrawGrid();
     DrawBeams();
@@ -61,52 +69,62 @@ void App::DrawScene(const glm::vec2& cursor) {
 void App::DrawGrid() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const auto layout = GetBoardLayout();
-    const float pad = layout.cellSize * 0.05F;
+    const bool hasStageBackground = (m_StageBackground && m_StageBackground->GetTextureId() != 0);
+    const float pad = layout.cellSize * (hasStageBackground ? 0.015F : 0.05F);
 
     for (int row = 0; row < m_StageHeight; ++row) {
         for (int col = 0; col < m_StageWidth; ++col) {
             const auto tile = m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
             ImU32 c = COLOR_EMPTY;
-            switch (tile) {
-                case TileType::ROAD:       c = COLOR_ROAD;       break;
-                case TileType::GROUND:     c = COLOR_GROUND;     break;
-                case TileType::HIGHGROUND: c = COLOR_HIGHGROUND; break;
-                case TileType::SPAWN:      c = COLOR_SPAWN;      break;
-                case TileType::GOAL:       c = COLOR_GOAL;       break;
-                default: break;
+            if (hasStageBackground) {
+                switch (tile) {
+                    case TileType::ROAD:       c = IM_COL32(255, 255, 255, 40); break;
+                    case TileType::GROUND:     c = IM_COL32(70, 120, 170, 42);  break;
+                    case TileType::HIGHGROUND: c = IM_COL32(176, 132, 72, 58);  break;
+                    case TileType::SPAWN:      c = IM_COL32(74, 196, 146, 110); break;
+                    case TileType::GOAL:       c = IM_COL32(226, 100, 102, 110);break;
+                    default:                   c = IM_COL32(0, 0, 0, 0);         break;
+                }
+            } else {
+                switch (tile) {
+                    case TileType::ROAD:       c = COLOR_ROAD;       break;
+                    case TileType::GROUND:     c = COLOR_GROUND;     break;
+                    case TileType::HIGHGROUND: c = COLOR_HIGHGROUND; break;
+                    case TileType::SPAWN:      c = COLOR_SPAWN;      break;
+                    case TileType::GOAL:       c = COLOR_GOAL;       break;
+                    default: break;
+                }
             }
-            float l = layout.topLeftX + col * layout.cellSize + pad;
-            float r = l + layout.cellSize - 2.0F * pad;
-            float t = layout.topLeftY - row * layout.cellSize - pad;
-            float b = t - layout.cellSize + 2.0F * pad;
 
-            ImVec2 q1 = ToScreenPosition({l, t});
-            ImVec2 q2 = ToScreenPosition({r, t});
-            ImVec2 q3 = ToScreenPosition({r, b});
-            ImVec2 q4 = ToScreenPosition({l, b});
+            const float l = layout.topLeftX + col * layout.cellSize + pad;
+            const float r = l + layout.cellSize - 2.0F * pad;
+            const float t = layout.topLeftY - row * layout.cellSize - pad;
+            const float b = t - layout.cellSize + 2.0F * pad;
 
-            // Highground: draw a slight elevated box with a drop shadow illusion
-            if (tile == TileType::HIGHGROUND) {
-                float hOff = layout.cellSize * 0.15F;
-                // Shadow / Side – offset quad downward on screen
-                ImVec2 d1 = {q1.x, q1.y + hOff};
-                ImVec2 d2 = {q2.x, q2.y + hOff};
-                ImVec2 d3 = {q3.x, q3.y + hOff};
-                ImVec2 d4 = {q4.x, q4.y + hOff};
+            const ImVec2 q1 = ToScreenPosition({l, t});
+            const ImVec2 q2 = ToScreenPosition({r, t});
+            const ImVec2 q3 = ToScreenPosition({r, b});
+            const ImVec2 q4 = ToScreenPosition({l, b});
+
+            if (!hasStageBackground && tile == TileType::HIGHGROUND) {
+                const float hOff = layout.cellSize * 0.15F;
+                const ImVec2 d1 = {q1.x, q1.y + hOff};
+                const ImVec2 d2 = {q2.x, q2.y + hOff};
+                const ImVec2 d3 = {q3.x, q3.y + hOff};
+                const ImVec2 d4 = {q4.x, q4.y + hOff};
                 draw->AddQuadFilled(d1, d2, d3, d4, IM_COL32(40, 32, 19, 255));
-                // Top face
                 draw->AddQuadFilled(q1, q2, q3, q4, COLOR_HIGHGROUND);
-                // Highlight border for nice art style
                 draw->AddQuad(q1, q2, q3, q4, IM_COL32(255,255,255,30), 1.5F);
             } else {
                 draw->AddQuadFilled(q1, q2, q3, q4, c);
-                // Light border
-                draw->AddQuad(q1, q2, q3, q4, COLOR_GRID, 1.0F);
+                draw->AddQuad(
+                    q1, q2, q3, q4,
+                    hasStageBackground ? IM_COL32(220, 230, 240, 96) : COLOR_GRID,
+                    hasStageBackground ? 1.35F : 1.0F);
             }
         }
     }
 }
-
 void App::DrawBeams() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     for (const auto& beam : m_Beams) {
@@ -295,7 +313,7 @@ void App::DrawHUD(float screenW) {
         draw->AddText({26, 34}, IM_COL32(255,230,80,255), "[SPACE] Start Wave  (deployment enabled after start)");
     else
         draw->AddText({26, 34}, COLOR_TEXT_SUB,
-            "1 Bagpipe | 2 Sniper | 3 Myrtle | LMB Deploy/Skill | R Reset | ESC Exit");
+            "1 Bagpipe | 2 Sniper | 3 Myrtle | LMB Deploy/Skill | MMB Drag | Wheel Zoom | WASD Pan | C Reset Cam | R Reset | ESC Exit");
 
     // HUD panel
     const float hx = screenW - 340.0F, hy = 22.0F, hw = 312.0F, hh = 360.0F;
@@ -376,3 +394,4 @@ void App::DrawHUD(float screenW) {
         draw->AddText({SW*0.5F-hs.x*0.5F, SH*0.5F+14}, COLOR_TEXT_MAIN, h.c_str());
     }
 }
+

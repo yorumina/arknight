@@ -1,6 +1,6 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// GameLogic.cpp  –  Wave management, game state, stage init & animation loading
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
+// GameLogic.cpp  ?? Wave management, game state, stage init & animation loading
+// ?????????????????????????????????????????????????????????????????????????????
 #include "App.hpp"
 
 #include <algorithm>
@@ -17,11 +17,15 @@ using namespace Ark;
 namespace {
 constexpr float WAVE_CLEAR_DP        = 5.0F;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
+constexpr float DEFAULT_CAMERA_SCALE_X = 1.0F;
+constexpr float DEFAULT_CAMERA_SCALE_Y = PERSPECTIVE_Y_SCALE;
+constexpr float DEFAULT_CAMERA_MIN_ZOOM = 0.7F;
+constexpr float DEFAULT_CAMERA_MAX_ZOOM = 1.8F;
 } // namespace
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 // RESET / INIT
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 void App::ResetDemo() {
     m_GameOver    = false;
     m_MissionClear= false;
@@ -33,6 +37,7 @@ void App::ResetDemo() {
 
     m_SelectedOperatorType = 0;
     m_IsDeploying          = false;
+    ResetCameraToStageDefaults();
 
     m_CurrentWave    = 0;
     m_WaveRunning    = false;
@@ -56,9 +61,9 @@ void App::InitializeStage() {
     if (m_OperatorTemplates.empty()) {
         // Fallback hardcoded operators if JSON not found
         m_OperatorTemplates = {
-            OperatorTemplate{"Bagpipe","風笛",  11,2664,769,382,1000,1,4,2,8000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
+            OperatorTemplate{"Bagpipe","憸函?",  11,2664,769,382,1000,1,4,2,8000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
             OperatorTemplate{"Sniper","Sniper",   11,1200,500,150,1000,0,0,0,0, IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false},
-            OperatorTemplate{"Myrtle","桃金娘",  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
+            OperatorTemplate{"Myrtle","獢?憡?,  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
         };
     }
     if (!LoadStageFromJsonModule()) BuildFallbackStage();
@@ -112,7 +117,7 @@ void App::LoadOperatorAnimations() {
             } else if (dirName.find("attack") != std::string::npos) {
                 // Prefer "attackloop" or "attack" over "attackbegin"/"attackend"
                 if (dirName.find("begin") != std::string::npos || dirName.find("end") != std::string::npos) {
-                    // Skip begin/end variants – the loop/main clip is far more useful
+                    // Skip begin/end variants ??the loop/main clip is far more useful
                     if (!m_OperatorAnims[i].attack)
                         m_OperatorAnims[i].attack = loadAnimFromDir(entry.path().string(), false);
                 } else {
@@ -145,6 +150,30 @@ bool App::LoadStageFromJsonModule() {
     m_WavePlans     = std::move(d.wavePlans);
     m_TotalWaves    = d.totalWaves;
     m_TotalWaveUnits= static_cast<int>(m_WavePlans.size());
+
+    m_HasBoardLayoutOverride = d.hasBoardLayoutOverride;
+    if (m_HasBoardLayoutOverride) {
+        m_BoardLayoutOverride = d.boardLayoutOverride;
+    }
+
+    m_Camera.projectionScaleX = std::max(0.05F, d.camera.projectionScaleX);
+    m_Camera.projectionScaleY = std::max(0.05F, d.camera.projectionScaleY);
+    m_Camera.minZoom = std::max(0.2F, d.camera.minZoom);
+    m_Camera.maxZoom = std::max(m_Camera.minZoom, d.camera.maxZoom);
+    m_Camera.defaultZoom = std::clamp(d.camera.zoom, m_Camera.minZoom, m_Camera.maxZoom);
+    m_Camera.defaultPan = {d.camera.panX, d.camera.panY};
+    ResetCameraToStageDefaults();
+
+    m_StageBackgroundPath = d.backgroundImage;
+    m_StageBackgroundAlpha = std::clamp(d.backgroundAlpha, 0.0F, 1.0F);
+    m_StageBackground.reset();
+    if (!m_StageBackgroundPath.empty()) {
+        try {
+            m_StageBackground = std::make_shared<Util::Image>(m_StageBackgroundPath);
+        } catch (...) {
+            m_StageBackground.reset();
+        }
+    }
     return true;
 }
 
@@ -152,6 +181,17 @@ void App::BuildFallbackStage() {
     m_StageWidth  = 14; m_StageHeight = 8;
     m_StageName   = "fallback_stage";
     m_StageLoadSource = "embedded fallback";
+    m_HasBoardLayoutOverride = false;
+    m_StageBackgroundPath.clear();
+    m_StageBackgroundAlpha = 1.0F;
+    m_StageBackground.reset();
+    m_Camera.projectionScaleX = DEFAULT_CAMERA_SCALE_X;
+    m_Camera.projectionScaleY = DEFAULT_CAMERA_SCALE_Y;
+    m_Camera.minZoom = DEFAULT_CAMERA_MIN_ZOOM;
+    m_Camera.maxZoom = DEFAULT_CAMERA_MAX_ZOOM;
+    m_Camera.defaultZoom = 1.0F;
+    m_Camera.defaultPan = {0.0F, 0.0F};
+    ResetCameraToStageDefaults();
 
     m_TileMap.assign(static_cast<std::size_t>(m_StageHeight),
                      std::vector<TileType>(static_cast<std::size_t>(m_StageWidth), TileType::GROUND));
@@ -197,9 +237,9 @@ void App::BuildFallbackStage() {
     m_TotalWaveUnits = static_cast<int>(m_WavePlans.size());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 // WAVE
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 void App::StartWave() {
     if (m_GameOver || m_WaveRunning || m_MissionClear || m_WavePlans.empty()) return;
     m_WaveRunning    = true;
@@ -223,9 +263,9 @@ void App::UpdateWave(float dtSec) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 // UPDATE (main game tick)
-// ─────────────────────────────────────────────────────────────────────────────
+// ?????????????????????????????????????????????????????????????????????????????
 void App::UpdateGame(float dtMs) {
     UpdateBeams(dtMs);
 

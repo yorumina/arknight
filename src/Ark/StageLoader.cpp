@@ -1,6 +1,6 @@
-// ────────────────────────────────────────────────────────────────
-// StageLoader.cpp  –  Ark engine stage/entity loader
-// ────────────────────────────────────────────────────────────────
+// ????????????????????????????????????????????????????????????????
+// StageLoader.cpp  ?? Ark engine stage/entity loader
+// ????????????????????????????????????????????????????????????????
 #include "Ark/StageLoader.hpp"
 
 #include <algorithm>
@@ -11,7 +11,7 @@
 
 #include "pch.hpp"
 
-// ── helpers ────────────────────────────────────────────────────
+// ?? helpers ????????????????????????????????????????????????????
 namespace {
 
 const std::array<std::string, 4> BASE_CANDIDATES{
@@ -42,8 +42,25 @@ Ark::TileType ParseTile(const std::string& s) {
     return Ark::TileType::EMPTY;
 }
 
-// Build a map: display-name → EnemyTemplate  (reads all *.json in enemy/)
-// File names are the enemy_id (B2, 01, 02, …).  The "id" field inside JSON
+float Clamp01(float v) {
+    return std::clamp(v, 0.0F, 1.0F);
+}
+
+std::filesystem::path ResolveAssetPath(const std::filesystem::path& stagePath, const std::string& value) {
+    if (value.empty()) return {};
+
+    const auto direct = std::filesystem::path(value);
+    if (std::filesystem::exists(direct)) return direct.lexically_normal();
+
+    if (stagePath.has_parent_path()) {
+        const auto relative = stagePath.parent_path() / direct;
+        if (std::filesystem::exists(relative)) return relative.lexically_normal();
+    }
+    return {};
+}
+
+// Build a map: display-name ??EnemyTemplate  (reads all *.json in enemy/)
+// File names are the enemy_id (B2, 01, 02, ??.  The "id" field inside JSON
 // is the display name used in level "enemies" sections.
 std::unordered_map<std::string, Ark::EnemyTemplate> BuildEnemyRegistry(const std::filesystem::path& dir) {
     std::unordered_map<std::string, Ark::EnemyTemplate> reg;
@@ -78,7 +95,7 @@ std::unordered_map<std::string, Ark::EnemyTemplate> BuildEnemyRegistry(const std
 
 } // namespace
 
-// ── public API ─────────────────────────────────────────────────
+// ?? public API ?????????????????????????????????????????????????
 namespace Ark {
 
 std::optional<std::filesystem::path> ResolveStagePath(const std::string& level) {
@@ -196,6 +213,29 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
         data.sourceFile = stagePath->lexically_normal().string();
         data.width  = W;
         data.height = H;
+        if (stage.contains("camera") && stage["camera"].is_object()) {
+            const auto& cam = stage["camera"];
+            data.camera.projectionScaleX = cam.value("projection_scale_x", data.camera.projectionScaleX);
+            data.camera.projectionScaleY = cam.value("projection_scale_y", data.camera.projectionScaleY);
+            data.camera.zoom = cam.value("zoom", data.camera.zoom);
+            data.camera.minZoom = cam.value("min_zoom", data.camera.minZoom);
+            data.camera.maxZoom = cam.value("max_zoom", data.camera.maxZoom);
+            data.camera.panX = cam.value("pan_x", data.camera.panX);
+            data.camera.panY = cam.value("pan_y", data.camera.panY);
+        }
+        if (stage.contains("board_layout") && stage["board_layout"].is_object()) {
+            const auto& boardLayout = stage["board_layout"];
+            data.boardLayoutOverride.cellSize = boardLayout.value("cell_size", data.boardLayoutOverride.cellSize);
+            data.boardLayoutOverride.topLeftX = boardLayout.value("top_left_x", data.boardLayoutOverride.topLeftX);
+            data.boardLayoutOverride.topLeftY = boardLayout.value("top_left_y", data.boardLayoutOverride.topLeftY);
+            data.hasBoardLayoutOverride = data.boardLayoutOverride.cellSize > 0.0F;
+        }
+        if (stage.contains("background") && stage["background"].is_object()) {
+            const auto& background = stage["background"];
+            const auto imagePath = ResolveAssetPath(*stagePath, background.value("image", std::string{}));
+            if (!imagePath.empty()) data.backgroundImage = imagePath.string();
+            data.backgroundAlpha = Clamp01(background.value("alpha", data.backgroundAlpha));
+        }
         data.tileMap.assign(static_cast<std::size_t>(H),
                             std::vector<TileType>(static_cast<std::size_t>(W), TileType::EMPTY));
 
@@ -236,12 +276,23 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
         if (enemyNames.empty()) return std::nullopt;
 
         data.enemyTemplates = LoadEnemies(enemyNames);
-        // Fill missing stats from level file as fallback
+        // Apply or override stats from level "enemies" section.
         for (auto& tmpl : data.enemyTemplates) {
+            const nlohmann::json* ed = nullptr;
             if (stage["enemies"].contains(tmpl.id)) {
-                const auto& ed = stage["enemies"][tmpl.id];
-                if (tmpl.hp    <= 0) tmpl.hp    = ed.value("hp",    500.0F);
-                if (tmpl.speed <= 0) tmpl.speed  = ed.value("speed",  1.0F);
+                ed = &stage["enemies"][tmpl.id];
+            } else if (stage["enemies"].contains(tmpl.enemyId)) {
+                ed = &stage["enemies"][tmpl.enemyId];
+            }
+            if (ed != nullptr && ed->is_object()) {
+                tmpl.hp = ed->value("hp", tmpl.hp);
+                tmpl.speed = ed->value("speed", tmpl.speed);
+                tmpl.damage = ed->value("damage", tmpl.damage);
+                tmpl.attackIntervalMs = ed->value("attackIntervalMs", tmpl.attackIntervalMs);
+                tmpl.def = ed->value("def", tmpl.def);
+                tmpl.attackRange = ed->value("attackRange", tmpl.attackRange);
+                tmpl.isRanged = ed->value("isRanged", tmpl.isRanged);
+                tmpl.canAttackOperator = ed->value("canAttackOperator", tmpl.canAttackOperator);
             }
         }
         if (data.enemyTemplates.empty()) return std::nullopt;
@@ -249,7 +300,8 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
         // Index helpers
         auto findEnemy = [&](const std::string& name) -> int {
             for (std::size_t i = 0; i < data.enemyTemplates.size(); ++i)
-                if (data.enemyTemplates[i].id == name) return static_cast<int>(i);
+                if (data.enemyTemplates[i].id == name || data.enemyTemplates[i].enemyId == name)
+                    return static_cast<int>(i);
             return -1;
         };
         auto findRoute = [&](const std::string& id) -> int {
