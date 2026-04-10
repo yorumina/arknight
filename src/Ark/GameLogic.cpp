@@ -37,6 +37,7 @@ void App::ResetDemo() {
 
     m_SelectedOperatorType = 0;
     m_IsDeploying          = false;
+    m_SelectedOperatorId   = -1;
     ResetCameraToStageDefaults();
 
     m_CurrentWave    = 0;
@@ -290,6 +291,7 @@ void App::UpdateGame(float dtMs) {
     // Remove dead operators (trigger redeploy cooldown)
     for (const auto& op : m_Operators) {
         if (op.hp <= 0.0F) {
+            if (m_SelectedOperatorId == op.id) m_SelectedOperatorId = -1;
             m_OperatorRedeployCooldownMs[op.typeIndex] = REDEPLOY_COOLDOWN_MS;
             // Cleanup animation instance
             if (static_cast<std::size_t>(op.typeIndex) < m_OperatorAnims.size()) {

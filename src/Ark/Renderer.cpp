@@ -16,6 +16,10 @@ constexpr ImU32 COLOR_GRID_WHITE_BOLD = IM_COL32(255, 255, 255, 235);
 constexpr ImU32 COLOR_LOW_TOP          = IM_COL32(142, 142, 142, 255); // #8e8e8e
 constexpr ImU32 COLOR_HIGH_TOP         = IM_COL32(255, 255, 255, 255); // #FFFFFF
 constexpr ImU32 COLOR_HIGH_SIDE        = IM_COL32( 76,  76,  76, 255); // #4c4c4c
+constexpr ImU32 COLOR_SPAWN_TOP        = IM_COL32(215,  58,  58, 170);
+constexpr ImU32 COLOR_SPAWN_SIDE       = IM_COL32(140,  34,  34, 140);
+constexpr ImU32 COLOR_GOAL_TOP         = IM_COL32( 65, 138, 245, 170);
+constexpr ImU32 COLOR_GOAL_SIDE        = IM_COL32( 35,  84, 165, 140);
 constexpr ImU32 COLOR_TEXT_MAIN = IM_COL32(236, 240, 245, 255);
 constexpr ImU32 COLOR_TEXT_SUB  = IM_COL32(173, 183, 198, 255);
 
@@ -32,9 +36,12 @@ void App::DrawScene(const glm::vec2& cursor) {
     const auto layout = GetBoardLayout();
 
     DrawGrid();
-    DrawBeams();
-    DrawOperators(layout);
+    DrawOperators(layout, false);
     DrawEnemies(layout);
+    DrawHighgroundTopLayer();
+    DrawMarkerTopLayer();
+    DrawOperators(layout, true);
+    DrawBeams();
     DrawDeployPreview(ToCell(cursor), layout);
     DrawHUD(W);
 }
@@ -44,6 +51,7 @@ void App::DrawGrid() {
     const auto layout = GetBoardLayout();
     const float pad = layout.cellSize * 0.03F;
     const float highgroundOffset = layout.cellSize * 0.22F;
+    const float markerOffset = layout.cellSize * 0.5F;
 
     for (int row = 0; row < m_StageHeight; ++row) {
         for (int col = 0; col < m_StageWidth; ++col) {
@@ -60,7 +68,27 @@ void App::DrawGrid() {
             const ImVec2 q3 = ToScreenPosition({r, b});
             const ImVec2 q4 = ToScreenPosition({l, b});
 
-            draw->AddQuadFilled(q1, q2, q3, q4, COLOR_LOW_TOP);
+            bool isSpecialMarker = (tile == TileType::SPAWN || tile == TileType::GOAL);
+            if (isSpecialMarker) {
+                const ImU32 markerSide = (tile == TileType::SPAWN) ? COLOR_SPAWN_SIDE : COLOR_GOAL_SIDE;
+                const ImVec2 u1{q1.x, q1.y - markerOffset};
+                const ImVec2 u2{q2.x, q2.y - markerOffset};
+                const ImVec2 u3{q3.x, q3.y - markerOffset};
+                const ImVec2 u4{q4.x, q4.y - markerOffset};
+
+                // Draw all side faces so tint remains visible from any camera pan.
+                draw->AddQuadFilled(u1, u2, q2, q1, markerSide);
+                draw->AddQuadFilled(u2, u3, q3, q2, markerSide);
+                draw->AddQuadFilled(u3, u4, q4, q3, markerSide);
+                draw->AddQuadFilled(u4, u1, q1, q4, markerSide);
+                draw->AddLine(q1, u1, COLOR_GRID_WHITE_MAIN, 1.0F);
+                draw->AddLine(q2, u2, COLOR_GRID_WHITE_MAIN, 1.0F);
+                draw->AddLine(q3, u3, COLOR_GRID_WHITE_MAIN, 1.0F);
+                draw->AddLine(q4, u4, COLOR_GRID_WHITE_MAIN, 1.0F);
+                draw->AddQuadFilled(q1, q2, q3, q4, COLOR_LOW_TOP);
+            } else {
+                draw->AddQuadFilled(q1, q2, q3, q4, COLOR_LOW_TOP);
+            }
 
             if (tile == TileType::HIGHGROUND) {
                 const ImVec2 u1{q1.x, q1.y - highgroundOffset};
@@ -71,20 +99,78 @@ void App::DrawGrid() {
                 // Side shadow faces for elevated tiles.
                 draw->AddQuadFilled(u2, u3, q3, q2, COLOR_HIGH_SIDE);
                 draw->AddQuadFilled(u3, u4, q4, q3, COLOR_HIGH_SIDE);
-                draw->AddQuadFilled(u1, u2, u3, u4, COLOR_HIGH_TOP);
-
-                draw->AddQuad(u1, u2, u3, u4, COLOR_GRID_WHITE_BOLD, 1.45F);
                 draw->AddLine(q1, u1, COLOR_GRID_WHITE_MAIN, 1.1F);
                 draw->AddLine(q2, u2, COLOR_GRID_WHITE_MAIN, 1.1F);
                 draw->AddLine(q3, u3, COLOR_GRID_WHITE_MAIN, 1.1F);
                 draw->AddLine(q4, u4, COLOR_GRID_WHITE_MAIN, 1.1F);
-                draw->AddLine(u1, u3, COLOR_GRID_WHITE_FAINT, 1.0F);
-                draw->AddLine(u2, u4, COLOR_GRID_WHITE_FAINT, 1.0F);
             }
 
             draw->AddQuad(q1, q2, q3, q4, COLOR_GRID_WHITE_MAIN, 1.2F);
-            draw->AddLine(q1, q3, COLOR_GRID_WHITE_FAINT, 1.0F);
-            draw->AddLine(q2, q4, COLOR_GRID_WHITE_FAINT, 1.0F);
+        }
+    }
+}
+
+void App::DrawMarkerTopLayer() {
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const auto layout = GetBoardLayout();
+    const float pad = layout.cellSize * 0.03F;
+    const float markerOffset = layout.cellSize * 0.5F;
+
+    for (int row = 0; row < m_StageHeight; ++row) {
+        for (int col = 0; col < m_StageWidth; ++col) {
+            const auto tile = m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
+            if (tile != TileType::SPAWN && tile != TileType::GOAL) continue;
+
+            const float l = layout.topLeftX + col * layout.cellSize + pad;
+            const float r = l + layout.cellSize - 2.0F * pad;
+            const float t = layout.topLeftY - row * layout.cellSize - pad;
+            const float b = t - layout.cellSize + 2.0F * pad;
+
+            const ImVec2 q1 = ToScreenPosition({l, t});
+            const ImVec2 q2 = ToScreenPosition({r, t});
+            const ImVec2 q3 = ToScreenPosition({r, b});
+            const ImVec2 q4 = ToScreenPosition({l, b});
+            const ImVec2 u1{q1.x, q1.y - markerOffset};
+            const ImVec2 u2{q2.x, q2.y - markerOffset};
+            const ImVec2 u3{q3.x, q3.y - markerOffset};
+            const ImVec2 u4{q4.x, q4.y - markerOffset};
+
+            const ImU32 markerTop = (tile == TileType::SPAWN) ? COLOR_SPAWN_TOP : COLOR_GOAL_TOP;
+            draw->AddQuadFilled(u1, u2, u3, u4, markerTop);
+            draw->AddQuad(u1, u2, u3, u4, COLOR_GRID_WHITE_BOLD, 1.3F);
+            draw->AddLine(u1, u3, COLOR_GRID_WHITE_BOLD, 1.2F);
+            draw->AddLine(u2, u4, COLOR_GRID_WHITE_BOLD, 1.2F);
+        }
+    }
+}
+
+void App::DrawHighgroundTopLayer() {
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const auto layout = GetBoardLayout();
+    const float pad = layout.cellSize * 0.03F;
+    const float highgroundOffset = layout.cellSize * 0.22F;
+
+    for (int row = 0; row < m_StageHeight; ++row) {
+        for (int col = 0; col < m_StageWidth; ++col) {
+            const auto tile = m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
+            if (tile != TileType::HIGHGROUND) continue;
+
+            const float l = layout.topLeftX + col * layout.cellSize + pad;
+            const float r = l + layout.cellSize - 2.0F * pad;
+            const float t = layout.topLeftY - row * layout.cellSize - pad;
+            const float b = t - layout.cellSize + 2.0F * pad;
+
+            const ImVec2 q1 = ToScreenPosition({l, t});
+            const ImVec2 q2 = ToScreenPosition({r, t});
+            const ImVec2 q3 = ToScreenPosition({r, b});
+            const ImVec2 q4 = ToScreenPosition({l, b});
+            const ImVec2 u1{q1.x, q1.y - highgroundOffset};
+            const ImVec2 u2{q2.x, q2.y - highgroundOffset};
+            const ImVec2 u3{q3.x, q3.y - highgroundOffset};
+            const ImVec2 u4{q4.x, q4.y - highgroundOffset};
+
+            draw->AddQuadFilled(u1, u2, u3, u4, COLOR_HIGH_TOP);
+            draw->AddQuad(u1, u2, u3, u4, COLOR_GRID_WHITE_BOLD, 1.45F);
         }
     }
 }
@@ -98,12 +184,13 @@ void App::DrawBeams() {
     }
 }
 
-void App::DrawOperators(const BoardLayout& layout) {
+void App::DrawOperators(const BoardLayout& layout, bool drawHighgroundOnly) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
 
     for (const auto& op : m_Operators) {
         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
         bool isHigh = (opType.deployType == DeployType::HIGHGROUND_ONLY);
+        if (isHigh != drawHighgroundOnly) continue;
         float yOff  = isHigh ? layout.cellSize * 0.22F : 0.0F;
 
         auto center0 = ToScreenPosition(ToPtsdPosition(ToBoardCenter(op.cell)));
@@ -158,19 +245,25 @@ void App::DrawOperators(const BoardLayout& layout) {
             draw->AddText({center.x - ts.x*0.5F, center.y - ts.y*0.5F}, IM_COL32(12,14,19,255), sym.c_str());
         }
 
-        // Direction arrow
-        glm::vec2 dirOff = glm::vec2(op.direction.x, op.direction.y) * 0.5F;
-        ImVec2 dirPt = ToScreenPosition(ToPtsdPosition(ToBoardCenter(op.cell) + dirOff));
-        dirPt.y -= yOff;
-        draw->AddLine(center, dirPt, IM_COL32(255, 50, 50, 255), 3.5F);
+        // Direction indicator (red bar): now only shown for selected operator.
+        if (op.id == m_SelectedOperatorId) {
+            glm::vec2 dirOff = glm::vec2(op.direction.x, op.direction.y) * 0.5F;
+            ImVec2 dirPt = ToScreenPosition(ToPtsdPosition(ToBoardCenter(op.cell) + dirOff));
+            dirPt.y -= yOff;
+            draw->AddLine(center, dirPt, IM_COL32(255, 50, 50, 255), 3.5F);
+        }
 
         // HP bar
         const float barW = layout.cellSize * 0.52F;
         const float barX = center0.x - barW * 0.5F;
         float barY = center0.y - layout.cellSize * 0.38F - yOff;
-        const float hpR = op.maxHp > 0 ? std::clamp(op.hp/op.maxHp, 0.0F, 1.0F) : 0.0F;
+        const float hpNow = std::clamp(op.hp, 0.0F, op.maxHp);
+        const float hpR = op.maxHp > 0 ? std::clamp(hpNow / op.maxHp, 0.0F, 1.0F) : 0.0F;
+        ImU32 hpCol = IM_COL32(162,220,255,255);
+        if (hpR < 0.30F) hpCol = IM_COL32(255, 120, 120, 255);
+        else if (hpR < 0.60F) hpCol = IM_COL32(255, 196, 132, 255);
         draw->AddRectFilled({barX,      barY}, {barX+barW, barY+5.0F}, IM_COL32(35,40,48,255));
-        draw->AddRectFilled({barX,      barY}, {barX+barW*hpR, barY+5.0F}, IM_COL32(101,228,122,255));
+        draw->AddRectFilled({barX,      barY}, {barX+barW*hpR, barY+5.0F}, hpCol);
 
         // SP bar
         if (opType.maxSp > 0) {
@@ -356,6 +449,46 @@ void App::DrawHUD(float screenW) {
                         + " DEF:" + std::to_string(static_cast<int>(t.def))
                         + " BLK:" + std::to_string(t.blockCount);
         line(244.0F + i * 36.0F, COLOR_TEXT_SUB, sub);
+    }
+
+    const Operator* selectedOp = nullptr;
+    for (const auto& op : m_Operators) {
+        if (op.id == m_SelectedOperatorId) {
+            selectedOp = &op;
+            break;
+        }
+    }
+        if (selectedOp) {
+            const auto& t = m_OperatorTemplates.at(static_cast<std::size_t>(selectedOp->typeIndex));
+            const int hpNow = static_cast<int>(std::round(selectedOp->hp));
+            const int hpMax = static_cast<int>(std::round(selectedOp->maxHp));
+            const int spNow = static_cast<int>(std::round(selectedOp->sp));
+            const int spMax = static_cast<int>(std::round(t.maxSp));
+            const std::string state = selectedOp->skillActive ? "Skill Active" : "Normal";
+            const auto selectedCenter = ToScreenPosition(ToPtsdPosition(ToBoardCenter(selectedOp->cell)));
+            const float px = std::clamp(selectedCenter.x + 26.0F, 8.0F, screenW - 270.0F);
+            const float py = std::clamp(selectedCenter.y - 84.0F, 8.0F, static_cast<float>(PTSD_Config::WINDOW_HEIGHT) - 178.0F);
+
+            ImGui::SetNextWindowPos(ImVec2(px, py), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(262.0F, 188.0F), ImGuiCond_Always);
+            ImGui::SetNextWindowBgAlpha(0.78F);
+            const ImGuiWindowFlags popupFlags =
+                ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+            if (ImGui::Begin("Operator Inspector", nullptr, popupFlags)) {
+                ImGui::Text("%s  #%d", t.name.c_str(), selectedOp->id);
+                ImGui::Separator();
+                ImGui::Text("State: %s", state.c_str());
+                ImGui::Text("Cell: (%d, %d)", selectedOp->cell.x, selectedOp->cell.y);
+                ImGui::Text("HP: %d / %d", hpNow, hpMax);
+                ImGui::Text("SP: %d / %d", spNow, spMax);
+                ImGui::Text("ATK: %d   DEF: %d", static_cast<int>(std::round(t.damage)),
+                            static_cast<int>(std::round(selectedOp->def)));
+                ImGui::Text("BLK: %d   CD: %dms", t.blockCount,
+                            static_cast<int>(std::ceil(selectedOp->cooldownMs)));
+            }
+            ImGui::End();
     }
 
     // Overlay

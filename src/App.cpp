@@ -26,9 +26,6 @@ constexpr int   MAX_OPS          = 12;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
 } // namespace
 
-// ?????????????????????????????????????????????????????????????????????????????
-// LIFECYCLE
-// ?????????????????????????????????????????????????????????????????????????????
 void App::Start() {
     InitializeStage();
     ResetDemo();
@@ -85,6 +82,7 @@ void App::Update() {
             if (cell) {
                 for (auto it = m_Operators.begin(); it != m_Operators.end(); ++it) {
                     if (it->cell == *cell) {
+                        if (m_SelectedOperatorId == it->id) m_SelectedOperatorId = -1;
                         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(it->typeIndex));
                         // Retreat refund
                         if (opType.name == "Bagpipe" || opType.name == "風笛") {
@@ -112,12 +110,15 @@ void App::Update() {
         if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_LB)) {
             if (!m_IsDeploying) {
                 const auto cell = ToCell(ptsdCursor);
+                bool clickedOperator = false;
                 if (cell) {
                     // Check skill activation first
                     bool handled = false;
                     if (m_WaveRunning) {
                         for (auto& op : m_Operators) {
                             if (op.cell != *cell) continue;
+                            clickedOperator = true;
+                            m_SelectedOperatorId = op.id;
                             const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
                             const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == "風笛");
                             if (!isBagpipe && opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
@@ -146,6 +147,7 @@ void App::Update() {
                         }
                     }
                 }
+                if (!clickedOperator) m_SelectedOperatorId = -1;
             }
         }
 
@@ -179,6 +181,8 @@ void App::Update() {
                 }
 
                 m_Operators.push_back(newOp);
+                // Keep inspector closed after deploy; only open on explicit click.
+                m_SelectedOperatorId = -1;
                 m_IsDeploying = false;
             }
         }

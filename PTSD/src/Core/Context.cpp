@@ -1,6 +1,9 @@
 #include "Core/Context.hpp"
 
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
+#include <vector>
 
 #include "Core/DebugMessageCallback.hpp"
 
@@ -13,6 +16,43 @@
 using Util::ms_t;
 
 namespace Core {
+namespace {
+std::vector<std::string> BuildFontCandidates() {
+    std::vector<std::string> candidates;
+    if (const char* envFont = std::getenv("ARKNIGHT_UI_FONT"); envFont != nullptr && envFont[0] != '\0') {
+        candidates.emplace_back(envFont);
+    }
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.otf");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansCJK-Regular.ttc");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.ttf");
+    candidates.emplace_back("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc");
+    candidates.emplace_back("/usr/share/fonts/opentype/noto/NotoSansCJKtc-Regular.otf");
+    candidates.emplace_back("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc");
+    candidates.emplace_back("/usr/share/fonts/truetype/noto/NotoSansCJKtc-Regular.otf");
+    candidates.emplace_back("/usr/share/fonts/truetype/arphic/uming.ttc");
+    candidates.emplace_back("/usr/share/fonts/truetype/arphic/ukai.ttc");
+    return candidates;
+}
+
+ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::string* loadedPath) {
+    for (const auto &path : BuildFontCandidates()) {
+        if (!std::filesystem::exists(path)) continue;
+        ImFontConfig fontCfg;
+        fontCfg.OversampleH = 2;
+        fontCfg.OversampleV = 2;
+        fontCfg.PixelSnapH = false;
+        ImFont* font = io.Fonts->AddFontFromFileTTF(
+            path.c_str(), 20.0F, &fontCfg, io.Fonts->GetGlyphRangesChineseFull());
+        if (font == nullptr) continue;
+        if (font->FindGlyphNoFallback(0x4F60) != nullptr && font->FindGlyphNoFallback(0x9EDE) != nullptr) {
+            if (loadedPath != nullptr) *loadedPath = path;
+            return font;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
 Context::Context() {
     Util::Logger::Init();
     PTSD_Config::Init();
@@ -92,6 +132,16 @@ Context::Context() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigWindowsMoveFromTitleBarOnly = true;
+
+    std::string loadedFontPath;
+    ImFont* cjkFont = LoadTraditionalChineseFont(io, &loadedFontPath);
+    if (cjkFont != nullptr) {
+        io.FontDefault = cjkFont;
+        LOG_INFO("Loaded UI CJK font: {}", loadedFontPath);
+    } else {
+        io.Fonts->AddFontDefault();
+        LOG_WARN("No Traditional Chinese font found. Install Noto CJK and/or set ARKNIGHT_UI_FONT=/path/to/font.ttf");
+    }
 
     ImGui_ImplSDL2_InitForOpenGL(m_Window, m_GlContext);
     ImGui_ImplOpenGL3_Init();

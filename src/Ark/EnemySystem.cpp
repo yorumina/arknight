@@ -10,6 +10,13 @@ using namespace Ark;
 
 namespace {
 constexpr float BEAM_DURATION_MS = 120.0F;
+
+float ComputeEnemyToOperatorDamage(float rawDamage, float targetDef) {
+    // Keep defense meaningful, but avoid "always 1 damage" stalemates.
+    const float reduced = rawDamage - targetDef * 0.60F;
+    const float floorByPercent = rawDamage * 0.10F;
+    return std::max(5.0F, std::max(floorByPercent, reduced));
+}
 } // namespace
 
 // ─── Spawn ──────────────────────────────────────────────────────────────────
@@ -76,6 +83,7 @@ void App::UpdateEnemies(float dtSec) {
         }
 
         // Try to acquire a block
+        bool acquiredBlockThisFrame = false;
         if (!blockOp) {
             glm::ivec2 eCell(static_cast<int>(std::floor(enemy.boardPos.x)),
                              static_cast<int>(std::floor(enemy.boardPos.y)));
@@ -89,6 +97,7 @@ void App::UpdateEnemies(float dtSec) {
                     blockOp = &op;
                     enemy.blockedByOperatorId = op.id;
                     ++op.blockedEnemyCount;
+                    acquiredBlockThisFrame = true;
                     break;
                 }
             }
@@ -97,9 +106,15 @@ void App::UpdateEnemies(float dtSec) {
         if (blockOp) {
             // Close-range melee attack on the blocking operator
             if (enemy.canAttackOperator) {
+                // Hit once immediately when contact/block is established,
+                // then respect attack interval for subsequent hits.
+                if (acquiredBlockThisFrame) {
+                    enemy.attackCooldownMs = 0.0F;
+                }
                 enemy.attackCooldownMs -= dtSec * 1000.0F;
                 if (enemy.attackCooldownMs <= 0.0F) {
-                    blockOp->hp -= std::max(1.0F, enemy.damage - blockOp->def);
+                    blockOp->hp -= ComputeEnemyToOperatorDamage(enemy.damage, blockOp->def);
+                    blockOp->hp = std::max(0.0F, blockOp->hp);
                     enemy.attackCooldownMs = enemy.attackIntervalMs;
                 }
             }
@@ -125,7 +140,8 @@ void App::UpdateEnemies(float dtSec) {
                     }
                 }
                 if (rangedTarget) {
-                    rangedTarget->hp -= std::max(1.0F, enemy.damage - rangedTarget->def);
+                    rangedTarget->hp -= ComputeEnemyToOperatorDamage(enemy.damage, rangedTarget->def);
+                    rangedTarget->hp = std::max(0.0F, rangedTarget->hp);
                     // Visual beam: enemy -> operator
                     m_Beams.push_back(AttackBeam{enemy.boardPos, ToBoardCenter(rangedTarget->cell), BEAM_DURATION_MS});
                 }

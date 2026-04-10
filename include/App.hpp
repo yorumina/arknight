@@ -67,8 +67,10 @@ private:
     // ?? Drawing ???????????????????????????????????????????????????
     void DrawScene(const glm::vec2& cursorPtsd);
     void DrawGrid();
+    void DrawHighgroundTopLayer();
+    void DrawMarkerTopLayer();
     void DrawBeams();
-    void DrawOperators(const Ark::BoardLayout& layout);
+    void DrawOperators(const Ark::BoardLayout& layout, bool drawHighgroundOnly);
     void DrawEnemies(const Ark::BoardLayout& layout);
     void DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const Ark::BoardLayout& layout);
     void DrawHUD(float screenW);
@@ -131,6 +133,7 @@ private:
     bool m_IsDeploying          = false;
     glm::ivec2 m_DeployingCell{0, 0};
     glm::ivec2 m_DeployingDirection{1, 0};
+    int m_SelectedOperatorId = -1;
 
     // ?? Wave ???????????????????????????????????????????????????????
     int         m_CurrentWave     = 0;
