@@ -13,6 +13,9 @@ namespace {
 constexpr ImU32 COLOR_GRID_WHITE_MAIN = IM_COL32(255, 255, 255, 205);
 constexpr ImU32 COLOR_GRID_WHITE_FAINT= IM_COL32(255, 255, 255, 110);
 constexpr ImU32 COLOR_GRID_WHITE_BOLD = IM_COL32(255, 255, 255, 235);
+constexpr ImU32 COLOR_LOW_TOP          = IM_COL32(142, 142, 142, 255); // #8e8e8e
+constexpr ImU32 COLOR_HIGH_TOP         = IM_COL32(255, 255, 255, 255); // #FFFFFF
+constexpr ImU32 COLOR_HIGH_SIDE        = IM_COL32( 76,  76,  76, 255); // #4c4c4c
 constexpr ImU32 COLOR_TEXT_MAIN = IM_COL32(236, 240, 245, 255);
 constexpr ImU32 COLOR_TEXT_SUB  = IM_COL32(173, 183, 198, 255);
 
@@ -57,15 +60,19 @@ void App::DrawGrid() {
             const ImVec2 q3 = ToScreenPosition({r, b});
             const ImVec2 q4 = ToScreenPosition({l, b});
 
-            draw->AddQuad(q1, q2, q3, q4, COLOR_GRID_WHITE_MAIN, 1.2F);
-            draw->AddLine(q1, q3, COLOR_GRID_WHITE_FAINT, 1.0F);
-            draw->AddLine(q2, q4, COLOR_GRID_WHITE_FAINT, 1.0F);
+            draw->AddQuadFilled(q1, q2, q3, q4, COLOR_LOW_TOP);
 
             if (tile == TileType::HIGHGROUND) {
                 const ImVec2 u1{q1.x, q1.y - highgroundOffset};
                 const ImVec2 u2{q2.x, q2.y - highgroundOffset};
                 const ImVec2 u3{q3.x, q3.y - highgroundOffset};
                 const ImVec2 u4{q4.x, q4.y - highgroundOffset};
+
+                // Side shadow faces for elevated tiles.
+                draw->AddQuadFilled(u2, u3, q3, q2, COLOR_HIGH_SIDE);
+                draw->AddQuadFilled(u3, u4, q4, q3, COLOR_HIGH_SIDE);
+                draw->AddQuadFilled(u1, u2, u3, u4, COLOR_HIGH_TOP);
+
                 draw->AddQuad(u1, u2, u3, u4, COLOR_GRID_WHITE_BOLD, 1.45F);
                 draw->AddLine(q1, u1, COLOR_GRID_WHITE_MAIN, 1.1F);
                 draw->AddLine(q2, u2, COLOR_GRID_WHITE_MAIN, 1.1F);
@@ -74,6 +81,10 @@ void App::DrawGrid() {
                 draw->AddLine(u1, u3, COLOR_GRID_WHITE_FAINT, 1.0F);
                 draw->AddLine(u2, u4, COLOR_GRID_WHITE_FAINT, 1.0F);
             }
+
+            draw->AddQuad(q1, q2, q3, q4, COLOR_GRID_WHITE_MAIN, 1.2F);
+            draw->AddLine(q1, q3, COLOR_GRID_WHITE_FAINT, 1.0F);
+            draw->AddLine(q2, q4, COLOR_GRID_WHITE_FAINT, 1.0F);
         }
     }
 }
