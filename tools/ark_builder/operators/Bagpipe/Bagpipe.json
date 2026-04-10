@@ -13,7 +13,7 @@
     "isVanguard": true,
     "maxSp": 4.0,
     "initialSp": 2.0,
-    "skillDuration": 8000.0,
+    "skillDuration": 1000.0,
     "skill": {
         "name": "高效衝擊",
         "description": "下一次的攻擊力提升至200%﹑且額外攻擊一次(可充能三次)"

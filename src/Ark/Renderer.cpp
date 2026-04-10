@@ -10,53 +10,23 @@ using namespace Ark;
 
 // Color constants
 namespace {
-constexpr ImU32 COLOR_BG        = IM_COL32( 16,  19,  26, 255);
-constexpr ImU32 COLOR_BOARD     = IM_COL32( 28,  34,  46, 255);
-constexpr ImU32 COLOR_GRID      = IM_COL32( 52,  60,  77, 255);
-constexpr ImU32 COLOR_EMPTY     = IM_COL32( 34,  39,  52, 255);
-constexpr ImU32 COLOR_ROAD      = IM_COL32( 78,  88, 106, 255);
-constexpr ImU32 COLOR_GROUND    = IM_COL32( 57,  72,  98, 255);
-constexpr ImU32 COLOR_HIGHGROUND= IM_COL32(112,  94,  61, 255);
-constexpr ImU32 COLOR_SPAWN     = IM_COL32( 44, 118,  78, 255);
-constexpr ImU32 COLOR_GOAL      = IM_COL32(154,  72,  72, 255);
+constexpr ImU32 COLOR_GRID_WHITE_MAIN = IM_COL32(255, 255, 255, 205);
+constexpr ImU32 COLOR_GRID_WHITE_FAINT= IM_COL32(255, 255, 255, 110);
+constexpr ImU32 COLOR_GRID_WHITE_BOLD = IM_COL32(255, 255, 255, 235);
 constexpr ImU32 COLOR_TEXT_MAIN = IM_COL32(236, 240, 245, 255);
 constexpr ImU32 COLOR_TEXT_SUB  = IM_COL32(173, 183, 198, 255);
 
 constexpr int   MAX_OPS         = 12;
 constexpr float BEAM_DURATION_MS = 120.0F;
+constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
+constexpr int   BAGPIPE_MAX_CHARGES = 3;
+constexpr float BAGPIPE_SKILL_DURATION_MS = 1000.0F;
 } // namespace
 
 // Draw
 void App::DrawScene(const glm::vec2& cursor) {
-    ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const float W = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
-    const float H = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
     const auto layout = GetBoardLayout();
-    const bool hasStageBackground = (m_StageBackground && m_StageBackground->GetTextureId() != 0);
-
-    if (hasStageBackground) {
-        const int alpha = static_cast<int>(255.0F * std::clamp(m_StageBackgroundAlpha, 0.0F, 1.0F));
-        draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_StageBackground->GetTextureId())),
-                       {0, 0}, {W, H}, {0, 0}, {1, 1}, IM_COL32(255, 255, 255, alpha));
-        draw->AddRectFilled({0,0},{W,H}, IM_COL32(0, 0, 0, 20));
-    } else {
-        draw->AddRectFilled({0,0},{W,H}, COLOR_BG);
-    }
-
-    // Board background ??four corners through perspective transform
-    float bL = layout.topLeftX - 10.0F / layout.cellSize;
-    float bR = layout.topLeftX + m_StageWidth * layout.cellSize + 10.0F / layout.cellSize;
-    float bT = layout.topLeftY + 10.0F / layout.cellSize;
-    float bB = layout.topLeftY - m_StageHeight * layout.cellSize - 10.0F / layout.cellSize;
-    ImVec2 bp1 = ToScreenPosition({bL, bT});
-    ImVec2 bp2 = ToScreenPosition({bR, bT});
-    ImVec2 bp3 = ToScreenPosition({bR, bB});
-    ImVec2 bp4 = ToScreenPosition({bL, bB});
-    if (!hasStageBackground) {
-        draw->AddQuadFilled(bp1, bp2, bp3, bp4, COLOR_BOARD);
-    } else {
-        draw->AddQuad(bp1, bp2, bp3, bp4, IM_COL32(255, 255, 255, 35), 1.0F);
-    }
 
     DrawGrid();
     DrawBeams();
@@ -69,32 +39,13 @@ void App::DrawScene(const glm::vec2& cursor) {
 void App::DrawGrid() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const auto layout = GetBoardLayout();
-    const bool hasStageBackground = (m_StageBackground && m_StageBackground->GetTextureId() != 0);
-    const float pad = layout.cellSize * (hasStageBackground ? 0.015F : 0.05F);
+    const float pad = layout.cellSize * 0.03F;
+    const float highgroundOffset = layout.cellSize * 0.22F;
 
     for (int row = 0; row < m_StageHeight; ++row) {
         for (int col = 0; col < m_StageWidth; ++col) {
             const auto tile = m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
-            ImU32 c = COLOR_EMPTY;
-            if (hasStageBackground) {
-                switch (tile) {
-                    case TileType::ROAD:       c = IM_COL32(255, 255, 255, 40); break;
-                    case TileType::GROUND:     c = IM_COL32(70, 120, 170, 42);  break;
-                    case TileType::HIGHGROUND: c = IM_COL32(176, 132, 72, 58);  break;
-                    case TileType::SPAWN:      c = IM_COL32(74, 196, 146, 110); break;
-                    case TileType::GOAL:       c = IM_COL32(226, 100, 102, 110);break;
-                    default:                   c = IM_COL32(0, 0, 0, 0);         break;
-                }
-            } else {
-                switch (tile) {
-                    case TileType::ROAD:       c = COLOR_ROAD;       break;
-                    case TileType::GROUND:     c = COLOR_GROUND;     break;
-                    case TileType::HIGHGROUND: c = COLOR_HIGHGROUND; break;
-                    case TileType::SPAWN:      c = COLOR_SPAWN;      break;
-                    case TileType::GOAL:       c = COLOR_GOAL;       break;
-                    default: break;
-                }
-            }
+            if (tile == TileType::EMPTY) continue;
 
             const float l = layout.topLeftX + col * layout.cellSize + pad;
             const float r = l + layout.cellSize - 2.0F * pad;
@@ -106,21 +57,22 @@ void App::DrawGrid() {
             const ImVec2 q3 = ToScreenPosition({r, b});
             const ImVec2 q4 = ToScreenPosition({l, b});
 
-            if (!hasStageBackground && tile == TileType::HIGHGROUND) {
-                const float hOff = layout.cellSize * 0.15F;
-                const ImVec2 d1 = {q1.x, q1.y + hOff};
-                const ImVec2 d2 = {q2.x, q2.y + hOff};
-                const ImVec2 d3 = {q3.x, q3.y + hOff};
-                const ImVec2 d4 = {q4.x, q4.y + hOff};
-                draw->AddQuadFilled(d1, d2, d3, d4, IM_COL32(40, 32, 19, 255));
-                draw->AddQuadFilled(q1, q2, q3, q4, COLOR_HIGHGROUND);
-                draw->AddQuad(q1, q2, q3, q4, IM_COL32(255,255,255,30), 1.5F);
-            } else {
-                draw->AddQuadFilled(q1, q2, q3, q4, c);
-                draw->AddQuad(
-                    q1, q2, q3, q4,
-                    hasStageBackground ? IM_COL32(220, 230, 240, 96) : COLOR_GRID,
-                    hasStageBackground ? 1.35F : 1.0F);
+            draw->AddQuad(q1, q2, q3, q4, COLOR_GRID_WHITE_MAIN, 1.2F);
+            draw->AddLine(q1, q3, COLOR_GRID_WHITE_FAINT, 1.0F);
+            draw->AddLine(q2, q4, COLOR_GRID_WHITE_FAINT, 1.0F);
+
+            if (tile == TileType::HIGHGROUND) {
+                const ImVec2 u1{q1.x, q1.y - highgroundOffset};
+                const ImVec2 u2{q2.x, q2.y - highgroundOffset};
+                const ImVec2 u3{q3.x, q3.y - highgroundOffset};
+                const ImVec2 u4{q4.x, q4.y - highgroundOffset};
+                draw->AddQuad(u1, u2, u3, u4, COLOR_GRID_WHITE_BOLD, 1.45F);
+                draw->AddLine(q1, u1, COLOR_GRID_WHITE_MAIN, 1.1F);
+                draw->AddLine(q2, u2, COLOR_GRID_WHITE_MAIN, 1.1F);
+                draw->AddLine(q3, u3, COLOR_GRID_WHITE_MAIN, 1.1F);
+                draw->AddLine(q4, u4, COLOR_GRID_WHITE_MAIN, 1.1F);
+                draw->AddLine(u1, u3, COLOR_GRID_WHITE_FAINT, 1.0F);
+                draw->AddLine(u2, u4, COLOR_GRID_WHITE_FAINT, 1.0F);
             }
         }
     }
@@ -212,16 +164,38 @@ void App::DrawOperators(const BoardLayout& layout) {
         // SP bar
         if (opType.maxSp > 0) {
             barY += 6.0F;
-            const float spR = op.skillActive
-                ? std::clamp(op.skillTimerMs / opType.skillDuration, 0.0F, 1.0F)
-                : std::clamp(op.sp / opType.maxSp, 0.0F, 1.0F);
+            const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == "風笛");
+            float spR = 0.0F;
+            bool skillReady = false;
+
+            if (isBagpipe) {
+                const int charges = std::clamp(static_cast<int>(std::floor(op.sp / BAGPIPE_SP_PER_SKILL)),
+                                               0, BAGPIPE_MAX_CHARGES);
+                skillReady = charges > 0;
+                spR = op.skillActive
+                    ? std::clamp(op.skillTimerMs / BAGPIPE_SKILL_DURATION_MS, 0.0F, 1.0F)
+                    : (skillReady ? 1.0F : std::clamp(op.sp / BAGPIPE_SP_PER_SKILL, 0.0F, 1.0F));
+            } else {
+                skillReady = (op.sp >= opType.maxSp);
+                spR = op.skillActive
+                    ? std::clamp(op.skillTimerMs / opType.skillDuration, 0.0F, 1.0F)
+                    : std::clamp(op.sp / opType.maxSp, 0.0F, 1.0F);
+            }
+
             ImU32 spCol = op.skillActive ? IM_COL32(255,165,0,255)
-                        : (op.sp >= opType.maxSp ? IM_COL32(255,215,0,255) : IM_COL32(100,150,255,255));
+                        : (skillReady ? IM_COL32(255,215,0,255) : IM_COL32(100,150,255,255));
             draw->AddRectFilled({barX,barY},{barX+barW, barY+4.0F}, IM_COL32(35,40,48,255));
             draw->AddRectFilled({barX,barY},{barX+barW*spR, barY+4.0F}, spCol);
-            if (op.sp >= opType.maxSp && !op.skillActive) {
+            if (skillReady && !op.skillActive) {
                 // Pulsing border
                 draw->AddRect({barX-1,barY-1},{barX+barW+1,barY+5.0F}, IM_COL32(255,215,0,180), 0, 0, 1.5F);
+            }
+
+            if (isBagpipe) {
+                const int charges = std::clamp(static_cast<int>(std::floor(op.sp / BAGPIPE_SP_PER_SKILL)),
+                                               0, BAGPIPE_MAX_CHARGES);
+                const std::string chargeText = "x" + std::to_string(charges);
+                draw->AddText({barX + barW + 4.0F, barY - 6.0F}, IM_COL32(255, 230, 130, 255), chargeText.c_str());
             }
         }
     }
@@ -394,4 +368,3 @@ void App::DrawHUD(float screenW) {
         draw->AddText({SW*0.5F-hs.x*0.5F, SH*0.5F+14}, COLOR_TEXT_MAIN, h.c_str());
     }
 }
-

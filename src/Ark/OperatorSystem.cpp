@@ -13,6 +13,18 @@ namespace {
 constexpr int   MAX_OPS          = 12;
 constexpr float BEAM_DURATION_MS = 120.0F;
 constexpr float KILL_REWARD_DP   = 1.5F;
+constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
+constexpr int   BAGPIPE_MAX_CHARGES = 3;
+constexpr float BAGPIPE_MAX_SP = BAGPIPE_SP_PER_SKILL * static_cast<float>(BAGPIPE_MAX_CHARGES);
+constexpr float BAGPIPE_SKILL_DURATION_MS = 1000.0F;
+
+bool IsBagpipe(const OperatorTemplate& opType) {
+    return opType.name == "Bagpipe" || opType.name == "風笛";
+}
+
+bool IsMyrtle(const OperatorTemplate& opType) {
+    return opType.name == "Myrtle" || opType.name == "桃金娘";
+}
 } // namespace
 
 // ─── Operator update ────────────────────────────────────────────────────────
@@ -81,6 +93,9 @@ void App::UpdateOperators(float dtMs) {
             animInst->Update();
         }
 
+        const bool isBagpipe = IsBagpipe(opType);
+        const bool isMyrtle = IsMyrtle(opType);
+
         // Myrtle talent: all vanguards regen 33 HP/s
         if (myrtleOnField && opType.isVanguard)
             op.hp = std::min(op.maxHp, op.hp + 33.0F * dtSec);
@@ -88,22 +103,25 @@ void App::UpdateOperators(float dtMs) {
         // Skill timer / SP regen
         if (op.skillActive) {
             op.skillTimerMs -= dtMs;
-            if (op.skillTimerMs <= 0.0F) { op.skillActive = false; op.sp = 0; }
+            if (op.skillTimerMs <= 0.0F) {
+                op.skillActive = false;
+                op.skillTimerMs = 0.0F;
+                if (!isBagpipe) {
+                    op.sp = 0.0F;
+                }
+            }
         } else if (opType.maxSp > 0) {
-            op.sp = std::min(opType.maxSp, op.sp + 1.0F * dtSec);
-            if (op.sp >= opType.maxSp && (opType.name == "Bagpipe" || opType.name == "風笛")) {
-                op.skillActive = true;
-                op.skillTimerMs = opType.skillDuration;
+            if (isBagpipe) {
+                op.sp = std::min(BAGPIPE_MAX_SP, op.sp + 1.0F * dtSec);
+            } else {
+                op.sp = std::min(opType.maxSp, op.sp + 1.0F * dtSec);
             }
         }
 
-        op.cooldownMs = std::max(0.0F, op.cooldownMs - dtMs);
-        if (op.cooldownMs > 0.0F) continue;
-
         // Myrtle skill active: no attacking
-        if ((opType.name == "Myrtle" || opType.name == "桃金娘") && op.skillActive) continue;
+        if (isMyrtle && op.skillActive) continue;
 
-        // Attack targeting
+        // Attack targeting (used by both auto-skill trigger and regular attacks)
         const auto opPos = ToBoardCenter(op.cell);
         
         struct TargetInfo { int idx; float distSq; };
@@ -133,7 +151,14 @@ void App::UpdateOperators(float dtMs) {
             }
         }
 
-        if (validTargets.empty()) continue;
+        if (isBagpipe && !op.skillActive && op.sp >= BAGPIPE_SP_PER_SKILL && !validTargets.empty()) {
+            op.skillActive = true;
+            op.skillTimerMs = BAGPIPE_SKILL_DURATION_MS;
+            op.sp = std::max(0.0F, op.sp - BAGPIPE_SP_PER_SKILL);
+        }
+
+        op.cooldownMs = std::max(0.0F, op.cooldownMs - dtMs);
+        if (op.cooldownMs > 0.0F || validTargets.empty()) continue;
 
         std::sort(validTargets.begin(), validTargets.end(), [](const TargetInfo& a, const TargetInfo& b) {
             return a.distSq < b.distSq;
@@ -142,7 +167,7 @@ void App::UpdateOperators(float dtMs) {
         float dmgMult = 1.0F;
         int maxTargets = 1;
 
-        if (opType.name == "Bagpipe" || opType.name == "風笛") {
+        if (isBagpipe) {
             bool talentTrigger = (rand() % 100) < 31;
             if (talentTrigger) {
                 dmgMult = 1.30F;
@@ -165,7 +190,7 @@ void App::UpdateOperators(float dtMs) {
             if (tgt.hp <= 0.0F) {
                 tgt.alive = false;
                 ++m_KillCount;
-                if (opType.name == "Bagpipe" || opType.name == "風笛") {
+                if (isBagpipe) {
                     m_DP = std::min(m_MaxDP, m_DP + 2.0F);
                 } else {
                     m_DP = std::min(m_MaxDP, m_DP + KILL_REWARD_DP);
@@ -198,7 +223,12 @@ void App::HandleDeploymentClick(const glm::vec2& cursor) {
     Operator newOp;
     newOp.id=m_NextOperatorId++; newOp.typeIndex=m_SelectedOperatorType;
     newOp.cell=*cell; newOp.direction={1,0}; newOp.cooldownMs=200;
-    newOp.hp=opType.hp; newOp.maxHp=opType.hp; newOp.def=opType.def; newOp.sp=opType.initialSp;
+    const bool isBagpipe = IsBagpipe(opType);
+    newOp.hp=opType.hp;
+    newOp.maxHp=opType.hp;
+    newOp.def=opType.def;
+    newOp.sp=isBagpipe ? 2.0F : opType.initialSp;
+    newOp.sp=std::clamp(newOp.sp, 0.0F, isBagpipe ? BAGPIPE_MAX_SP : opType.maxSp);
     m_Operators.push_back(newOp);
 }
 
@@ -206,11 +236,12 @@ void App::HandleSkillActivation(const glm::ivec2& cell) {
     for (auto& op : m_Operators) {
         if (op.cell != cell) continue;
         const auto& opType = m_OperatorTemplates.at(op.typeIndex);
+        if (IsBagpipe(opType)) return; // Bagpipe skill is auto-triggered
         if (opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
             op.skillActive  = true;
             op.skillTimerMs = opType.skillDuration;
             op.sp           = 0;
-            if (opType.name == "Myrtle" || opType.name == "桃金娘") m_DP = std::min(m_MaxDP, m_DP+6);
+            if (IsMyrtle(opType)) m_DP = std::min(m_MaxDP, m_DP+6);
         }
         return;
     }

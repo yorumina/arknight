@@ -12,9 +12,8 @@
 #include "Util/Animation.hpp"
 #include "Util/Image.hpp"
 
-// 60-degree top-down oblique view: Y foreshortening factor
-// Used by Camera.cpp (projection) and App.cpp (cursor inverse mapping)
-constexpr float PERSPECTIVE_Y_SCALE = 0.5F; // cos(60簞)
+// Top-down orthographic board projection (no perspective foreshortening).
+constexpr float PERSPECTIVE_Y_SCALE = 1.0F;
 
 class App {
 public:

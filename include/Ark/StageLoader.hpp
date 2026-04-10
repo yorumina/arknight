@@ -35,7 +35,7 @@ struct StageData {
 
     struct CameraConfig {
         float projectionScaleX = 1.0F;
-        float projectionScaleY = 0.5F;
+        float projectionScaleY = 1.0F;
         float zoom = 1.0F;
         float minZoom = 0.7F;
         float maxZoom = 1.8F;

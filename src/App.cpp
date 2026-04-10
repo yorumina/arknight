@@ -87,7 +87,7 @@ void App::Update() {
                     if (it->cell == *cell) {
                         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(it->typeIndex));
                         // Retreat refund
-                        if (opType.name == "Bagpipe" || opType.name == "憸函?") {
+                        if (opType.name == "Bagpipe" || opType.name == "風笛") {
                             m_DP = std::min(m_MaxDP, m_DP + static_cast<float>(opType.cost)); 
                         } else {
                             m_DP = std::min(m_MaxDP, m_DP + std::floor(static_cast<float>(opType.cost) / 2.0F)); 
@@ -119,11 +119,12 @@ void App::Update() {
                         for (auto& op : m_Operators) {
                             if (op.cell != *cell) continue;
                             const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
-                            if (opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
+                            const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == "風笛");
+                            if (!isBagpipe && opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
                                 op.skillActive  = true;
                                 op.skillTimerMs = opType.skillDuration;
                                 op.sp           = 0;
-                                if (opType.name == "Myrtle" || opType.name == "獢?憡?) {
+                                if (opType.name == "Myrtle" || opType.name == "桃金娘") {
                                     m_DP = std::min(m_MaxDP, m_DP + 6.0F);
                                 }
                                 handled = true;
@@ -169,19 +170,13 @@ void App::Update() {
                 newOp.hp        = opType.hp;
                 newOp.maxHp     = opType.hp;
                 newOp.def       = opType.def;
-                newOp.sp        = opType.initialSp;
-                
-                // Talent: Bagpipe Vanguard SP Buff
-                bool hasBagpipe = std::any_of(m_OperatorTemplates.begin(), m_OperatorTemplates.end(),
-                    [](const OperatorTemplate& t) { return t.name == "Bagpipe" || t.name == "憸函?"; });
-                
-                if (hasBagpipe && opType.isVanguard) {
-                    newOp.sp += 10.0F;
+                const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == "風笛");
+                newOp.sp        = isBagpipe ? 2.0F : opType.initialSp;
+                if (isBagpipe) {
+                    newOp.sp = std::clamp(newOp.sp, 0.0F, 12.0F); // 4 SP per use, up to 3 charges
+                } else {
+                    newOp.sp = std::min(newOp.sp, opType.maxSp);
                 }
-                if (opType.name == "Bagpipe" || opType.name == "憸函?") {
-                    newOp.sp += 4.0F; // Bagpipe deployment SP bonus
-                }
-                newOp.sp = std::min(newOp.sp, opType.maxSp);
 
                 m_Operators.push_back(newOp);
                 m_IsDeploying = false;

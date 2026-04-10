@@ -61,9 +61,9 @@ void App::InitializeStage() {
     if (m_OperatorTemplates.empty()) {
         // Fallback hardcoded operators if JSON not found
         m_OperatorTemplates = {
-            OperatorTemplate{"Bagpipe","憸函?",  11,2664,769,382,1000,1,4,2,8000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
+            OperatorTemplate{"Bagpipe","風笛",  11,2664,769,382,1000,1,4,2,1000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
             OperatorTemplate{"Sniper","Sniper",   11,1200,500,150,1000,0,0,0,0, IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false},
-            OperatorTemplate{"Myrtle","獢?憡?,  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
+            OperatorTemplate{"Myrtle","桃金娘",  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
         };
     }
     if (!LoadStageFromJsonModule()) BuildFallbackStage();
@@ -156,24 +156,19 @@ bool App::LoadStageFromJsonModule() {
         m_BoardLayoutOverride = d.boardLayoutOverride;
     }
 
-    m_Camera.projectionScaleX = std::max(0.05F, d.camera.projectionScaleX);
-    m_Camera.projectionScaleY = std::max(0.05F, d.camera.projectionScaleY);
+    const float stageProjection = std::max(0.05F, d.camera.projectionScaleX);
+    m_Camera.projectionScaleX = stageProjection;
+    m_Camera.projectionScaleY = stageProjection;
     m_Camera.minZoom = std::max(0.2F, d.camera.minZoom);
     m_Camera.maxZoom = std::max(m_Camera.minZoom, d.camera.maxZoom);
     m_Camera.defaultZoom = std::clamp(d.camera.zoom, m_Camera.minZoom, m_Camera.maxZoom);
     m_Camera.defaultPan = {d.camera.panX, d.camera.panY};
     ResetCameraToStageDefaults();
 
-    m_StageBackgroundPath = d.backgroundImage;
-    m_StageBackgroundAlpha = std::clamp(d.backgroundAlpha, 0.0F, 1.0F);
+    // Keep the map background clear for the wireframe top-down presentation.
+    m_StageBackgroundPath.clear();
+    m_StageBackgroundAlpha = 0.0F;
     m_StageBackground.reset();
-    if (!m_StageBackgroundPath.empty()) {
-        try {
-            m_StageBackground = std::make_shared<Util::Image>(m_StageBackgroundPath);
-        } catch (...) {
-            m_StageBackground.reset();
-        }
-    }
     return true;
 }
 

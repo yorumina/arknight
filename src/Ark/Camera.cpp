@@ -25,8 +25,9 @@ void App::ResetCameraToStageDefaults() {
 glm::vec2 App::RawCursorToPtsd(const glm::vec2& rawCursor) const {
     const float sx = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX * m_Camera.zoom);
     const float sy = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY * m_Camera.zoom);
-    return {rawCursor.x / sx - m_Camera.pan.x,
-            rawCursor.y / sy - m_Camera.pan.y};
+    const float u = rawCursor.x / sx;
+    const float v = rawCursor.y / sy;
+    return {u - m_Camera.pan.x, v - m_Camera.pan.y};
 }
 
 void App::UpdateCameraControls(float deltaTimeMs, const glm::vec2& rawCursor) {
@@ -83,8 +84,8 @@ void App::UpdateCameraControls(float deltaTimeMs, const glm::vec2& rawCursor) {
 
             const float sx = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX * m_Camera.zoom);
             const float sy = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY * m_Camera.zoom);
-            m_Camera.pan.x = rawCursor.x / sx - anchorBefore.x;
             m_Camera.pan.y = rawCursor.y / sy - anchorBefore.y;
+            m_Camera.pan.x = rawCursor.x / sx - anchorBefore.x;
         }
     }
 }
@@ -94,8 +95,10 @@ ImVec2 App::ToScreenPosition(const glm::vec2& p) const {
     const float H = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
     const float sx = m_Camera.projectionScaleX * m_Camera.zoom;
     const float sy = m_Camera.projectionScaleY * m_Camera.zoom;
-    return {W * 0.5F + (p.x + m_Camera.pan.x) * sx,
-            H * 0.5F - (p.y + m_Camera.pan.y) * sy};
+    const float worldX = p.x + m_Camera.pan.x;
+    const float worldY = p.y + m_Camera.pan.y;
+    return {W * 0.5F + worldX * sx,
+            H * 0.5F - worldY * sy};
 }
 
 BoardLayout App::GetBoardLayout() const {
@@ -118,7 +121,9 @@ BoardLayout App::GetBoardLayout() const {
     const float rows = static_cast<float>(std::max(1, m_StageHeight));
     const float projX = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX);
     const float projY = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY);
-    const float cellSizeRaw = std::floor(std::min(availW / (cols * projX), availH / (rows * projY)));
+    const float boardProjW = cols * projX;
+    const float boardProjH = rows * projY;
+    const float cellSizeRaw = std::floor(std::min(availW / boardProjW, availH / boardProjH));
 
     BoardLayout layout;
     layout.cellSize = std::clamp(cellSizeRaw, 24.0F, 120.0F);
