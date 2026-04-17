@@ -1,5 +1,7 @@
 #include "Core/Context.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -51,11 +53,48 @@ ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::string* loadedPath) {
     }
     return nullptr;
 }
+
+float ComputeDeviceScaleFromDisplayWidth(int displayWidth) {
+    // Tier-based scaling requested by project:
+    // 4K tier -> 1x, 2K tier -> 1/2x, 1K tier -> 1/4x, and so on.
+    if (displayWidth <= 0) return 1.0F;
+
+    float scale = 1.0F;
+    int tierWidth = 3840;
+    while (displayWidth < tierWidth) {
+        scale *= 0.5F;
+        tierWidth /= 2;
+        if (tierWidth <= 0 || scale <= 0.015625F) break; // stop at 1/64
+    }
+    return std::clamp(scale, 0.015625F, 1.0F);
+}
+
+void ApplyWindowScaleFromDisplay() {
+    SDL_DisplayMode dm{};
+    if (SDL_GetCurrentDisplayMode(0, &dm) != 0) {
+        LOG_WARN("Failed to query display mode, keep configured window size: {}", SDL_GetError());
+        return;
+    }
+
+    const unsigned int baseW = PTSD_Config::WINDOW_WIDTH;
+    const unsigned int baseH = PTSD_Config::WINDOW_HEIGHT;
+    const float scale = ComputeDeviceScaleFromDisplayWidth(dm.w);
+
+    const unsigned int scaledW = std::max(640U, static_cast<unsigned int>(std::lround(static_cast<float>(baseW) * scale)));
+    const unsigned int scaledH = std::max(360U, static_cast<unsigned int>(std::lround(static_cast<float>(baseH) * scale)));
+
+    PTSD_Config::WINDOW_WIDTH = scaledW;
+    PTSD_Config::WINDOW_HEIGHT = scaledH;
+
+    LOG_INFO("Display mode: {}x{}, window scale: {:.3f}, final window: {}x{} (base {}x{})",
+             dm.w, dm.h, scale, scaledW, scaledH, baseW, baseH);
+}
 } // namespace
 
 Context::Context() {
     Util::Logger::Init();
     PTSD_Config::Init();
+    ApplyWindowScaleFromDisplay();
     Util::Logger::SetLevel(PTSD_Config::DEFAULT_LOG_LEVEL);
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {

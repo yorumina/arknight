@@ -48,6 +48,10 @@ struct StageData {
 
     std::string backgroundImage;
     float backgroundAlpha = 1.0F;
+    std::string loadingImage;
+    float loadingAlpha = 1.0F;
+    std::string finishImage;
+    float finishAlpha = 1.0F;
 };
 std::optional<StageData> LoadStageFromJson(const std::string& stageFile);
 

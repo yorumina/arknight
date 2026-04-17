@@ -236,6 +236,18 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
             if (!imagePath.empty()) data.backgroundImage = imagePath.string();
             data.backgroundAlpha = Clamp01(background.value("alpha", data.backgroundAlpha));
         }
+        if (stage.contains("loading") && stage["loading"].is_object()) {
+            const auto& loading = stage["loading"];
+            const auto imagePath = ResolveAssetPath(*stagePath, loading.value("image", std::string{}));
+            if (!imagePath.empty()) data.loadingImage = imagePath.string();
+            data.loadingAlpha = Clamp01(loading.value("alpha", data.loadingAlpha));
+        }
+        if (stage.contains("finish") && stage["finish"].is_object()) {
+            const auto& finish = stage["finish"];
+            const auto imagePath = ResolveAssetPath(*stagePath, finish.value("image", std::string{}));
+            if (!imagePath.empty()) data.finishImage = imagePath.string();
+            data.finishAlpha = Clamp01(finish.value("alpha", data.finishAlpha));
+        }
         data.tileMap.assign(static_cast<std::size_t>(H),
                             std::vector<TileType>(static_cast<std::size_t>(W), TileType::EMPTY));
 

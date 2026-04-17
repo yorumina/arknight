@@ -67,7 +67,7 @@ void App::Update() {
         m_SelectedOperatorType = static_cast<int>(m_OperatorTemplates.size()) - 1;
 
     if (Util::Input::IsKeyDown(Util::Keycode::SPACE) && !m_WaveRunning &&
-        !m_GameOver && !m_MissionClear) {
+        !m_GameOver && !m_MissionClear && !m_PreStageWaiting) {
         StartWave();
     }
 
@@ -76,7 +76,7 @@ void App::Update() {
     UpdateCameraControls(dt, rawCursor);
     const glm::vec2 ptsdCursor = RawCursorToPtsd(rawCursor);
 
-    if (!m_GameOver && !m_MissionClear) {
+    if (!m_GameOver && !m_MissionClear && !m_PreStageWaiting) {
         if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_RB) && !m_IsDeploying) {
             const auto cell = ToCell(ptsdCursor);
             if (cell) {

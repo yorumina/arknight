@@ -28,22 +28,105 @@ constexpr float BEAM_DURATION_MS = 120.0F;
 constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
 constexpr int   BAGPIPE_MAX_CHARGES = 3;
 constexpr float BAGPIPE_SKILL_DURATION_MS = 1000.0F;
+constexpr float PRE_STAGE_TOTAL_MS = 3000.0F;
+constexpr float PRE_STAGE_FADE_MS = 500.0F;
+constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
+constexpr float FINISH_BLACKOUT_MS = 1000.0F;
+constexpr float FINISH_FADE_IN_MS = 700.0F;
+constexpr float FINISH_FADE_OUT_MS = 700.0F;
 } // namespace
 
 // Draw
 void App::DrawScene(const glm::vec2& cursor) {
     const float W = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
     const auto layout = GetBoardLayout();
+    auto drawGameplayFrame = [&]() {
+        DrawGrid();
+        DrawOperators(layout, false);
+        DrawEnemies(layout);
+        DrawHighgroundTopLayer();
+        DrawMarkerTopLayer();
+        DrawOperators(layout, true);
+        DrawBeams();
+        DrawDeployPreview(ToCell(cursor), layout);
+        DrawHUD(W);
+    };
 
-    DrawGrid();
-    DrawOperators(layout, false);
-    DrawEnemies(layout);
-    DrawHighgroundTopLayer();
-    DrawMarkerTopLayer();
-    DrawOperators(layout, true);
-    DrawBeams();
-    DrawDeployPreview(ToCell(cursor), layout);
-    DrawHUD(W);
+    if (m_PreStageWaiting && !m_StageLoadingPath.empty()) {
+        m_StageBackgroundPath = m_StageLoadingPath;
+        const float t = std::clamp(m_PreStageTimerMs, 0.0F, PRE_STAGE_TOTAL_MS);
+        const float fadeIn = std::clamp(t / PRE_STAGE_FADE_MS, 0.0F, 1.0F);
+        const float fadeOut = std::clamp((PRE_STAGE_TOTAL_MS - t) / PRE_STAGE_FADE_MS, 0.0F, 1.0F);
+        m_StageBackgroundAlpha = m_StageLoadingAlpha * std::min(fadeIn, fadeOut);
+        DrawLoadingScreen();
+        return;
+    }
+
+    if (m_MissionClear && !m_StageFinishPath.empty()) {
+        const float t = std::max(0.0F, m_ClearTimerMs);
+        if (t < FINISH_FADE_TO_BLACK_MS + FINISH_BLACKOUT_MS) {
+            drawGameplayFrame();
+            float blackAlpha = 1.0F;
+            if (t < FINISH_FADE_TO_BLACK_MS) {
+                blackAlpha = std::clamp(t / FINISH_FADE_TO_BLACK_MS, 0.0F, 1.0F);
+            }
+            ImGui::GetBackgroundDrawList()->AddRectFilled(
+                {0.0F, 0.0F},
+                {static_cast<float>(PTSD_Config::WINDOW_WIDTH), static_cast<float>(PTSD_Config::WINDOW_HEIGHT)},
+                IM_COL32(0, 0, 0, static_cast<int>(blackAlpha * 255.0F))
+            );
+            return;
+        }
+
+        m_StageBackgroundPath = m_StageFinishPath;
+        float alpha = std::clamp((t - FINISH_FADE_TO_BLACK_MS - FINISH_BLACKOUT_MS) / FINISH_FADE_IN_MS, 0.0F, 1.0F);
+        if (m_FinishExitRequested) {
+            alpha = std::min(alpha, 1.0F - std::clamp(m_FinishExitTimerMs / FINISH_FADE_OUT_MS, 0.0F, 1.0F));
+        }
+        m_StageBackgroundAlpha = m_StageFinishAlpha * alpha;
+        DrawLoadingScreen();
+        return;
+    }
+
+    drawGameplayFrame();
+}
+
+void App::DrawLoadingScreen() {
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const float screenW = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
+    const float screenH = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
+
+    draw->AddRectFilled({0.0F, 0.0F}, {screenW, screenH}, IM_COL32(0, 0, 0, 255));
+
+    if (m_StageBackgroundPath != m_StageOverlayLoadedPath) {
+        m_StageBackground.reset();
+        m_StageOverlayLoadedPath = m_StageBackgroundPath;
+    }
+
+    if (m_StageBackground == nullptr && !m_StageBackgroundPath.empty()) {
+        m_StageBackground = std::make_shared<Util::Image>(m_StageBackgroundPath);
+    }
+
+    if (m_StageBackground != nullptr && m_StageBackground->GetTextureId() != 0) {
+        const glm::vec2 imageSize = m_StageBackground->GetSize();
+        if (imageSize.x > 0.0F && imageSize.y > 0.0F) {
+            // Cover scaling: always fill full screen (crop overflow if needed).
+            const float scale = std::max(screenW / imageSize.x, screenH / imageSize.y);
+            const float drawW = imageSize.x * scale;
+            const float drawH = imageSize.y * scale;
+            const float x = (screenW - drawW) * 0.5F;
+            const float y = (screenH - drawH) * 0.5F;
+            const int alpha = static_cast<int>(std::clamp(m_StageBackgroundAlpha, 0.0F, 1.0F) * 255.0F);
+            draw->AddImage(
+                reinterpret_cast<void*>(static_cast<intptr_t>(m_StageBackground->GetTextureId())),
+                {x, y},
+                {x + drawW, y + drawH},
+                {0.0F, 0.0F},
+                {1.0F, 1.0F},
+                IM_COL32(255, 255, 255, alpha)
+            );
+        }
+    }
 }
 
 void App::DrawGrid() {
@@ -387,8 +470,13 @@ void App::DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const Bo
 void App::DrawHUD(float screenW) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     draw->AddText({26, 12}, COLOR_TEXT_MAIN, "Arknights Demo  |  PTSD Engine");
-    if (!m_WaveRunning && !m_GameOver && !m_MissionClear)
+    if (m_PreStageWaiting) {
+        const int remainSec = std::max(1, static_cast<int>(std::ceil((3000.0F - m_PreStageTimerMs) / 1000.0F)));
+        const std::string standby = "Stage opening in " + std::to_string(remainSec) + "s...";
+        draw->AddText({26, 34}, IM_COL32(255,230,80,255), standby.c_str());
+    } else if (!m_WaveRunning && !m_GameOver && !m_MissionClear) {
         draw->AddText({26, 34}, IM_COL32(255,230,80,255), "[SPACE] Start Wave  (deployment enabled after start)");
+    }
     else
         draw->AddText({26, 34}, COLOR_TEXT_SUB,
             "1 Bagpipe | 2 Sniper | 3 Myrtle | LMB Deploy/Skill | MMB Drag | Wheel Zoom | WASD Pan | C Reset Cam | R Reset | ESC Exit");
@@ -399,6 +487,7 @@ void App::DrawHUD(float screenW) {
     draw->AddRect({hx,hy},{hx+hw,hy+hh}, IM_COL32(70,80,96,255), 8.0F);
 
     std::string state = "Ready";
+    if (m_PreStageWaiting) state = "STANDBY";
     if (m_WaveRunning)   state = "IN BATTLE";
     if (m_MissionClear)  state = "MISSION CLEAR";
     if (m_GameOver)      state = "MISSION FAILED";

@@ -11,16 +11,25 @@
 
 #include "config.hpp"
 #include "Ark/StageLoader.hpp"
+#include "Util/Input.hpp"
+#include "Util/Keycode.hpp"
 
 using namespace Ark;
 
 namespace {
 constexpr float WAVE_CLEAR_DP        = 5.0F;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
+constexpr float PRE_STAGE_WAIT_MS    = 3000.0F;  // 3 seconds
+constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
+constexpr float FINISH_BLACKOUT_MS   = 1000.0F;  // 1 second
+constexpr float FINISH_FADE_IN_MS    = 700.0F;
+constexpr float FINISH_FADE_OUT_MS   = 700.0F;
 constexpr float DEFAULT_CAMERA_SCALE_X = 1.0F;
 constexpr float DEFAULT_CAMERA_SCALE_Y = PERSPECTIVE_Y_SCALE;
 constexpr float DEFAULT_CAMERA_MIN_ZOOM = 0.7F;
 constexpr float DEFAULT_CAMERA_MAX_ZOOM = 1.8F;
+constexpr const char* STAGE_1_1_FILE = "Operation 1-1/stage";
+constexpr const char* STAGE_1_2_FILE = "Operation 1-2/stage";
 } // namespace
 
 // ?????????????????????????????????????????????????????????????????????????????
@@ -30,6 +39,10 @@ void App::ResetDemo() {
     m_GameOver    = false;
     m_MissionClear= false;
     m_ClearTimerMs= 0.0F;
+    m_PreStageWaiting = true;
+    m_PreStageTimerMs = 0.0F;
+    m_FinishExitRequested = false;
+    m_FinishExitTimerMs = 0.0F;
 
     m_DP          = 12.0F;
     m_LifePoint   = 10;
@@ -166,9 +179,13 @@ bool App::LoadStageFromJsonModule() {
     m_Camera.defaultPan = {d.camera.panX, d.camera.panY};
     ResetCameraToStageDefaults();
 
-    // Keep the map background clear for the wireframe top-down presentation.
+    m_StageLoadingPath = d.loadingImage;
+    m_StageLoadingAlpha = d.loadingAlpha;
+    m_StageFinishPath = d.finishImage;
+    m_StageFinishAlpha = d.finishAlpha;
     m_StageBackgroundPath.clear();
-    m_StageBackgroundAlpha = 0.0F;
+    m_StageBackgroundAlpha = 1.0F;
+    m_StageOverlayLoadedPath.clear();
     m_StageBackground.reset();
     return true;
 }
@@ -181,6 +198,11 @@ void App::BuildFallbackStage() {
     m_StageBackgroundPath.clear();
     m_StageBackgroundAlpha = 1.0F;
     m_StageBackground.reset();
+    m_StageOverlayLoadedPath.clear();
+    m_StageLoadingPath.clear();
+    m_StageFinishPath.clear();
+    m_StageLoadingAlpha = 1.0F;
+    m_StageFinishAlpha = 1.0F;
     m_Camera.projectionScaleX = DEFAULT_CAMERA_SCALE_X;
     m_Camera.projectionScaleY = DEFAULT_CAMERA_SCALE_Y;
     m_Camera.minZoom = DEFAULT_CAMERA_MIN_ZOOM;
@@ -237,7 +259,7 @@ void App::BuildFallbackStage() {
 // WAVE
 // ?????????????????????????????????????????????????????????????????????????????
 void App::StartWave() {
-    if (m_GameOver || m_WaveRunning || m_MissionClear || m_WavePlans.empty()) return;
+    if (m_GameOver || m_WaveRunning || m_MissionClear || m_PreStageWaiting || m_WavePlans.empty()) return;
     m_WaveRunning    = true;
     m_WaveElapsedSec = 0.0F;
     m_NextSpawnIndex = 0;
@@ -265,13 +287,35 @@ void App::UpdateWave(float dtSec) {
 void App::UpdateGame(float dtMs) {
     UpdateBeams(dtMs);
 
+    if (m_PreStageWaiting) {
+        m_PreStageTimerMs += dtMs;
+        if (m_PreStageTimerMs >= PRE_STAGE_WAIT_MS) {
+            m_PreStageWaiting = false;
+        }
+        return;
+    }
+
     if (m_GameOver || m_MissionClear) {
         if (m_MissionClear) {
             m_ClearTimerMs += dtMs;
-            if (m_ClearTimerMs >= 2000.0F && m_CurrentStageFile != "Operation 1-1") {
-                m_CurrentStageFile = "Operation 1-1";
-                InitializeStage();
-                ResetDemo();
+
+            const float clickableAt = FINISH_FADE_TO_BLACK_MS + FINISH_BLACKOUT_MS + FINISH_FADE_IN_MS;
+            if (!m_FinishExitRequested) {
+                if (m_ClearTimerMs >= clickableAt && Util::Input::IsKeyPressed(Util::Keycode::MOUSE_LB)) {
+                    m_FinishExitRequested = true;
+                    m_FinishExitTimerMs = 0.0F;
+                }
+            } else {
+                m_FinishExitTimerMs += dtMs;
+                if (m_FinishExitTimerMs >= FINISH_FADE_OUT_MS) {
+                    if (Ark::ResolveStagePath(STAGE_1_2_FILE).has_value()) {
+                        m_CurrentStageFile = STAGE_1_2_FILE;
+                        InitializeStage();
+                        ResetDemo();
+                    } else {
+                        m_CurrentState = State::END;
+                    }
+                }
             }
         }
         return;

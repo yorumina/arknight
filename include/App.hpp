@@ -74,6 +74,7 @@ private:
     void DrawEnemies(const Ark::BoardLayout& layout);
     void DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const Ark::BoardLayout& layout);
     void DrawHUD(float screenW);
+    void DrawLoadingScreen();
 
     // ?? Coordinate helpers ????????????????????????????????????????
     bool IsCellOccupied(const glm::ivec2& cell) const;
@@ -99,7 +100,7 @@ private:
     int         m_StageHeight = 8;
     std::string m_StageName = "fallback_stage";
     std::string m_StageLoadSource = "fallback";
-    std::string m_CurrentStageFile = "Operation 1-1";
+    std::string m_CurrentStageFile = "Operation 1-1/stage";
 
     std::vector<std::vector<Ark::TileType>> m_TileMap;
     std::vector<Ark::Route>                 m_Routes;
@@ -111,6 +112,11 @@ private:
     std::string m_StageBackgroundPath;
     float m_StageBackgroundAlpha = 1.0F;
     std::shared_ptr<Util::Image> m_StageBackground;
+    std::string m_StageOverlayLoadedPath;
+    std::string m_StageLoadingPath;
+    float m_StageLoadingAlpha = 1.0F;
+    std::string m_StageFinishPath;
+    float m_StageFinishAlpha = 1.0F;
 
     // ?? Operator definitions (loaded from JSON) ????????????????????
     std::vector<Ark::OperatorTemplate> m_OperatorTemplates;
@@ -120,6 +126,10 @@ private:
     bool  m_GameOver     = false;
     bool  m_MissionClear = false;
     float m_ClearTimerMs = 0.0F;
+    bool  m_PreStageWaiting = true;
+    float m_PreStageTimerMs = 0.0F;
+    bool  m_FinishExitRequested = false;
+    float m_FinishExitTimerMs = 0.0F;
 
     // ?? Economy ????????????????????????????????????????????????????
     float m_DP            = 10.0F;
