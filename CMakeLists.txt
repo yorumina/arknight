@@ -28,7 +28,11 @@ set(ARKNIGHT_SRC
     src/Ark/Camera.cpp
     src/Ark/EnemySystem.cpp
     src/Ark/OperatorSystem.cpp
-    src/Ark/Renderer.cpp
+    src/Ark/Renderer/Scene.cpp
+    src/Ark/Renderer/Grid.cpp
+    src/Ark/Renderer/Entities.cpp
+    src/Ark/Renderer/Deploy.cpp
+    src/Ark/Renderer/Hud.cpp
     src/Ark/GameLogic.cpp
 )
 

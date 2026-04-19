@@ -2,6 +2,7 @@
 // GameLogic.cpp  ?? Wave management, game state, stage init & animation loading
 // ?????????????????????????????????????????????????????????????????????????????
 #include "App.hpp"
+#include "Ark/Renderer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -45,12 +46,15 @@ void App::ResetDemo() {
     m_FinishExitTimerMs = 0.0F;
 
     m_DP          = 12.0F;
-    m_LifePoint   = 10;
+    m_LifePoint   = 3;
     m_KillCount   = 0;
 
     m_SelectedOperatorType = 0;
     m_IsDeploying          = false;
     m_SelectedOperatorId   = -1;
+    m_DraggingFromBar      = false;
+    m_DragOperatorType     = -1;
+    m_WaitingForDirection  = false;
     ResetCameraToStageDefaults();
 
     m_CurrentWave    = 0;
@@ -82,6 +86,9 @@ void App::InitializeStage() {
     }
     if (!LoadStageFromJsonModule()) BuildFallbackStage();
     LoadOperatorAnimations();
+    if (m_Renderer) {
+        m_Renderer->LoadOperatorThumbnails();
+    }
 }
 
 void App::LoadOperatorAnimations() {

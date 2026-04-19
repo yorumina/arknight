@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 #include "Core/DebugMessageCallback.hpp"
@@ -36,22 +37,28 @@ std::vector<std::string> BuildFontCandidates() {
     return candidates;
 }
 
-ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::string* loadedPath) {
+ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::vector<std::string>* loadedPaths) {
+    ImFont* baseFont = nullptr;
+    std::unordered_set<std::string> visited;
+
     for (const auto &path : BuildFontCandidates()) {
+        if (!visited.insert(path).second) continue;
         if (!std::filesystem::exists(path)) continue;
+
         ImFontConfig fontCfg;
         fontCfg.OversampleH = 2;
         fontCfg.OversampleV = 2;
         fontCfg.PixelSnapH = false;
+        fontCfg.MergeMode = (baseFont != nullptr);
+
         ImFont* font = io.Fonts->AddFontFromFileTTF(
             path.c_str(), 20.0F, &fontCfg, io.Fonts->GetGlyphRangesChineseFull());
-        if (font == nullptr) continue;
-        if (font->FindGlyphNoFallback(0x4F60) != nullptr && font->FindGlyphNoFallback(0x9EDE) != nullptr) {
-            if (loadedPath != nullptr) *loadedPath = path;
-            return font;
+        if (font != nullptr) {
+            if (loadedPaths != nullptr) loadedPaths->push_back(path);
+            if (baseFont == nullptr) baseFont = font;
         }
     }
-    return nullptr;
+    return baseFont;
 }
 
 float ComputeDeviceScaleFromDisplayWidth(int displayWidth) {
@@ -172,11 +179,16 @@ Context::Context() {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
-    std::string loadedFontPath;
-    ImFont* cjkFont = LoadTraditionalChineseFont(io, &loadedFontPath);
+    io.Fonts->Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
+    io.Fonts->TexDesiredWidth = 4096;
+
+    std::vector<std::string> loadedFontPaths;
+    ImFont* cjkFont = LoadTraditionalChineseFont(io, &loadedFontPaths);
     if (cjkFont != nullptr) {
         io.FontDefault = cjkFont;
-        LOG_INFO("Loaded UI CJK font: {}", loadedFontPath);
+        for (const auto& path : loadedFontPaths) {
+            LOG_INFO("Loaded UI CJK font: {}", path);
+        }
     } else {
         io.Fonts->AddFontDefault();
         LOG_WARN("No Traditional Chinese font found. Install Noto CJK and/or set ARKNIGHT_UI_FONT=/path/to/font.ttf");

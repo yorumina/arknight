@@ -1,19 +1,20 @@
-// ?????????????????????????????????????????????????????????????????????????????
-// App.cpp  ??Arknights clone   (main lifecycle & input handling)
+// ─────────────────────────────────────────────────────────────────────────────
+// App.cpp  –Arknights clone   (main lifecycle & input handling)
 //
 // Implementation is split across multiple files:
-//   Camera.cpp        ??Projection & coordinate mapping
-//   EnemySystem.cpp   ??Enemy spawning, movement & AI
-//   OperatorSystem.cpp??Operator combat, skills & deployment helpers
-//   Renderer.cpp      ??All drawing / rendering code
-//   GameLogic.cpp     ??Wave management, game state, stage init
-// ?????????????????????????????????????????????????????????????????????????????
+//   Camera.cpp        –Projection & coordinate mapping
+//   EnemySystem.cpp   –Enemy spawning, movement & AI
+//   OperatorSystem.cpp–Operator combat, skills & deployment helpers
+//   Renderer.cpp      –All drawing / rendering code
+//   GameLogic.cpp     –Wave management, game state, stage init
+// ─────────────────────────────────────────────────────────────────────────────
 #include "App.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <string>
 
+#include "Ark/Renderer.hpp"
 #include "Util/Input.hpp"
 #include "Util/Keycode.hpp"
 #include "Util/Time.hpp"
@@ -24,9 +25,18 @@ using namespace Ark;
 namespace {
 constexpr int   MAX_OPS          = 12;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
+
+// Bottom operator bar layout constants (screen-space)
+constexpr float OP_BAR_HEIGHT     = 100.0F;
+constexpr float OP_CARD_WIDTH     = 80.0F;
+constexpr float OP_CARD_HEIGHT    = 95.0F;
+constexpr float OP_CARD_SPACING   = 6.0F;
 } // namespace
 
 void App::Start() {
+    if (!m_Renderer) {
+        m_Renderer = std::make_shared<Ark::AppRenderer>(*this);
+    }
     InitializeStage();
     ResetDemo();
     m_CurrentState = State::UPDATE;
@@ -55,17 +65,6 @@ void App::Update() {
     if (Util::Input::IsKeyDown(Util::Keycode::R)) ResetDemo();
     const float dt = std::clamp(Util::Time::GetDeltaTimeMs(), 0.0F, 100.0F);
 
-    // Operator selection (hotkeys)
-    for (int i = 0; i < static_cast<int>(m_OperatorTemplates.size()); ++i) {
-        // NUM_1 = NUM_0 + 1? Use array of keys
-    }
-    if (Util::Input::IsKeyDown(Util::Keycode::NUM_1)) m_SelectedOperatorType = 0;
-    if (Util::Input::IsKeyDown(Util::Keycode::NUM_2)) m_SelectedOperatorType = 1;
-    if (Util::Input::IsKeyDown(Util::Keycode::NUM_3)) m_SelectedOperatorType = 2;
-    // Clamp selection to available operators
-    if (m_SelectedOperatorType >= static_cast<int>(m_OperatorTemplates.size()))
-        m_SelectedOperatorType = static_cast<int>(m_OperatorTemplates.size()) - 1;
-
     if (Util::Input::IsKeyDown(Util::Keycode::SPACE) && !m_WaveRunning &&
         !m_GameOver && !m_MissionClear && !m_PreStageWaiting) {
         StartWave();
@@ -76,8 +75,16 @@ void App::Update() {
     UpdateCameraControls(dt, rawCursor);
     const glm::vec2 ptsdCursor = RawCursorToPtsd(rawCursor);
 
+    // Screen-space cursor for bar hit-testing
+    const float screenW = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
+    const float screenH = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
+    const float screenCursorX = rawCursor.x + screenW * 0.5F;
+    const float screenCursorY = screenH * 0.5F - rawCursor.y;
+
     if (!m_GameOver && !m_MissionClear && !m_PreStageWaiting) {
-        if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_RB) && !m_IsDeploying) {
+        // ── Right-click: retreat operator ────────────────────────────
+        if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_RB) && !m_IsDeploying &&
+            !m_DraggingFromBar && !m_WaitingForDirection) {
             const auto cell = ToCell(ptsdCursor);
             if (cell) {
                 for (auto it = m_Operators.begin(); it != m_Operators.end(); ++it) {
@@ -85,7 +92,7 @@ void App::Update() {
                         if (m_SelectedOperatorId == it->id) m_SelectedOperatorId = -1;
                         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(it->typeIndex));
                         // Retreat refund
-                        if (opType.name == "Bagpipe" || opType.name == "風笛") {
+                        if (opType.name == "Bagpipe" || opType.name == u8"風笛") {
                             m_DP = std::min(m_MaxDP, m_DP + static_cast<float>(opType.cost)); 
                         } else {
                             m_DP = std::min(m_MaxDP, m_DP + std::floor(static_cast<float>(opType.cost) / 2.0F)); 
@@ -107,43 +114,124 @@ void App::Update() {
             }
         }
 
-        if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_LB)) {
-            if (!m_IsDeploying) {
-                const auto cell = ToCell(ptsdCursor);
-                bool clickedOperator = false;
-                if (cell) {
-                    // Check skill activation first
-                    bool handled = false;
-                    if (m_WaveRunning) {
-                        for (auto& op : m_Operators) {
-                            if (op.cell != *cell) continue;
-                            clickedOperator = true;
-                            m_SelectedOperatorId = op.id;
-                            const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
-                            const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == "風笛");
-                            if (!isBagpipe && opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
-                                op.skillActive  = true;
-                                op.skillTimerMs = opType.skillDuration;
-                                op.sp           = 0;
-                                if (opType.name == "Myrtle" || opType.name == "桃金娘") {
-                                    m_DP = std::min(m_MaxDP, m_DP + 6.0F);
-                                }
-                                handled = true;
-                                break;
+        // ── Direction selection phase ─────────────────────────────────
+        if (m_WaitingForDirection) {
+            if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB) && !m_IsDirectionDragging) {
+                m_IsDirectionDragging = true;
+                m_DirectionDragStart = {screenCursorX, screenCursorY};
+            }
+
+            if (m_IsDirectionDragging) {
+                glm::vec2 diff{
+                    screenCursorX - m_DirectionDragStart.x,
+                    screenCursorY - m_DirectionDragStart.y
+                };
+                if (std::abs(diff.x) > 25.0F || std::abs(diff.y) > 25.0F) {
+                    if (std::abs(diff.x) > std::abs(diff.y)) {
+                        m_DeployingDirection = diff.x > 0 ? glm::ivec2(1, 0) : glm::ivec2(-1, 0);
+                    } else {
+                        m_DeployingDirection = diff.y > 0 ? glm::ivec2(0, 1) : glm::ivec2(0, -1);
+                    }
+                }
+                
+                if (Util::Input::IsKeyUp(Util::Keycode::MOUSE_LB)) {
+                    // Finalize deployment if they dragged far enough
+                    if (std::abs(diff.x) > 25.0F || std::abs(diff.y) > 25.0F) {
+                        const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(m_DragOperatorType));
+                        m_DP -= static_cast<float>(opType.cost);
+
+                        Operator newOp;
+                        newOp.id        = m_NextOperatorId++;
+                        newOp.typeIndex = m_DragOperatorType;
+                        newOp.cell      = m_DirectionCell;
+                        newOp.direction = m_DeployingDirection;
+                        newOp.cooldownMs= 200.0F;
+                        newOp.hp        = opType.hp;
+                        newOp.maxHp     = opType.hp;
+                        newOp.def       = opType.def;
+                        const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == u8"風笛");
+                        newOp.sp        = isBagpipe ? 2.0F : opType.initialSp;
+                        if (isBagpipe) {
+                            newOp.sp = std::clamp(newOp.sp, 0.0F, 12.0F);
+                        } else {
+                            newOp.sp = std::min(newOp.sp, opType.maxSp);
+                        }
+
+                        m_Operators.push_back(newOp);
+                        m_SelectedOperatorId = -1;
+                    } else {
+                        // Cancel deployment if dropped inside the center area
+                        m_SelectedOperatorId = -1;
+                    }
+                    m_WaitingForDirection = false;
+                    m_DraggingFromBar = false;
+                    m_IsDeploying = false;
+                    m_IsDirectionDragging = false;
+                }
+            }
+
+            // Right-click cancels direction selection
+            if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_RB)) {
+                m_WaitingForDirection = false;
+                m_DraggingFromBar = false;
+                m_IsDeploying = false;
+                m_IsDirectionDragging = false;
+            }
+        }
+        // ── Drag from operator bar ────────────────────────────────────
+        else if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB) && !m_DraggingFromBar) {
+            // Check if click is inside the bottom operator bar area
+            const float barY = screenH - OP_BAR_HEIGHT;
+            if (screenCursorY >= barY && m_WaveRunning) {
+                const int opCount = static_cast<int>(m_OperatorTemplates.size());
+                
+                std::vector<int> displayOps;
+                for (int i = 0; i < opCount; ++i) {
+                    if (!IsOperatorTypeOnField(i)) displayOps.push_back(i);
+                }
+                
+                const int dispCount = static_cast<int>(displayOps.size());
+                const float totalW = dispCount * OP_CARD_WIDTH + (dispCount - 1) * OP_CARD_SPACING;
+                const float startX = screenW - totalW - 24.0F;
+
+                for (int idx = 0; idx < dispCount; ++idx) {
+                    int i = displayOps[idx];
+                    float cx = startX + idx * (OP_CARD_WIDTH + OP_CARD_SPACING);
+                    if (screenCursorX >= cx && screenCursorX <= cx + OP_CARD_WIDTH &&
+                        screenCursorY >= barY && screenCursorY <= barY + OP_CARD_HEIGHT) {
+                        // Check availability
+                        if (IsOperatorTypeAvailable(i) &&
+                            static_cast<int>(m_Operators.size()) < MAX_OPS) {
+                            const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(i));
+                            if (m_DP >= static_cast<float>(opType.cost)) {
+                                m_DraggingFromBar = true;
+                                m_DragOperatorType = i;
+                                m_SelectedOperatorType = i;
+                                m_DragScreenPos = {screenCursorX, screenCursorY};
                             }
                         }
+                        break;
                     }
-                    // Deploy: only allowed after wave started
-                    // Must check: operator type not already on field AND not on redeploy cooldown
-                    if (!handled && m_WaveRunning &&
-                        IsOperatorTypeAvailable(m_SelectedOperatorType) &&
-                        IsDeployableCellForSelectedOperator(*cell) && !IsCellOccupied(*cell) &&
-                        static_cast<int>(m_Operators.size()) < MAX_OPS) {
-                        const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(m_SelectedOperatorType));
-                        if (m_DP >= static_cast<float>(opType.cost)) {
-                            m_IsDeploying    = true;
-                            m_DeployingCell  = *cell;
-                            m_DeployingDirection = {1, 0};
+                }
+            } else {
+                // Click on board – check skill activation or operator selection
+                const auto cell = ToCell(ptsdCursor);
+                bool clickedOperator = false;
+                if (cell && m_WaveRunning) {
+                    for (auto& op : m_Operators) {
+                        if (op.cell != *cell) continue;
+                        clickedOperator = true;
+                        m_SelectedOperatorId = op.id;
+                        const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
+                        const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == u8"風笛");
+                        if (!isBagpipe && opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
+                            op.skillActive  = true;
+                            op.skillTimerMs = opType.skillDuration;
+                            op.sp           = 0;
+                            if (opType.name == "Myrtle" || opType.name == u8"桃金娘") {
+                                m_DP = std::min(m_MaxDP, m_DP + 6.0F);
+                            }
+                            break;
                         }
                     }
                 }
@@ -151,45 +239,57 @@ void App::Update() {
             }
         }
 
-        if (m_IsDeploying) {
-            glm::vec2 cellCenter = ToPtsdPosition(ToBoardCenter(m_DeployingCell));
-            glm::vec2 diff       = ptsdCursor - cellCenter;
-            if (glm::length(diff) > 20.0F) {
-                if (std::abs(diff.x) > std::abs(diff.y)) m_DeployingDirection = {diff.x > 0 ? 1 : -1, 0};
-                else                                      m_DeployingDirection = {0, diff.y > 0 ? -1 : 1};
+        // ── Update drag position ──────────────────────────────────────
+        if (m_DraggingFromBar && Util::Input::IsKeyPressed(Util::Keycode::MOUSE_LB)) {
+            m_DragScreenPos = {screenCursorX, screenCursorY};
+            
+            // Show deploy preview based on hovered cell
+            const auto cell = ToCell(ptsdCursor);
+            if (cell) {
+                m_IsDeploying = true;
+                m_DeployingCell = *cell;
             }
+        }
 
-            if (Util::Input::IsKeyUp(Util::Keycode::MOUSE_LB)) {
-                const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(m_SelectedOperatorType));
-                m_DP -= static_cast<float>(opType.cost);
+        // ── Release drag – drop on cell ───────────────────────────────
+        if (m_DraggingFromBar && Util::Input::IsKeyUp(Util::Keycode::MOUSE_LB)) {
+            const auto cell = ToCell(ptsdCursor);
+            if (cell && m_WaveRunning && m_DragOperatorType >= 0) {
+                // Temporarily set selected type for deploy check
+                int prevSelected = m_SelectedOperatorType;
+                m_SelectedOperatorType = m_DragOperatorType;
 
-                Operator newOp;
-                newOp.id        = m_NextOperatorId++;
-                newOp.typeIndex = m_SelectedOperatorType;
-                newOp.cell      = m_DeployingCell;
-                newOp.direction = m_DeployingDirection;
-                newOp.cooldownMs= 200.0F;
-                newOp.hp        = opType.hp;
-                newOp.maxHp     = opType.hp;
-                newOp.def       = opType.def;
-                const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == "風笛");
-                newOp.sp        = isBagpipe ? 2.0F : opType.initialSp;
-                if (isBagpipe) {
-                    newOp.sp = std::clamp(newOp.sp, 0.0F, 12.0F); // 4 SP per use, up to 3 charges
+                if (IsOperatorTypeAvailable(m_DragOperatorType) &&
+                    IsDeployableCellForSelectedOperator(*cell) && !IsCellOccupied(*cell) &&
+                    static_cast<int>(m_Operators.size()) < MAX_OPS) {
+                    const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(m_DragOperatorType));
+                    if (m_DP >= static_cast<float>(opType.cost)) {
+                        // Enter direction selection phase
+                        m_WaitingForDirection = true;
+                        m_DirectionCell = *cell;
+                        m_DeployingDirection = {1, 0};
+                        m_IsDeploying = true;
+                        m_DeployingCell = *cell;
+                    } else {
+                        m_DraggingFromBar = false;
+                        m_IsDeploying = false;
+                    }
                 } else {
-                    newOp.sp = std::min(newOp.sp, opType.maxSp);
+                    m_DraggingFromBar = false;
+                    m_IsDeploying = false;
                 }
-
-                m_Operators.push_back(newOp);
-                // Keep inspector closed after deploy; only open on explicit click.
-                m_SelectedOperatorId = -1;
+                m_SelectedOperatorType = prevSelected;
+            } else {
+                m_DraggingFromBar = false;
                 m_IsDeploying = false;
             }
         }
     }
 
     UpdateGame(dt);
-    DrawScene(ptsdCursor);
+    if (m_Renderer) {
+        m_Renderer->DrawScene(ptsdCursor);
+    }
 }
 
 void App::End() {}
