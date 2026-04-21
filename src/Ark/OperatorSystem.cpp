@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <limits>
 
 using namespace Ark;
 
@@ -17,6 +18,8 @@ constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
 constexpr int   BAGPIPE_MAX_CHARGES = 3;
 constexpr float BAGPIPE_MAX_SP = BAGPIPE_SP_PER_SKILL * static_cast<float>(BAGPIPE_MAX_CHARGES);
 constexpr float BAGPIPE_SKILL_DURATION_MS = 1000.0F;
+constexpr float OPERATOR_ATTACK_SPEED_SCALE = 0.5F;
+constexpr float BAGPIPE_MYRTLE_ENGAGE_DELAY_MS = 800.0F;
 
 bool IsBagpipe(const OperatorTemplate& opType) {
     return opType.name == "Bagpipe" || opType.name == "風笛";
@@ -24,6 +27,10 @@ bool IsBagpipe(const OperatorTemplate& opType) {
 
 bool IsMyrtle(const OperatorTemplate& opType) {
     return opType.name == "Myrtle" || opType.name == "桃金娘";
+}
+
+bool IsSniper(const OperatorTemplate& opType) {
+    return opType.name == "Sniper" || opType.id == "Sniper";
 }
 } // namespace
 
@@ -124,8 +131,27 @@ void App::UpdateOperators(float dtMs) {
         // Attack targeting (used by both auto-skill trigger and regular attacks)
         const auto opPos = ToBoardCenter(op.cell);
         
-        struct TargetInfo { int idx; float distSq; };
+        struct TargetInfo {
+            int idx;
+            float distSq;
+            float remainToGoal;
+        };
         std::vector<TargetInfo> validTargets;
+
+        const auto computeRemainToGoal = [&](const Enemy& enemy) -> float {
+            if (enemy.routeIndex < 0 || enemy.routeIndex >= static_cast<int>(m_Routes.size())) {
+                return std::numeric_limits<float>::infinity();
+            }
+            const auto& route = m_Routes[static_cast<std::size_t>(enemy.routeIndex)];
+            if (route.nodes.empty()) return std::numeric_limits<float>::infinity();
+            if (enemy.nodeIndex + 1 >= route.nodes.size()) return 0.0F;
+
+            float remain = glm::length(route.nodes[enemy.nodeIndex + 1].boardPos - enemy.boardPos);
+            for (std::size_t i = enemy.nodeIndex + 1; i + 1 < route.nodes.size(); ++i) {
+                remain += glm::length(route.nodes[i + 1].boardPos - route.nodes[i].boardPos);
+            }
+            return remain;
+        };
 
         for (std::size_t i = 0; i < m_Enemies.size(); ++i) {
             const auto& e = m_Enemies[i];
@@ -147,8 +173,14 @@ void App::UpdateOperators(float dtMs) {
             if (inRange) {
                 const auto d = e.boardPos - opPos;
                 const float sq = glm::dot(d, d);
-                validTargets.push_back({static_cast<int>(i), sq});
+                validTargets.push_back({static_cast<int>(i), sq, computeRemainToGoal(e)});
             }
+        }
+
+        if (validTargets.empty()) {
+            op.targetInRangeMs = 0.0F;
+        } else if (isBagpipe || isMyrtle) {
+            op.targetInRangeMs = std::min(BAGPIPE_MYRTLE_ENGAGE_DELAY_MS, op.targetInRangeMs + dtMs);
         }
 
         if (isBagpipe && !op.skillActive && op.sp >= BAGPIPE_SP_PER_SKILL && !validTargets.empty()) {
@@ -157,10 +189,16 @@ void App::UpdateOperators(float dtMs) {
             op.sp = std::max(0.0F, op.sp - BAGPIPE_SP_PER_SKILL);
         }
 
-        op.cooldownMs = std::max(0.0F, op.cooldownMs - dtMs);
+        if ((isBagpipe || isMyrtle) && !validTargets.empty() &&
+            op.targetInRangeMs < BAGPIPE_MYRTLE_ENGAGE_DELAY_MS) {
+            continue;
+        }
+
+        op.cooldownMs = std::max(0.0F, op.cooldownMs - dtMs * OPERATOR_ATTACK_SPEED_SCALE);
         if (op.cooldownMs > 0.0F || validTargets.empty()) continue;
 
         std::sort(validTargets.begin(), validTargets.end(), [](const TargetInfo& a, const TargetInfo& b) {
+            if (a.remainToGoal != b.remainToGoal) return a.remainToGoal < b.remainToGoal;
             return a.distSq < b.distSq;
         });
 
@@ -192,7 +230,7 @@ void App::UpdateOperators(float dtMs) {
                 ++m_KillCount;
                 if (isBagpipe) {
                     m_DP = std::min(m_MaxDP, m_DP + 2.0F);
-                } else {
+                } else if (!IsSniper(opType)) {
                     m_DP = std::min(m_MaxDP, m_DP + KILL_REWARD_DP);
                 }
             }

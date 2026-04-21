@@ -10,6 +10,7 @@ using namespace Ark;
 
 namespace {
 constexpr float BEAM_DURATION_MS = 120.0F;
+constexpr float ENEMY_SPEED_SCALE = 0.5F;
 
 float ComputeEnemyToOperatorDamage(float rawDamage, float targetDef) {
     // Keep defense meaningful, but avoid "always 1 damage" stalemates.
@@ -52,6 +53,8 @@ void App::SpawnEnemy(const WavePlan& plan) {
 
 // ─── Enemy update ───────────────────────────────────────────────────────────
 void App::UpdateEnemies(float dtSec) {
+    const float scaledDtSec = dtSec * ENEMY_SPEED_SCALE;
+
     // Reset block counts
     for (auto& op : m_Operators) op.blockedEnemyCount = 0;
 
@@ -111,7 +114,7 @@ void App::UpdateEnemies(float dtSec) {
                 if (acquiredBlockThisFrame) {
                     enemy.attackCooldownMs = 0.0F;
                 }
-                enemy.attackCooldownMs -= dtSec * 1000.0F;
+                enemy.attackCooldownMs -= scaledDtSec * 1000.0F;
                 if (enemy.attackCooldownMs <= 0.0F) {
                     blockOp->hp -= ComputeEnemyToOperatorDamage(enemy.damage, blockOp->def);
                     blockOp->hp = std::max(0.0F, blockOp->hp);
@@ -123,7 +126,7 @@ void App::UpdateEnemies(float dtSec) {
 
         // ── Ranged attacker: scans all operators in range ────────────────
         if (enemy.isRanged && enemy.attackRange > 0.0F) {
-            enemy.attackCooldownMs -= dtSec * 1000.0F;
+            enemy.attackCooldownMs -= scaledDtSec * 1000.0F;
             if (enemy.attackCooldownMs <= 0.0F) {
                 // Find nearest operator within attack range
                 Operator* rangedTarget = nullptr;
@@ -155,7 +158,7 @@ void App::UpdateEnemies(float dtSec) {
             enemy.alive = false; continue;
         }
         const auto& route = m_Routes[static_cast<std::size_t>(enemy.routeIndex)];
-        float timeLeft = dtSec;
+        float timeLeft = scaledDtSec;
 
         while (timeLeft > 0.0F && enemy.alive) {
             if (enemy.waitSec > 0.0F) {

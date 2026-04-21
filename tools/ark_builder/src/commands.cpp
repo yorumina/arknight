@@ -71,7 +71,7 @@ void RunNew(const std::vector<std::string>& args) {
     if (args.size() < 2) {
         throw CliError("new requires <file>");
     }
-    const std::filesystem::path file = args[1];
+    const std::filesystem::path file = ResolveLevelFilePath(args[1]);
     const std::string name = RequireStringOption(args, "--name");
     const int width = RequireIntOption(args, "--width", "width");
     const int height = RequireIntOption(args, "--height", "height");
@@ -86,7 +86,7 @@ void RunPaint(const std::vector<std::string>& args) {
         throw CliError("paint requires <file> <x> <y> <tile>");
     }
 
-    const std::filesystem::path file = args[1];
+    const std::filesystem::path file = ResolveLevelFilePath(args[1]);
     const int x = ParseInt(args[2], "x");
     const int y = ParseInt(args[3], "y");
     const std::string tile = args[4];
@@ -135,7 +135,7 @@ void RunRouteSet(const std::vector<std::string>& args) {
         throw CliError("route-set requires <file> <route-id> <x,y[:wait]>...");
     }
 
-    const std::filesystem::path file = args[1];
+    const std::filesystem::path file = ResolveLevelFilePath(args[1]);
     const std::string routeId = args[2];
     if (routeId.empty()) {
         throw CliError("route-id cannot be empty");
@@ -160,7 +160,7 @@ void RunEnemySet(const std::vector<std::string>& args) {
         throw CliError("enemy-set requires <file> <enemy-id>");
     }
 
-    const std::filesystem::path file = args[1];
+    const std::filesystem::path file = ResolveLevelFilePath(args[1]);
     const std::string enemyId = args[2];
     if (enemyId.empty()) {
         throw CliError("enemy-id cannot be empty");
@@ -184,7 +184,7 @@ void RunSpawnAdd(const std::vector<std::string>& args) {
         throw CliError("spawn-add requires <file>");
     }
 
-    const std::filesystem::path file = args[1];
+    const std::filesystem::path file = ResolveLevelFilePath(args[1]);
     const std::string enemy = RequireStringOption(args, "--enemy");
     const std::string route = RequireStringOption(args, "--route");
     const int count = RequireIntOption(args, "--count", "count");
@@ -215,7 +215,7 @@ void RunValidate(const std::vector<std::string>& args) {
         throw CliError("validate requires <file>");
     }
 
-    const auto stage = LoadJson(args[1]);
+    const auto stage = LoadJson(ResolveLevelFilePath(args[1]));
     const auto errors = ValidateStage(stage);
     PrintValidationResult(errors);
     if (!errors.empty()) {
@@ -228,7 +228,7 @@ void RunSimulate(const std::vector<std::string>& args) {
         throw CliError("simulate requires <file>");
     }
 
-    const std::filesystem::path file = args[1];
+    const std::filesystem::path file = ResolveLevelFilePath(args[1]);
     const auto stage = LoadJson(file);
     const auto errors = ValidateStage(stage);
     if (!errors.empty()) {
@@ -309,7 +309,7 @@ void RunShow(const std::vector<std::string>& args) {
         throw CliError("show requires <file>");
     }
 
-    const auto stage = LoadJson(args[1]);
+    const auto stage = LoadJson(ResolveLevelFilePath(args[1]));
     const auto errors = ValidateStage(stage);
 
     std::cout << "Stage: " << stage.value("name", "<unnamed>") << '\n'

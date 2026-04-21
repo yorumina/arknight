@@ -3,11 +3,68 @@
 #include "RendererShared.hpp"
 #include "config.hpp"
 
+#include <array>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using namespace Ark;
 using namespace Ark::RendererConst;
+
+namespace {
+ImVec2 RectCenter(const UiRect& rect) {
+    return {(rect.minX + rect.maxX) * 0.5F, (rect.minY + rect.maxY) * 0.5F};
+}
+
+ImVec2 MeasureText(const char* text, float fontSize) {
+    ImFont* font = ImGui::GetFont();
+    return font->CalcTextSizeA(fontSize, std::numeric_limits<float>::max(), 0.0F, text);
+}
+
+void AddCenteredText(ImDrawList* draw, const ImVec2& center, float fontSize, ImU32 color, const char* text) {
+    const ImVec2 size = MeasureText(text, fontSize);
+    draw->AddText(ImGui::GetFont(), fontSize,
+                  {center.x - size.x * 0.5F, center.y - size.y * 0.5F},
+                  color, text);
+}
+
+void DrawTopUiButton(ImDrawList* draw, const UiRect& rect, float rounding, bool highlighted) {
+    const ImU32 base = highlighted ? IM_COL32(72, 84, 108, 220) : IM_COL32(34, 40, 52, 210);
+    const ImU32 line = highlighted ? IM_COL32(145, 176, 230, 220) : IM_COL32(116, 124, 145, 190);
+    const ImU32 border = highlighted ? IM_COL32(190, 212, 255, 220) : IM_COL32(100, 108, 126, 170);
+
+    draw->AddRectFilled({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, base, rounding);
+    draw->AddLine({rect.minX + 1.0F, rect.minY + 1.0F},
+                  {rect.maxX - 1.0F, rect.minY + 1.0F}, line, 2.0F);
+    draw->AddRect({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, border, rounding, 0, 1.4F);
+}
+
+void DrawGearIcon(ImDrawList* draw, const ImVec2& center, float radius, ImU32 color, float thickness) {
+    for (int i = 0; i < 8; ++i) {
+        const float ang = (static_cast<float>(i) / 8.0F) * 6.2831853F;
+        const ImVec2 p0{center.x + std::cos(ang) * radius * 0.90F, center.y + std::sin(ang) * radius * 0.90F};
+        const ImVec2 p1{center.x + std::cos(ang) * radius * 1.20F, center.y + std::sin(ang) * radius * 1.20F};
+        draw->AddLine(p0, p1, color, thickness);
+    }
+    draw->AddCircle(center, radius, color, 32, thickness);
+    draw->AddCircle(center, radius * 0.42F, color, 24, thickness);
+}
+
+void DrawPauseIcon(ImDrawList* draw, const ImVec2& center, float width, float height, ImU32 color) {
+    const float barW = width * 0.22F;
+    const float gap = width * 0.15F;
+    draw->AddRectFilled({center.x - gap * 0.5F - barW, center.y - height * 0.5F},
+                        {center.x - gap * 0.5F, center.y + height * 0.5F}, color, 1.5F);
+    draw->AddRectFilled({center.x + gap * 0.5F, center.y - height * 0.5F},
+                        {center.x + gap * 0.5F + barW, center.y + height * 0.5F}, color, 1.5F);
+}
+
+void DrawPlayIcon(ImDrawList* draw, const ImVec2& center, float width, float height, ImU32 color) {
+    draw->AddTriangleFilled({center.x - width * 0.35F, center.y - height * 0.5F},
+                            {center.x - width * 0.35F, center.y + height * 0.5F},
+                            {center.x + width * 0.45F, center.y}, color);
+}
+} // namespace
 
 void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
@@ -227,8 +284,10 @@ void Ark::AppRenderer::DrawOperatorDetails(const Ark::OperatorTemplate& t, const
     
     // Stats block
     const float statX = px + 30.0F;
-    int curHp = opOnField ? static_cast<int>(opOnField->hp) : t.hp;
-    std::string hpStr = std::to_string(curHp) + " / " + std::to_string(t.hp);
+    const auto toInt = [](float v) { return static_cast<int>(std::lround(v)); };
+    const int curHp = opOnField ? toInt(opOnField->hp) : toInt(t.hp);
+    const int maxHp = toInt(t.hp);
+    std::string hpStr = std::to_string(curHp) + " / " + std::to_string(maxHp);
     
     const ImU32 labelCol = IM_COL32(150, 160, 180, 255);
     const ImU32 statCol = IM_COL32(255, 255, 255, 255);
@@ -238,11 +297,11 @@ void Ark::AppRenderer::DrawOperatorDetails(const Ark::OperatorTemplate& t, const
     cy += 24.0F;
     
     draw->AddText({statX, cy}, labelCol, u8"攻擊");
-    draw->AddText({statX + 60.0F, cy}, statCol, std::to_string(static_cast<int>(t.damage)).c_str());
+    draw->AddText({statX + 60.0F, cy}, statCol, std::to_string(toInt(t.damage)).c_str());
     cy += 24.0F;
     
     draw->AddText({statX, cy}, labelCol, u8"防禦");
-    draw->AddText({statX + 60.0F, cy}, statCol, std::to_string(opOnField ? static_cast<int>(opOnField->def) : t.def).c_str());
+    draw->AddText({statX + 60.0F, cy}, statCol, std::to_string(opOnField ? toInt(opOnField->def) : toInt(t.def)).c_str());
     cy += 24.0F;
     
     draw->AddText({statX, cy}, labelCol, u8"法抗");
@@ -263,8 +322,9 @@ void Ark::AppRenderer::DrawOperatorDetails(const Ark::OperatorTemplate& t, const
     draw->AddRectFilled({px + 30.0F, cy}, {px + 80.0F, cy + 50.0F}, IM_COL32(80, 150, 80, 255)); // skill icon
     draw->AddText({px + 100.0F, cy}, IM_COL32(255, 255, 255, 255), u8"支援號令");
     
-    int spNow = opOnField ? static_cast<int>(opOnField->sp) : t.initialSp;
-    std::string spStr = std::to_string(spNow) + " / " + std::to_string(static_cast<int>(t.maxSp));
+    const int spNow = opOnField ? toInt(opOnField->sp) : toInt(t.initialSp);
+    const int maxSp = toInt(t.maxSp);
+    std::string spStr = std::to_string(spNow) + " / " + std::to_string(maxSp);
     draw->AddText({px + 100.0F, cy + 25.0F}, IM_COL32(150, 220, 150, 255), spStr.c_str());
 }
 
@@ -303,55 +363,192 @@ void Ark::AppRenderer::DrawDeploymentInfo(float screenW, float screenH) {
 
 void Ark::AppRenderer::DrawHUD(float screenW) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
-
-    // Top-left: compact game info
-    if (m_App.m_PreStageWaiting) {
-        const int remainSec = std::max(1, static_cast<int>(std::ceil((3000.0F - m_App.m_PreStageTimerMs) / 1000.0F)));
-        const std::string standby = "Stage opening in " + std::to_string(remainSec) + "s...";
-        draw->AddText({26, 12}, IM_COL32(255,230,80,255), standby.c_str());
-    } else if (!m_App.m_WaveRunning && !m_App.m_GameOver && !m_App.m_MissionClear) {
-        draw->AddText({26, 12}, IM_COL32(255,230,80,255), "[SPACE] Start Wave");
-    }
-
-    // Top-center: Target / Castle info (as requested by user)
-    {
-        const std::string killInfo = std::to_string(m_App.m_KillCount) + "/" +
-                                    std::to_string(m_App.m_TotalWaveUnits);
-        const std::string lpStr = std::to_string(m_App.m_LifePoint); // Life points (3)
-        const auto killSize = ImGui::CalcTextSize(killInfo.c_str());
-        const auto lpSize = ImGui::CalcTextSize(lpStr.c_str());
-        
-        const float cx = screenW * 0.5F;
-        const float cy = 16.0F; // vertical center of bar
-
-        // We want: [Target] 0/33 | [Tower] 3
-        draw->AddRectFilled({cx - 80.0F, cy - 14.0F}, {cx + 80.0F, cy + 14.0F}, IM_COL32(20, 24, 30, 200), 4.0F);
-        
-        const float sepX = cx + 20.0F;
-        draw->AddLine({sepX, cy - 10.0F}, {sepX, cy + 10.0F}, IM_COL32(60, 70, 80, 255), 2.0F);
-        
-        // Target (Enemy kill count)
-        // Icon (orange rect as placeholder)
-        draw->AddRectFilled({cx - 70.0F, cy - 8.0F}, {cx - 54.0F, cy + 8.0F}, IM_COL32(255, 140, 0, 200));
-        draw->AddText({cx - 45.0F, cy - killSize.y*0.5F}, IM_COL32(255, 255, 255, 255), killInfo.c_str());
-        
-        // Tower (Life Points)
-        // Icon (blue rect as placeholder)
-        draw->AddRectFilled({sepX + 10.0F, cy - 8.0F}, {sepX + 26.0F, cy + 8.0F}, IM_COL32(50, 180, 255, 200));
-        draw->AddText({sepX + 35.0F, cy - lpSize.y*0.5F}, IM_COL32(255, 120, 120, 255), lpStr.c_str());
-    }
-
-    // Top-right: Wave indicator
-    if (m_App.m_WaveRunning) {
-        const std::string waveStr = "Wave " + std::to_string(m_App.m_CurrentWave) + "/" + std::to_string(std::max(1, m_App.m_TotalWaves));
-        draw->AddText({screenW - 160.0F, 9.0F}, COLOR_TEXT_SUB, waveStr.c_str());
-    }
-
-    // (Operator Inspector removed as requested)
-
-    // Overlay
-    const float SW = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
+    const float SW = screenW;
     const float SH = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
+    const auto ui = ComputeBattleUiLayout(SW, SH);
+    const float iconRounding = 4.0F * ui.scale;
+
+    // Top-center battle status (enemy count / life point)
+    {
+        const float panelW = 460.0F * ui.scale;
+        const float panelH = 52.0F * ui.scale;
+        const float px = SW * 0.5F - panelW * 0.5F;
+        const float py = 10.0F * ui.scale;
+
+        draw->AddRectFilled({px, py}, {px + panelW, py + panelH}, IM_COL32(30, 36, 46, 210), 3.0F * ui.scale);
+        draw->AddRect({px, py}, {px + panelW, py + panelH}, IM_COL32(96, 104, 122, 170), 3.0F * ui.scale, 0, 1.0F);
+
+        draw->AddLine({px + 180.0F * ui.scale, py + 7.0F * ui.scale},
+                      {px + 180.0F * ui.scale, py + panelH - 7.0F * ui.scale},
+                      IM_COL32(105, 114, 132, 160), 1.5F);
+        draw->AddLine({px + 310.0F * ui.scale, py + 7.0F * ui.scale},
+                      {px + 310.0F * ui.scale, py + panelH - 7.0F * ui.scale},
+                      IM_COL32(105, 114, 132, 160), 1.5F);
+
+        const ImVec2 enemyCenter{px + 72.0F * ui.scale, py + panelH * 0.5F};
+        draw->AddCircleFilled(enemyCenter, 14.0F * ui.scale, IM_COL32(20, 20, 20, 180), 28);
+        draw->AddCircle(enemyCenter, 13.0F * ui.scale, IM_COL32(247, 151, 39, 255), 28, 2.0F);
+        draw->AddLine({enemyCenter.x - 10.0F * ui.scale, enemyCenter.y},
+                      {enemyCenter.x + 10.0F * ui.scale, enemyCenter.y},
+                      IM_COL32(247, 151, 39, 230), 1.6F);
+        draw->AddLine({enemyCenter.x, enemyCenter.y - 10.0F * ui.scale},
+                      {enemyCenter.x, enemyCenter.y + 10.0F * ui.scale},
+                      IM_COL32(247, 151, 39, 230), 1.6F);
+
+        const std::string killInfo = std::to_string(m_App.m_KillCount) + "/" + std::to_string(m_App.m_TotalWaveUnits);
+        draw->AddText(ImGui::GetFont(), 20.0F * ui.scale,
+                      {px + 110.0F * ui.scale, py + 12.0F * ui.scale},
+                      IM_COL32(241, 244, 248, 255), killInfo.c_str());
+
+        const ImVec2 towerCenter{px + 350.0F * ui.scale, py + panelH * 0.5F};
+        draw->AddRectFilled({towerCenter.x - 8.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
+                            {towerCenter.x + 8.0F * ui.scale, towerCenter.y + 9.0F * ui.scale},
+                            IM_COL32(99, 197, 255, 220), 1.0F * ui.scale);
+        draw->AddTriangleFilled({towerCenter.x - 10.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
+                                {towerCenter.x + 10.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
+                                {towerCenter.x, towerCenter.y - 16.0F * ui.scale},
+                                IM_COL32(99, 197, 255, 220));
+
+        const std::string lp = std::to_string(m_App.m_LifePoint);
+        draw->AddText(ImGui::GetFont(), 20.0F * ui.scale,
+                      {px + 385.0F * ui.scale, py + 12.0F * ui.scale},
+                      IM_COL32(255, 127, 142, 255), lp.c_str());
+    }
+
+    // Top-left settings button
+    DrawTopUiButton(draw, ui.settingsButton, iconRounding, false);
+    DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * ui.scale, IM_COL32(242, 246, 252, 255), 2.6F * ui.scale);
+
+    // Top-right speed and pause controls
+    const bool isDoubleSpeed = m_App.m_GameSpeedMultiplier >= 1.5F;
+    DrawTopUiButton(draw, ui.speedButton, iconRounding, isDoubleSpeed);
+    DrawTopUiButton(draw, ui.pauseButton, iconRounding, m_App.m_GamePaused);
+
+    {
+        const ImVec2 speedCenter = RectCenter(ui.speedButton);
+        const std::string speedText = isDoubleSpeed ? "2X" : "1X";
+        AddCenteredText(draw, {speedCenter.x, ui.speedButton.minY + 30.0F * ui.scale},
+                        22.0F * ui.scale, IM_COL32(255, 255, 255, 255), speedText.c_str());
+        DrawPlayIcon(draw, {speedCenter.x, ui.speedButton.maxY - 32.0F * ui.scale},
+                     23.0F * ui.scale, 25.0F * ui.scale, IM_COL32(255, 255, 255, 245));
+    }
+
+    {
+        const ImVec2 pauseCenter = RectCenter(ui.pauseButton);
+        if (m_App.m_GamePaused) {
+            DrawPlayIcon(draw, pauseCenter, 32.0F * ui.scale, 34.0F * ui.scale, IM_COL32(255, 255, 255, 255));
+        } else {
+            DrawPauseIcon(draw, pauseCenter, 28.0F * ui.scale, 32.0F * ui.scale, IM_COL32(255, 255, 255, 255));
+        }
+    }
+
+    // Pause overlay
+    if (m_App.m_GamePaused && !m_App.m_ShowQuitConfirm && !m_App.m_GameOver && !m_App.m_MissionClear) {
+        draw->AddRectFilled({0.0F, 0.0F}, {SW, SH}, IM_COL32(0, 0, 0, 128));
+        const ImVec2 center{SW * 0.5F, SH * 0.5F - 35.0F * ui.scale};
+        AddCenteredText(draw, {center.x + 2.0F, center.y + 2.0F}, 112.0F * ui.scale, IM_COL32(0, 0, 0, 140), "PAUSE");
+        AddCenteredText(draw, center, 112.0F * ui.scale, IM_COL32(245, 245, 245, 255), "PAUSE");
+        AddCenteredText(draw, {SW * 0.5F, SH * 0.5F + 62.0F * ui.scale},
+                        56.0F * ui.scale, IM_COL32(238, 238, 238, 245), u8"----暫停中----");
+    }
+
+    // Settings -> quit confirmation dialog
+    if (m_App.m_ShowQuitConfirm && !m_App.m_GameOver && !m_App.m_MissionClear) {
+        draw->AddRectFilled({0.0F, 0.0F}, {SW, SH}, IM_COL32(8, 10, 16, 174));
+
+        const UiRect& panel = ui.quitPanel;
+        const float panelW = panel.maxX - panel.minX;
+        const float panelH = panel.maxY - panel.minY;
+        const float headerH = std::max(120.0F * ui.scale, panelH * 0.24F);
+        const float bodyTop = panel.minY + headerH;
+
+        draw->AddRectFilled({panel.minX, panel.minY}, {panel.maxX, bodyTop},
+                            IM_COL32(43, 47, 57, 244), 2.0F * ui.scale, ImDrawFlags_RoundCornersTop);
+        draw->AddRectFilled({panel.minX, bodyTop}, {panel.maxX, panel.maxY},
+                            IM_COL32(236, 236, 238, 252), 2.0F * ui.scale, ImDrawFlags_RoundCornersBottom);
+        draw->AddLine({panel.minX, bodyTop}, {panel.maxX, bodyTop}, IM_COL32(60, 63, 70, 230), 2.0F);
+        draw->AddRect({panel.minX, panel.minY}, {panel.maxX, panel.maxY},
+                      IM_COL32(104, 110, 124, 180), 2.0F * ui.scale, 0, 1.5F);
+
+        const float stripeY = bodyTop - 18.0F * ui.scale;
+        const float stripeW = 12.0F * ui.scale;
+        for (int i = 0; i < 3; ++i) {
+            const float x0 = panel.minX + 8.0F * ui.scale + i * (stripeW + 3.0F * ui.scale);
+            draw->AddRectFilled({x0, stripeY}, {x0 + stripeW, stripeY + 16.0F * ui.scale},
+                                IM_COL32(246, 213, 79, 240));
+        }
+
+        const ImVec2 logoCenter{panel.minX + panelW * 0.5F, panel.minY + headerH * 0.46F};
+        AddCenteredText(draw, {logoCenter.x - 22.0F * ui.scale, logoCenter.y + 2.0F * ui.scale},
+                        125.0F * ui.scale, IM_COL32(245, 245, 247, 255), "Q");
+        AddCenteredText(draw, {logoCenter.x + 18.0F * ui.scale, logoCenter.y - 2.0F * ui.scale},
+                        58.0F * ui.scale, IM_COL32(245, 245, 247, 255), "QUIT");
+
+        const char* msgA = u8"放棄行動";
+        const char* msgB = u8"將會恢復6理智";
+        const char* msgC = u8"（全部返還）";
+        const char* msgD = u8"：";
+        const float msgSize = 58.0F * ui.scale;
+        const ImVec2 sizeA = MeasureText(msgA, msgSize);
+        const ImVec2 sizeB = MeasureText(msgB, msgSize);
+        const ImVec2 sizeC = MeasureText(msgC, msgSize);
+        const ImVec2 sizeD = MeasureText(msgD, msgSize);
+        float msgX = panel.minX + (panelW - (sizeA.x + sizeB.x + sizeC.x + sizeD.x)) * 0.5F;
+        const float msgY = bodyTop + 54.0F * ui.scale;
+        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(244, 132, 41, 255), msgA);
+        msgX += sizeA.x;
+        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(47, 50, 58, 255), msgB);
+        msgX += sizeB.x;
+        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(244, 132, 41, 255), msgC);
+        msgX += sizeC.x;
+        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(47, 50, 58, 255), msgD);
+
+        const float rewardW = std::min(panelW * 0.42F, 460.0F * ui.scale);
+        const float rewardH = 130.0F * ui.scale;
+        const float rewardX = panel.minX + (panelW - rewardW) * 0.5F;
+        const float rewardY = msgY + 92.0F * ui.scale;
+        draw->AddRectFilledMultiColor({rewardX, rewardY}, {rewardX + rewardW, rewardY + rewardH},
+                                      IM_COL32(65, 68, 75, 245), IM_COL32(52, 55, 62, 245),
+                                      IM_COL32(58, 61, 68, 245), IM_COL32(45, 47, 54, 245));
+        draw->AddRect({rewardX, rewardY}, {rewardX + rewardW, rewardY + rewardH},
+                      IM_COL32(125, 128, 138, 190), 0.0F, 0, 1.3F);
+
+        const ImVec2 tokenCenter{rewardX + 78.0F * ui.scale, rewardY + rewardH * 0.5F};
+        const float tokenR = 43.0F * ui.scale;
+        draw->AddCircleFilled(tokenCenter, tokenR + 7.0F * ui.scale, IM_COL32(254, 223, 44, 255), 40);
+        draw->AddCircleFilled(tokenCenter, tokenR, IM_COL32(74, 79, 90, 255), 40);
+        draw->AddCircle(tokenCenter, tokenR * 0.76F, IM_COL32(198, 204, 217, 220), 30, 2.0F);
+        draw->AddPolyline(
+            std::array<ImVec2, 5>{
+                ImVec2{tokenCenter.x - 5.0F * ui.scale, tokenCenter.y - 22.0F * ui.scale},
+                ImVec2{tokenCenter.x + 8.0F * ui.scale, tokenCenter.y - 5.0F * ui.scale},
+                ImVec2{tokenCenter.x - 1.0F * ui.scale, tokenCenter.y - 5.0F * ui.scale},
+                ImVec2{tokenCenter.x + 5.0F * ui.scale, tokenCenter.y + 21.0F * ui.scale},
+                ImVec2{tokenCenter.x - 9.0F * ui.scale, tokenCenter.y + 3.0F * ui.scale}
+            }.data(), 5, IM_COL32(255, 255, 255, 240), ImDrawFlags_None, 3.0F * ui.scale);
+
+        AddCenteredText(draw, {rewardX + rewardW * 0.70F, rewardY + rewardH * 0.52F},
+                        90.0F * ui.scale, IM_COL32(246, 246, 249, 255), "+6");
+
+        AddCenteredText(draw, {panel.minX + panelW * 0.5F, rewardY + rewardH + 70.0F * ui.scale},
+                        62.0F * ui.scale, IM_COL32(40, 43, 49, 255), u8"是否放棄行動?");
+
+        draw->AddRectFilled({ui.quitBackButton.minX, ui.quitBackButton.minY},
+                            {ui.quitBackButton.maxX, ui.quitBackButton.maxY},
+                            IM_COL32(18, 19, 24, 245), 0.0F);
+        draw->AddRectFilled({ui.quitConfirmButton.minX, ui.quitConfirmButton.minY},
+                            {ui.quitConfirmButton.maxX, ui.quitConfirmButton.maxY},
+                            IM_COL32(137, 21, 26, 245), 0.0F);
+        draw->AddLine({ui.quitBackButton.maxX, ui.quitBackButton.minY},
+                      {ui.quitBackButton.maxX, ui.quitBackButton.maxY},
+                      IM_COL32(80, 82, 90, 180), 1.0F);
+
+        AddCenteredText(draw, RectCenter(ui.quitBackButton), 64.0F * ui.scale,
+                        IM_COL32(245, 245, 248, 255), u8"返回");
+        AddCenteredText(draw, RectCenter(ui.quitConfirmButton), 64.0F * ui.scale,
+                        IM_COL32(248, 248, 248, 255), u8"放棄行動");
+    }
+
     if (m_App.m_GameOver) {
         draw->AddRectFilled({0,0},{SW,SH}, IM_COL32(0,0,0,145));
         const std::string t = "MISSION FAILED";

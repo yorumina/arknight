@@ -20,28 +20,53 @@ using Util::ms_t;
 
 namespace Core {
 namespace {
-std::vector<std::string> BuildFontCandidates() {
+std::vector<std::string> BuildBaseFontCandidates() {
     std::vector<std::string> candidates;
+    if (const char* envFont = std::getenv("ARKNIGHT_UI_FONT"); envFont != nullptr && envFont[0] != '\0') {
+        candidates.emplace_back(envFont);
+    }
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/Inter.ttf");
+    candidates.emplace_back("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+    candidates.emplace_back("/usr/share/fonts/TTF/DejaVuSans.ttf");
+    return candidates;
+}
+
+std::vector<std::string> BuildCjkFontCandidates() {
+    std::vector<std::string> candidates;
+    if (const char* envFont = std::getenv("ARKNIGHT_UI_CJK_FONT"); envFont != nullptr && envFont[0] != '\0') {
+        candidates.emplace_back(envFont);
+    }
     if (const char* envFont = std::getenv("ARKNIGHT_UI_FONT"); envFont != nullptr && envFont[0] != '\0') {
         candidates.emplace_back(envFont);
     }
     candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.otf");
     candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansCJK-Regular.ttc");
     candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.ttf");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Medium.ttf");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansCJKtc-Regular.ttf");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/wqy-microhei.ttc");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/wqy-zenhei.ttc");
+    candidates.emplace_back("/usr/share/fonts/noto/NotoSansCJK-Regular.ttc");
+    candidates.emplace_back("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc");
     candidates.emplace_back("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc");
     candidates.emplace_back("/usr/share/fonts/opentype/noto/NotoSansCJKtc-Regular.otf");
+    candidates.emplace_back("/usr/share/fonts/opentype/noto/NotoSansTC-Regular.otf");
     candidates.emplace_back("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc");
     candidates.emplace_back("/usr/share/fonts/truetype/noto/NotoSansCJKtc-Regular.otf");
+    candidates.emplace_back("/usr/share/fonts/truetype/noto/NotoSansTC-Regular.ttf");
     candidates.emplace_back("/usr/share/fonts/truetype/arphic/uming.ttc");
     candidates.emplace_back("/usr/share/fonts/truetype/arphic/ukai.ttc");
+    candidates.emplace_back("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc");
+    candidates.emplace_back("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc");
     return candidates;
 }
 
-ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::vector<std::string>* loadedPaths) {
+ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::vector<std::string>* loadedPaths, bool* cjkLoaded) {
+    if (cjkLoaded != nullptr) *cjkLoaded = false;
     ImFont* baseFont = nullptr;
     std::unordered_set<std::string> visited;
 
-    for (const auto &path : BuildFontCandidates()) {
+    for (const auto &path : BuildBaseFontCandidates()) {
         if (!visited.insert(path).second) continue;
         if (!std::filesystem::exists(path)) continue;
 
@@ -49,13 +74,37 @@ ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::vector<std::string>* loaded
         fontCfg.OversampleH = 2;
         fontCfg.OversampleV = 2;
         fontCfg.PixelSnapH = false;
-        fontCfg.MergeMode = (baseFont != nullptr);
+        fontCfg.MergeMode = false;
+
+        ImFont* font = io.Fonts->AddFontFromFileTTF(
+            path.c_str(), 20.0F, &fontCfg, io.Fonts->GetGlyphRangesDefault());
+        if (font != nullptr) {
+            if (loadedPaths != nullptr) loadedPaths->push_back(path + " (base)");
+            baseFont = font;
+            break;
+        }
+    }
+
+    if (baseFont == nullptr) {
+        baseFont = io.Fonts->AddFontDefault();
+    }
+
+    for (const auto &path : BuildCjkFontCandidates()) {
+        if (!visited.insert(path).second) continue;
+        if (!std::filesystem::exists(path)) continue;
+
+        ImFontConfig fontCfg;
+        fontCfg.OversampleH = 2;
+        fontCfg.OversampleV = 2;
+        fontCfg.PixelSnapH = false;
+        fontCfg.MergeMode = true;
 
         ImFont* font = io.Fonts->AddFontFromFileTTF(
             path.c_str(), 20.0F, &fontCfg, io.Fonts->GetGlyphRangesChineseFull());
         if (font != nullptr) {
-            if (loadedPaths != nullptr) loadedPaths->push_back(path);
-            if (baseFont == nullptr) baseFont = font;
+            if (loadedPaths != nullptr) loadedPaths->push_back(path + " (cjk)");
+            if (cjkLoaded != nullptr) *cjkLoaded = true;
+            break;
         }
     }
     return baseFont;
@@ -183,15 +232,22 @@ Context::Context() {
     io.Fonts->TexDesiredWidth = 4096;
 
     std::vector<std::string> loadedFontPaths;
-    ImFont* cjkFont = LoadTraditionalChineseFont(io, &loadedFontPaths);
+    bool hasCjkGlyphs = false;
+    ImFont* cjkFont = LoadTraditionalChineseFont(io, &loadedFontPaths, &hasCjkGlyphs);
     if (cjkFont != nullptr) {
         io.FontDefault = cjkFont;
         for (const auto& path : loadedFontPaths) {
-            LOG_INFO("Loaded UI CJK font: {}", path);
+            LOG_INFO("Loaded UI font: {}", path);
+        }
+        if (loadedFontPaths.empty()) {
+            LOG_WARN("Using ImGui default font only. Chinese glyphs may not render.");
+        } else if (!hasCjkGlyphs) {
+            LOG_WARN("CJK font fallback failed. Chinese glyphs may not render.");
+            LOG_WARN("Please set ARKNIGHT_UI_CJK_FONT=/absolute/path/to/NotoSansTC-Regular.ttf (or .ttc)");
         }
     } else {
         io.Fonts->AddFontDefault();
-        LOG_WARN("No Traditional Chinese font found. Install Noto CJK and/or set ARKNIGHT_UI_FONT=/path/to/font.ttf");
+        LOG_WARN("Font initialization failed. Install Noto CJK and/or set ARKNIGHT_UI_CJK_FONT=/path/to/font.ttf");
     }
 
     ImGui_ImplSDL2_InitForOpenGL(m_Window, m_GlContext);

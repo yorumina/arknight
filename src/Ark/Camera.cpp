@@ -13,7 +13,6 @@ using namespace Ark;
 namespace {
 constexpr float CAMERA_EPSILON = 0.0001F;
 constexpr float KEYBOARD_PAN_SPEED = 780.0F;
-constexpr float ZOOM_STEP = 1.10F;
 }
 
 void App::ResetCameraToStageDefaults() {
@@ -73,21 +72,7 @@ void App::UpdateCameraControls(float deltaTimeMs, const glm::vec2& rawCursor) {
         m_Camera.dragging = false;
     }
 
-    if (Util::Input::IfScroll()) {
-        const float scrollY = Util::Input::GetScrollDistance().y;
-        if (std::abs(scrollY) > CAMERA_EPSILON) {
-            const glm::vec2 anchorBefore = RawCursorToPtsd(rawCursor);
-            m_Camera.zoom = std::clamp(
-                m_Camera.zoom * std::pow(ZOOM_STEP, scrollY),
-                m_Camera.minZoom,
-                m_Camera.maxZoom);
-
-            const float sx = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX * m_Camera.zoom);
-            const float sy = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY * m_Camera.zoom);
-            m_Camera.pan.y = rawCursor.y / sy - anchorBefore.y;
-            m_Camera.pan.x = rawCursor.x / sx - anchorBefore.x;
-        }
-    }
+    // Intentionally ignore mouse wheel to prevent scroll-based map movement.
 }
 
 ImVec2 App::ToScreenPosition(const glm::vec2& p) const {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -22,5 +23,8 @@ auto RequireDoubleOption(const std::vector<std::string>& args,
                          std::string_view name) -> double;
 auto RequireStringOption(const std::vector<std::string>& args,
                          std::string_view flag) -> std::string;
+
+auto ResolveDataRoot() -> std::filesystem::path;
+auto ResolveLevelFilePath(const std::string& userPath) -> std::filesystem::path;
 
 } // namespace ark_builder

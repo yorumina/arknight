@@ -68,6 +68,7 @@ struct Operator {
     float hp = 0; float maxHp = 0; float def = 0;
     int blockedEnemyCount = 0;
     float sp = 0;
+    float targetInRangeMs = 0;
     bool skillActive = false;
     float skillTimerMs = 0;
 

@@ -1,54 +1,72 @@
 # Arknight Demo
 
-此專案使用 `PTSD` 框架，包含一個可玩的明日方舟核心玩法 demo（地圖載入、路線、波次、部署、DP/LP）。
+This repository contains an Arknight-style gameplay prototype built on top of the `PTSD` framework.
 
-## 如何執行
+## Requirements
 
-1. 下載專案（含 submodule）
+- CMake 3.16+
+- A C++17 compiler (MSVC / Clang / GCC)
+
+## Build and Run
+
+1. Clone with submodules:
 ```bash
 git clone --recurse-submodules <your-repo-url>
-cd Arknight
-```
-如果你已經 clone 過，請補抓 submodule：
-```bash
-git submodule update --init --recursive
+cd Arknight_Linux
 ```
 
-2. 準備環境
-- CMake 3.16+
-- 可用 C++17 編譯器（MSVC / Clang / GCC）
-
-3. 建置 Demo
+2. Configure and build:
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --target Arknight
 ```
 
-4. 執行 Demo
-- Windows:
-```powershell
-.\build\Arknight.exe
-```
-- Linux/macOS:
+3. Run:
+- Linux/macOS
 ```bash
 ./build/Arknight
 ```
+- Windows
+```powershell
+.\build\Arknight.exe
+```
 
-## Demo 操作
-- `滑鼠左鍵`：部署幹員
-- `1`：選 Vanguard（只能放地面）
-- `2`：選 Sniper（只能放高台）
-- `SPACE`：開始關卡
-- `R`：重開 demo
-- `ESC`：離開
+## Controls
 
-## 關卡來源
-Demo 會優先載入下列關卡：
-1. `tools/ark_builder/levels/test.json`
-2. `tools/ark_builder/levels/tutorial_1.json`
+- `Left Mouse Button`: deploy operator
+- `1`: select Vanguard (ground only)
+- `2`: select Sniper (highground only)
+- `SPACE`: start wave
+- `R`: restart demo
+- `ESC`: exit
 
-可用 `ArknightBuilder` 編輯與驗證關卡：
+## Data Layout
+
+Gameplay data is now stored under:
+
+- `data/levels`
+- `data/enemy`
+- `data/operators`
+
+The demo tries stage files such as:
+
+1. `data/levels/test.json`
+2. `data/levels/tutorial_1.json`
+
+## ArknightBuilder
+
+Build the builder:
 ```bash
 cmake --build build --target ArknightBuilder
-build/ArknightBuilder validate tools/ark_builder/levels/test.json
 ```
+
+Example:
+```bash
+./build/ArknightBuilder validate tutorial_1.json
+```
+
+`ArknightBuilder` now auto-maps stage file arguments to `data/levels/`.
+Detailed builder documentation:
+
+- English: `docs/arknightbuilder/README.md`
+- Traditional Chinese: `docs/arknightbuilder/README_zh-tw.md`

@@ -10,16 +10,16 @@ namespace Ark {
 // Searches across common relative paths for level JSON files
 std::optional<std::filesystem::path> ResolveStagePath(const std::string& specificLevel);
 
-// Searches across common relative paths for enemy JSON dir
+// Searches across common relative paths for enemy JSON dir (data/enemy)
 std::filesystem::path ResolveEnemyDir();
 
-// Searches across common relative paths for operator JSON dir  
+// Searches across common relative paths for operator JSON dir (data/operators)
 std::filesystem::path ResolveOperatorDir();
 
-// Loads all enemy definitions from the enemy/ directory
+// Loads all enemy definitions from the data/enemy directory
 std::vector<EnemyTemplate> LoadEnemies(const std::vector<std::string>& enemyIds);
 
-// Loads all operator definitions from the operators/ directory
+// Loads all operator definitions from the data/operators directory
 std::vector<OperatorTemplate> LoadOperators();
 
 // Loads a stage JSON and populates stage data + wave plans

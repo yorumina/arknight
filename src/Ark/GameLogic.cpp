@@ -20,11 +20,12 @@ using namespace Ark;
 namespace {
 constexpr float WAVE_CLEAR_DP        = 5.0F;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
-constexpr float PRE_STAGE_WAIT_MS    = 3000.0F;  // 3 seconds
+constexpr float PRE_STAGE_WAIT_MS    = 2000.0F;  // 2 seconds
 constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
 constexpr float FINISH_BLACKOUT_MS   = 1000.0F;  // 1 second
 constexpr float FINISH_FADE_IN_MS    = 700.0F;
 constexpr float FINISH_FADE_OUT_MS   = 700.0F;
+constexpr float BATTLE_TIME_SCALE     = 0.5F;
 constexpr float DEFAULT_CAMERA_SCALE_X = 1.0F;
 constexpr float DEFAULT_CAMERA_SCALE_Y = PERSPECTIVE_Y_SCALE;
 constexpr float DEFAULT_CAMERA_MIN_ZOOM = 0.7F;
@@ -39,6 +40,10 @@ constexpr const char* STAGE_1_2_FILE = "Operation 1-2/stage";
 void App::ResetDemo() {
     m_GameOver    = false;
     m_MissionClear= false;
+    m_GamePaused  = false;
+    m_ShowQuitConfirm = false;
+    m_PauseBeforeQuitConfirm = false;
+    m_GameSpeedMultiplier = 1.0F;
     m_ClearTimerMs= 0.0F;
     m_PreStageWaiting = true;
     m_PreStageTimerMs = 0.0F;
@@ -292,14 +297,21 @@ void App::UpdateWave(float dtSec) {
 // UPDATE (main game tick)
 // ?????????????????????????????????????????????????????????????????????????????
 void App::UpdateGame(float dtMs) {
+    if (m_ShowQuitConfirm || m_GamePaused) {
+        return;
+    }
+
     UpdateBeams(dtMs);
 
     if (m_PreStageWaiting) {
         m_PreStageTimerMs += dtMs;
-        if (m_PreStageTimerMs >= PRE_STAGE_WAIT_MS) {
-            m_PreStageWaiting = false;
+        if (m_PreStageTimerMs < PRE_STAGE_WAIT_MS) return;
+
+        m_PreStageWaiting = false;
+        // Auto-start stage immediately after the 1s wait.
+        if (!m_WaveRunning && !m_GameOver && !m_MissionClear) {
+            StartWave();
         }
-        return;
     }
 
     if (m_GameOver || m_MissionClear) {
@@ -334,7 +346,7 @@ void App::UpdateGame(float dtMs) {
     }
 
     const float dtSec = dtMs / 1000.0F;
-    UpdateWave(dtSec);
+    UpdateWave(dtSec * BATTLE_TIME_SCALE);
     UpdateEnemies(dtSec);
     UpdateOperators(dtMs);
     CleanupDefeatedEnemies();

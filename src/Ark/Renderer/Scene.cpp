@@ -44,16 +44,6 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
         }
     };
 
-    if (m_App.m_PreStageWaiting && !m_App.m_StageLoadingPath.empty()) {
-        m_App.m_StageBackgroundPath = m_App.m_StageLoadingPath;
-        const float t = std::clamp(m_App.m_PreStageTimerMs, 0.0F, PRE_STAGE_TOTAL_MS);
-        const float fadeIn = std::clamp(t / PRE_STAGE_FADE_MS, 0.0F, 1.0F);
-        const float fadeOut = std::clamp((PRE_STAGE_TOTAL_MS - t) / PRE_STAGE_FADE_MS, 0.0F, 1.0F);
-        m_App.m_StageBackgroundAlpha = m_App.m_StageLoadingAlpha * std::min(fadeIn, fadeOut);
-        DrawLoadingScreen();
-        return;
-    }
-
     if (m_App.m_MissionClear && !m_App.m_StageFinishPath.empty()) {
         const float t = std::max(0.0F, m_App.m_ClearTimerMs);
         if (t < FINISH_FADE_TO_BLACK_MS + FINISH_BLACKOUT_MS) {

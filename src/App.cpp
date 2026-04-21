@@ -15,6 +15,7 @@
 #include <string>
 
 #include "Ark/Renderer.hpp"
+#include "Ark/Renderer/RendererShared.hpp"
 #include "Util/Input.hpp"
 #include "Util/Keycode.hpp"
 #include "Util/Time.hpp"
@@ -65,23 +66,49 @@ void App::Update() {
     if (Util::Input::IsKeyDown(Util::Keycode::R)) ResetDemo();
     const float dt = std::clamp(Util::Time::GetDeltaTimeMs(), 0.0F, 100.0F);
 
-    if (Util::Input::IsKeyDown(Util::Keycode::SPACE) && !m_WaveRunning &&
-        !m_GameOver && !m_MissionClear && !m_PreStageWaiting) {
-        StartWave();
-    }
-
     const auto raw = Util::Input::GetCursorPosition();
     const glm::vec2 rawCursor{raw.x, raw.y};
-    UpdateCameraControls(dt, rawCursor);
-    const glm::vec2 ptsdCursor = RawCursorToPtsd(rawCursor);
 
     // Screen-space cursor for bar hit-testing
     const float screenW = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
     const float screenH = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
     const float screenCursorX = rawCursor.x + screenW * 0.5F;
     const float screenCursorY = screenH * 0.5F - rawCursor.y;
+    const auto uiLayout = Ark::RendererConst::ComputeBattleUiLayout(screenW, screenH);
 
-    if (!m_GameOver && !m_MissionClear && !m_PreStageWaiting) {
+    bool uiConsumedLeftClick = false;
+    if (!m_PreStageWaiting && !m_GameOver && !m_MissionClear &&
+        Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB)) {
+        if (m_ShowQuitConfirm) {
+            uiConsumedLeftClick = true;
+            if (uiLayout.quitBackButton.Contains(screenCursorX, screenCursorY)) {
+                m_ShowQuitConfirm = false;
+                m_GamePaused = m_PauseBeforeQuitConfirm;
+            } else if (uiLayout.quitConfirmButton.Contains(screenCursorX, screenCursorY)) {
+                m_CurrentState = State::END;
+                return;
+            }
+        } else if (uiLayout.settingsButton.Contains(screenCursorX, screenCursorY)) {
+            uiConsumedLeftClick = true;
+            m_PauseBeforeQuitConfirm = m_GamePaused;
+            m_GamePaused = true;
+            m_ShowQuitConfirm = true;
+        } else if (uiLayout.speedButton.Contains(screenCursorX, screenCursorY)) {
+            uiConsumedLeftClick = true;
+            m_GameSpeedMultiplier = (m_GameSpeedMultiplier < 1.5F) ? 2.0F : 1.0F;
+        } else if (uiLayout.pauseButton.Contains(screenCursorX, screenCursorY)) {
+            uiConsumedLeftClick = true;
+            m_GamePaused = !m_GamePaused;
+        }
+    }
+
+    if (!m_PreStageWaiting && !m_GamePaused && !m_ShowQuitConfirm) {
+        UpdateCameraControls(dt, rawCursor);
+    }
+    const glm::vec2 ptsdCursor = RawCursorToPtsd(rawCursor);
+
+    if (!m_GameOver && !m_MissionClear && !m_PreStageWaiting &&
+        !m_GamePaused && !m_ShowQuitConfirm && !uiConsumedLeftClick) {
         // ── Right-click: retreat operator ────────────────────────────
         if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_RB) && !m_IsDeploying &&
             !m_DraggingFromBar && !m_WaitingForDirection) {
@@ -286,7 +313,7 @@ void App::Update() {
         }
     }
 
-    UpdateGame(dt);
+    UpdateGame(dt * m_GameSpeedMultiplier);
     if (m_Renderer) {
         m_Renderer->DrawScene(ptsdCursor);
     }

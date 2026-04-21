@@ -14,8 +14,15 @@
 // ?? helpers ????????????????????????????????????????????????????
 namespace {
 
-const std::array<std::string, 4> BASE_CANDIDATES{
-    ".", "tools/ark_builder", "../tools/ark_builder", "../../tools/ark_builder"
+const std::array<std::string, 8> BASE_CANDIDATES{
+    "data",
+    ".",
+    "../data",
+    "..",
+    "../../data",
+    "../..",
+    "../../../data",
+    "../../..",
 };
 
 std::filesystem::path FindDir(const std::string& sub) {
@@ -59,7 +66,7 @@ std::filesystem::path ResolveAssetPath(const std::filesystem::path& stagePath, c
     return {};
 }
 
-// Build a map: display-name ??EnemyTemplate  (reads all *.json in enemy/)
+// Build a map: display-name -> EnemyTemplate (reads all *.json in data/enemy/)
 // File names are the enemy_id (B2, 01, 02, ??.  The "id" field inside JSON
 // is the display name used in level "enemies" sections.
 std::unordered_map<std::string, Ark::EnemyTemplate> BuildEnemyRegistry(const std::filesystem::path& dir) {
@@ -145,7 +152,7 @@ std::vector<EnemyTemplate> LoadEnemies(const std::vector<std::string>& displayNa
     return result;
 }
 
-// Load all operator definitions from operators/
+// Load all operator definitions from data/operators/
 std::vector<OperatorTemplate> LoadOperators() {
     const auto opDir = ResolveOperatorDir();
     std::vector<OperatorTemplate> result;
@@ -190,7 +197,7 @@ std::vector<OperatorTemplate> LoadOperators() {
     return result;
 }
 
-// Load a full stage from JSON, wiring in enemies from the enemy/ directory
+// Load a full stage from JSON, wiring in enemies from the data/enemy directory
 std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
     const auto stagePath = ResolveStagePath(stageFile);
     if (!stagePath.has_value()) return std::nullopt;

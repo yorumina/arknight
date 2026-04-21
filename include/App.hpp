@@ -116,6 +116,10 @@ private:
     State m_CurrentState = State::START;
     bool  m_GameOver     = false;
     bool  m_MissionClear = false;
+    bool  m_GamePaused   = false;
+    bool  m_ShowQuitConfirm = false;
+    bool  m_PauseBeforeQuitConfirm = false;
+    float m_GameSpeedMultiplier = 1.0F; // 1x or 2x
     float m_ClearTimerMs = 0.0F;
     bool  m_PreStageWaiting = true;
     float m_PreStageTimerMs = 0.0F;

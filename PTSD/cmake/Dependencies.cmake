@@ -1,4 +1,5 @@
 find_package(OpenGL REQUIRED)
+find_package(Freetype REQUIRED)
 
 cmake_policy(SET CMP0135 NEW)
 
@@ -131,11 +132,13 @@ set(IMGUI_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/imgui_draw.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/imgui_tables.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/imgui_widgets.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/misc/freetype/imgui_freetype.cpp
 )
 
 set(IMGUI_INCLUDE_DIR
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/backends/
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/misc/freetype/
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/sdl2/include/
 )
 
@@ -144,6 +147,10 @@ add_library(ImGui STATIC
 )
 target_include_directories(ImGui PUBLIC
     ${IMGUI_INCLUDE_DIR}
+)
+target_compile_definitions(ImGui PRIVATE IMGUI_ENABLE_FREETYPE)
+target_link_libraries(ImGui PUBLIC
+    Freetype::Freetype
 )
 
 
