@@ -32,6 +32,7 @@ public:
      * (default is true).
      */
     Image(const std::string &filepath, bool useAA = true);
+    Image(SDL_Surface *surface, bool useAA = true);
 
     /**
      * @brief Retrieves the size of the image.
@@ -55,6 +56,7 @@ public:
      * @param filepath The file path to the image.
      */
     void SetImage(const std::string &filepath);
+    void SetSurface(SDL_Surface *surface);
 
     /**
      * @brief Sets whether anti-aliasing (AA) should be enabled or disabled.
@@ -85,6 +87,7 @@ private:
     void InitProgram();
     void InitVertexArray();
     void InitUniformBuffer();
+    void InitDrawableResources();
 
     static constexpr int UNIFORM_SURFACE_LOCATION = 0;
 
@@ -98,6 +101,7 @@ private:
     std::unique_ptr<Core::Texture> m_Texture = nullptr;
 
     std::string m_Path;
+    bool m_UseAA = true;
     glm::vec2 m_Size;
 };
 } // namespace Util

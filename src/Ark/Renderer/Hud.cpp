@@ -6,6 +6,7 @@
 #include <array>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <limits>
 
 using namespace Ark;
@@ -64,6 +65,44 @@ void DrawPlayIcon(ImDrawList* draw, const ImVec2& center, float width, float hei
                             {center.x - width * 0.35F, center.y + height * 0.5F},
                             {center.x + width * 0.45F, center.y}, color);
 }
+
+std::string ResolveHudIconPath(const std::string& filename) {
+    const std::array<std::filesystem::path, 6> bases{
+        "data/levels_pic",
+        "../data/levels_pic",
+        "../../data/levels_pic",
+        "../../../data/levels_pic",
+        ".",
+        "..",
+    };
+    for (const auto& base : bases) {
+        const auto path = base / filename;
+        if (std::filesystem::exists(path)) return path.lexically_normal().string();
+    }
+    return {};
+}
+
+std::shared_ptr<Util::Image> LoadHudIcon(const std::string& filename) {
+    const auto path = ResolveHudIconPath(filename);
+    if (path.empty()) return nullptr;
+    return std::make_shared<Util::Image>(path);
+}
+
+void DrawIconImage(ImDrawList* draw, const std::shared_ptr<Util::Image>& image,
+                   const ImVec2& center, float maxW, float maxH) {
+    if (!image || image->GetTextureId() == 0) return;
+    const glm::vec2 size = image->GetSize();
+    if (size.x <= 0.0F || size.y <= 0.0F) return;
+
+    const float scale = std::min(maxW / size.x, maxH / size.y);
+    const float w = size.x * scale;
+    const float h = size.y * scale;
+    draw->AddImage(
+        reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+        {center.x - w * 0.5F, center.y - h * 0.5F},
+        {center.x + w * 0.5F, center.y + h * 0.5F}
+    );
+}
 } // namespace
 
 void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
@@ -72,15 +111,6 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
     if (opCount <= 0) return;
 
     const float barY = screenH - OP_BAR_HEIGHT;
-
-    // Semi-transparent bar background
-    draw->AddRectFilled(
-        {0.0F, barY - 5.0F}, {screenW, screenH},
-        IM_COL32(15, 18, 25, 200)
-    );
-    // Top border line with gradient effect
-    draw->AddLine({0.0F, barY - 5.0F}, {screenW, barY - 5.0F},
-                  IM_COL32(80, 90, 110, 180), 1.5F);
 
     std::vector<int> displayOps;
     for (int i = 0; i < opCount; ++i) {
@@ -96,166 +126,57 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
         int i = displayOps[idx];
         const auto& t = m_App.m_OperatorTemplates[static_cast<std::size_t>(i)];
 
-        // Determine availability
-        bool available = true;
-        int cdSec = 0;
-        // The operator is guaranteed not to be on field here
-        auto cdIt = m_App.m_OperatorRedeployCooldownMs.find(i);
-        if (cdIt != m_App.m_OperatorRedeployCooldownMs.end() && cdIt->second > 0.0F) {
-            available = false;
-            cdSec = static_cast<int>(std::ceil(cdIt->second / 1000.0F));
-        }
-        
         bool affordable = m_App.m_DP >= static_cast<float>(t.cost);
-        bool canDeploy = available && affordable && m_App.m_WaveRunning &&
-                         static_cast<int>(m_App.m_Operators.size()) < MAX_OPS;
 
         const float cx = startX + idx * (OP_CARD_WIDTH + OP_CARD_SPACING);
         const float cy = barY;
-
-        // ── Card background ──
-        ImU32 cardBg = canDeploy ? IM_COL32(35, 40, 55, 240)
-                                 : IM_COL32(25, 28, 38, 200);
-        ImU32 cardBorder = canDeploy ? IM_COL32(100, 120, 160, 200)
-                                     : IM_COL32(60, 65, 80, 150);
-
-        // Selected card glow
-        if (m_App.m_DraggingFromBar && m_App.m_DragOperatorType == i) {
-            cardBg = IM_COL32(55, 70, 100, 255);
-            cardBorder = IM_COL32(140, 180, 255, 255);
+        GLuint cardTex = 0;
+        if (static_cast<std::size_t>(i) < m_App.m_OperatorCards.size() &&
+            m_App.m_OperatorCards[static_cast<std::size_t>(i)]) {
+            cardTex = m_App.m_OperatorCards[static_cast<std::size_t>(i)]->GetTextureId();
         }
 
-        draw->AddRectFilled({cx, cy}, {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
-                            cardBg, OP_CARD_ROUNDING);
-        draw->AddRect({cx, cy}, {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
-                      cardBorder, OP_CARD_ROUNDING, 0, 1.2F);
-
-        // ── Portrait area ──
-        const float portraitY = cy + 2.0F;
-        const float portraitW = OP_CARD_WIDTH - 4.0F;
-        const float portraitH = OP_CARD_PORTRAIT_HEIGHT - 4.0F;
-        const float portraitX = cx + 2.0F;
-
-        // Draw thumbnail or colored placeholder
-        GLuint thumbTex = 0;
-        if (static_cast<std::size_t>(i) < m_App.m_OperatorThumbnails.size() &&
-            m_App.m_OperatorThumbnails[static_cast<std::size_t>(i)]) {
-            thumbTex = m_App.m_OperatorThumbnails[static_cast<std::size_t>(i)]->GetTextureId();
-        }
-
-        if (thumbTex != 0) {
-            draw->AddImageRounded(
-                reinterpret_cast<void*>(static_cast<intptr_t>(thumbTex)),
-                {portraitX, portraitY},
-                {portraitX + portraitW, portraitY + portraitH},
-                {0.0F, 0.0F}, {1.0F, 1.0F},
-                canDeploy ? IM_COL32(255,255,255,255) : IM_COL32(120,120,120,200),
-                OP_CARD_ROUNDING
+        if (cardTex != 0) {
+            draw->AddImage(
+                reinterpret_cast<void*>(static_cast<intptr_t>(cardTex)),
+                {cx, cy},
+                {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
+                {0.0F, 0.0F},
+                {1.0F, 1.0F},
+                IM_COL32(255, 255, 255, 255)
             );
         } else {
-            // Colored placeholder with operator initial
-            ImU32 portraitBg = canDeploy ? t.color : IM_COL32(60, 60, 60, 200);
-            draw->AddRectFilled({portraitX, portraitY},
-                                {portraitX + portraitW, portraitY + portraitH},
-                                portraitBg, OP_CARD_ROUNDING);
-            // Operator initial (large, centered)
-            const std::string initStr(1, t.name[0]);
-            ImGui::SetWindowFontScale(1.4F);
-            const auto initSize = ImGui::CalcTextSize(initStr.c_str());
-            ImGui::SetWindowFontScale(1.0F);
-            draw->AddText(nullptr, 20.0F,
-                {portraitX + (portraitW - initSize.x * 1.4F) * 0.5F,
-                 portraitY + (portraitH - initSize.y * 1.4F) * 0.5F},
-                IM_COL32(255, 255, 255, canDeploy ? 255 : 120),
-                initStr.c_str());
+            draw->AddRectFilled({cx, cy}, {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
+                                IM_COL32(35, 40, 52, 230), 2.0F);
+            const auto nameSize = ImGui::CalcTextSize(t.name.c_str());
+            draw->AddText({cx + (OP_CARD_WIDTH - nameSize.x) * 0.5F, cy + 42.0F},
+                          IM_COL32(235, 240, 248, 255), t.name.c_str());
         }
 
-        // ── Unavailable overlay ──
-        if (!canDeploy) {
-            draw->AddRectFilled({portraitX, portraitY},
-                                {portraitX + portraitW, portraitY + portraitH},
-                                IM_COL32(0, 0, 0, 100), OP_CARD_ROUNDING);
-            if (cdSec > 0) {
-                const std::string cdText = std::to_string(cdSec) + "s";
-                const auto cdSize = ImGui::CalcTextSize(cdText.c_str());
-                draw->AddText({portraitX + (portraitW - cdSize.x) * 0.5F,
-                               portraitY + (portraitH - cdSize.y) * 0.5F},
-                              IM_COL32(255, 180, 100, 255), cdText.c_str());
-            }
+        if (!affordable) {
+            draw->AddRectFilled({cx, cy}, {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
+                                IM_COL32(0, 0, 0, 135), 2.0F);
         }
-
-        // ── Info bar at bottom of card ──
-        const float infoY = cy + OP_CARD_PORTRAIT_HEIGHT;
-        const float infoH = OP_CARD_INFO_HEIGHT;
-        draw->AddRectFilled({cx, infoY}, {cx + OP_CARD_WIDTH, infoY + infoH},
-                            IM_COL32(20, 22, 30, 240), 0.0F);
-
-        // Deploy type indicator (small colored triangle)
-        if (t.deployType == DeployType::GROUND_ONLY) {
-            // Small ground triangle (blue)
-            const float triX = cx + 6.0F;
-            const float triY2 = infoY + 12.0F;
-            draw->AddTriangleFilled({triX, triY2 + 6.0F}, {triX + 6.0F, triY2 - 2.0F},
-                                     {triX + 12.0F, triY2 + 6.0F}, IM_COL32(100, 160, 255, 200));
-        } else {
-            // Small highground triangle (yellow)
-            const float triX = cx + 6.0F;
-            const float triY2 = infoY + 12.0F;
-            draw->AddTriangleFilled({triX, triY2 + 6.0F}, {triX + 6.0F, triY2 - 2.0F},
-                                     {triX + 12.0F, triY2 + 6.0F}, IM_COL32(255, 200, 60, 200));
-        }
-
-        // Cost number (right-aligned, prominent)
-        const std::string costStr = std::to_string(t.cost);
-        const auto costSize = ImGui::CalcTextSize(costStr.c_str());
-        ImU32 costCol = affordable ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 100, 100, 255);
-        draw->AddText({cx + OP_CARD_WIDTH - costSize.x - 6.0F, infoY + 4.0F},
-                      costCol, costStr.c_str());
-
-        // Operator name (small, bottom)
-        const std::string nameStr = t.name; // Full name instead of arbitrary slicing
-        const auto nameSize = ImGui::CalcTextSize(nameStr.c_str());
-        draw->AddText({cx + (OP_CARD_WIDTH - nameSize.x) * 0.5F, infoY + 18.0F},
-                      IM_COL32(180, 190, 210, canDeploy ? 255 : 120),
-                      nameStr.c_str());
     }
 
-    // ── Draw drag ghost if dragging ──
     if (m_App.m_DraggingFromBar && m_App.m_DragOperatorType >= 0) {
-        const auto& t = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(m_App.m_DragOperatorType));
-        const float ghostS = 40.0F;
         const float gx = m_App.m_DragScreenPos.x;
         const float gy = m_App.m_DragScreenPos.y;
-
-        // Ghost card following cursor
-        GLuint thumbTex = 0;
-        if (static_cast<std::size_t>(m_App.m_DragOperatorType) < m_App.m_OperatorThumbnails.size() &&
-            m_App.m_OperatorThumbnails[static_cast<std::size_t>(m_App.m_DragOperatorType)]) {
-            thumbTex = m_App.m_OperatorThumbnails[static_cast<std::size_t>(m_App.m_DragOperatorType)]->GetTextureId();
+        GLuint cardTex = 0;
+        if (static_cast<std::size_t>(m_App.m_DragOperatorType) < m_App.m_OperatorCards.size() &&
+            m_App.m_OperatorCards[static_cast<std::size_t>(m_App.m_DragOperatorType)]) {
+            cardTex = m_App.m_OperatorCards[static_cast<std::size_t>(m_App.m_DragOperatorType)]->GetTextureId();
         }
 
-        // Semi-transparent background
-        draw->AddRectFilled({gx - ghostS, gy - ghostS}, {gx + ghostS, gy + ghostS},
-                            IM_COL32(35, 45, 70, 180), 6.0F);
-        draw->AddRect({gx - ghostS, gy - ghostS}, {gx + ghostS, gy + ghostS},
-                      IM_COL32(160, 200, 255, 200), 6.0F, 0, 2.0F);
-
-        if (thumbTex != 0) {
-            draw->AddImageRounded(
-                reinterpret_cast<void*>(static_cast<intptr_t>(thumbTex)),
-                {gx - ghostS + 4.0F, gy - ghostS + 4.0F},
-                {gx + ghostS - 4.0F, gy + ghostS - 4.0F},
-                {0.0F, 0.0F}, {1.0F, 1.0F},
-                IM_COL32(255, 255, 255, 200), 4.0F
+        if (cardTex != 0) {
+            draw->AddImage(
+                reinterpret_cast<void*>(static_cast<intptr_t>(cardTex)),
+                {gx - OP_CARD_WIDTH * 0.5F, gy - OP_CARD_HEIGHT * 0.5F},
+                {gx + OP_CARD_WIDTH * 0.5F, gy + OP_CARD_HEIGHT * 0.5F},
+                {0.0F, 0.0F},
+                {1.0F, 1.0F},
+                IM_COL32(255, 255, 255, 190)
             );
-        } else {
-            draw->AddRectFilled({gx - ghostS + 4.0F, gy - ghostS + 4.0F},
-                                {gx + ghostS - 4.0F, gy + ghostS - 4.0F},
-                                t.color, 4.0F);
-            const std::string sym(1, t.name[0]);
-            const auto ts = ImGui::CalcTextSize(sym.c_str());
-            draw->AddText({gx - ts.x * 0.5F, gy - ts.y * 0.5F},
-                          IM_COL32(255, 255, 255, 255), sym.c_str());
         }
     }
 }
@@ -370,12 +291,15 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
 
     // Top-center battle status (enemy count / life point)
     {
+        static std::shared_ptr<Util::Image> enemyNumberIcon = LoadHudIcon("enemy_number.png");
+        static std::shared_ptr<Util::Image> lifePointIcon = LoadHudIcon("life_point.png");
+
         const float panelW = 460.0F * ui.scale;
         const float panelH = 52.0F * ui.scale;
         const float px = SW * 0.5F - panelW * 0.5F;
         const float py = 10.0F * ui.scale;
 
-        draw->AddRectFilled({px, py}, {px + panelW, py + panelH}, IM_COL32(30, 36, 46, 210), 3.0F * ui.scale);
+        draw->AddRectFilled({px, py}, {px + panelW, py + panelH}, IM_COL32(46, 47, 44, 179), 3.0F * ui.scale);
         draw->AddRect({px, py}, {px + panelW, py + panelH}, IM_COL32(96, 104, 122, 170), 3.0F * ui.scale, 0, 1.0F);
 
         draw->AddLine({px + 180.0F * ui.scale, py + 7.0F * ui.scale},
@@ -386,14 +310,11 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
                       IM_COL32(105, 114, 132, 160), 1.5F);
 
         const ImVec2 enemyCenter{px + 72.0F * ui.scale, py + panelH * 0.5F};
-        draw->AddCircleFilled(enemyCenter, 14.0F * ui.scale, IM_COL32(20, 20, 20, 180), 28);
-        draw->AddCircle(enemyCenter, 13.0F * ui.scale, IM_COL32(247, 151, 39, 255), 28, 2.0F);
-        draw->AddLine({enemyCenter.x - 10.0F * ui.scale, enemyCenter.y},
-                      {enemyCenter.x + 10.0F * ui.scale, enemyCenter.y},
-                      IM_COL32(247, 151, 39, 230), 1.6F);
-        draw->AddLine({enemyCenter.x, enemyCenter.y - 10.0F * ui.scale},
-                      {enemyCenter.x, enemyCenter.y + 10.0F * ui.scale},
-                      IM_COL32(247, 151, 39, 230), 1.6F);
+        if (enemyNumberIcon) {
+            DrawIconImage(draw, enemyNumberIcon, enemyCenter, 54.0F * ui.scale, 42.0F * ui.scale);
+        } else {
+            draw->AddCircle(enemyCenter, 13.0F * ui.scale, IM_COL32(247, 151, 39, 255), 28, 2.0F);
+        }
 
         const std::string killInfo = std::to_string(m_App.m_KillCount) + "/" + std::to_string(m_App.m_TotalWaveUnits);
         draw->AddText(ImGui::GetFont(), 20.0F * ui.scale,
@@ -401,13 +322,13 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
                       IM_COL32(241, 244, 248, 255), killInfo.c_str());
 
         const ImVec2 towerCenter{px + 350.0F * ui.scale, py + panelH * 0.5F};
-        draw->AddRectFilled({towerCenter.x - 8.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
-                            {towerCenter.x + 8.0F * ui.scale, towerCenter.y + 9.0F * ui.scale},
-                            IM_COL32(99, 197, 255, 220), 1.0F * ui.scale);
-        draw->AddTriangleFilled({towerCenter.x - 10.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
-                                {towerCenter.x + 10.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
-                                {towerCenter.x, towerCenter.y - 16.0F * ui.scale},
-                                IM_COL32(99, 197, 255, 220));
+        if (lifePointIcon) {
+            DrawIconImage(draw, lifePointIcon, towerCenter, 42.0F * ui.scale, 40.0F * ui.scale);
+        } else {
+            draw->AddRectFilled({towerCenter.x - 8.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
+                                {towerCenter.x + 8.0F * ui.scale, towerCenter.y + 9.0F * ui.scale},
+                                IM_COL32(99, 197, 255, 220), 1.0F * ui.scale);
+        }
 
         const std::string lp = std::to_string(m_App.m_LifePoint);
         draw->AddText(ImGui::GetFont(), 20.0F * ui.scale,

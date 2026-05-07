@@ -37,7 +37,13 @@ public:
      */
     Animation(const std::vector<std::string> &paths, bool play,
               std::size_t interval, bool looping = true,
-              std::size_t cooldown = 100, bool useAA = true);
+              std::size_t cooldown = 100, bool useAA = true,
+              bool streamFrames = false);
+
+    Animation(const std::string &mediaPath, bool play,
+              bool looping = true, bool useAA = true);
+
+    ~Animation() override = default;
 
     /**
      * @brief Constructor for Animation class bypassing path loading.
@@ -79,7 +85,7 @@ public:
      * @brief Get the total number of frames in the animation.
      * @return Total number of frames.
      */
-    std::size_t GetFrameCount() const { return m_Frames.size(); }
+    std::size_t GetFrameCount() const;
 
     /**
      * @brief Get the current state of the animation
@@ -91,12 +97,12 @@ public:
      * @brief Get the size of the current frame.
      * @return Size of the current frame.
      */
-    glm::vec2 GetSize() const override { return m_Frames[m_Index]->GetSize(); }
+    glm::vec2 GetSize() const override;
 
     /**
      * @brief Retrieves the current frame texture ID.
      */
-    GLuint GetTextureId() const { return m_Frames[m_Index]->GetTextureId(); }
+    GLuint GetTextureId() const;
 
     /**
      * @brief Set the interval between frames.
@@ -163,7 +169,24 @@ public:
     void Update();
 
 private:
+    std::shared_ptr<Util::Image> GetCurrentImage() const;
+    void EnsureStreamFrameLoaded() const;
+    void EnsureGifFrameLoaded() const;
+    void EnsureVideoFrameLoaded() const;
+    bool LoadVideoPosterFrame(const std::string &mediaPath);
+    double GetCurrentFrameInterval() const;
+
     std::vector<std::shared_ptr<Util::Image>> m_Frames;
+    std::vector<std::string> m_FramePaths;
+    std::vector<SDL_Surface*> m_VideoFrames;
+    mutable std::shared_ptr<Util::Image> m_StreamFrame;
+    mutable std::size_t m_LoadedStreamIndex = static_cast<std::size_t>(-1);
+    using GifAnimationPtr = std::unique_ptr<IMG_Animation, void (*)(IMG_Animation*)>;
+    GifAnimationPtr m_GifAnimation{nullptr, IMG_FreeAnimation};
+    mutable std::size_t m_LoadedGifIndex = static_cast<std::size_t>(-1);
+    mutable std::size_t m_LoadedVideoIndex = static_cast<std::size_t>(-1);
+    bool m_StreamFrames = false;
+    bool m_UseAA = true;
     State m_State;
     double m_Interval;
     bool m_Looping;

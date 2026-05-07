@@ -16,17 +16,13 @@
   },
   "camera": {
     "projection_scale_x": 0.92,
-    "projection_scale_y": 0.82,
+    "projection_scale_y": 1.0,
+    "projection_skew_x": 0.0,
     "zoom": 1.0,
     "min_zoom": 0.75,
     "max_zoom": 1.8,
     "pan_x": 0.0,
     "pan_y": 0.0
-  },
-  "board_layout": {
-    "cell_size": 106.0,
-    "top_left_x": -608.0,
-    "top_left_y": 236.0
   },
   "tiles": [
     ["highground", "highground", "highground", "highground", "spawn", "highground", "highground", "highground", "highground"],

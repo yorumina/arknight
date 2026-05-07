@@ -55,14 +55,17 @@ void Texture::UpdateData(GLint format, int width, int height,
 
     // Reference:
     // https://registry.khronos.org/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
+    GLint previousUnpackAlignment = 4;
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GlFormatToGlInternalFormat(format), width,
                  height, 0, format, GL_UNSIGNED_BYTE, data);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, m_MinFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, m_MagFilter);
-    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void Texture::UseAntiAliasing(bool useAA) {
@@ -72,10 +75,10 @@ void Texture::UseAntiAliasing(bool useAA) {
      * https://www.khronos.org/opengl/wiki/Sampler_Object#Sampling_parameters
      */
     if (useAA) {
-        m_MinFilter = GL_LINEAR_MIPMAP_LINEAR;
+        m_MinFilter = GL_LINEAR;
         m_MagFilter = GL_LINEAR;
     } else {
-        m_MinFilter = GL_NEAREST_MIPMAP_NEAREST;
+        m_MinFilter = GL_NEAREST;
         m_MagFilter = GL_NEAREST;
     }
 }

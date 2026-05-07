@@ -1,0 +1,70 @@
+{
+  "name": "Operation 1-2",
+  "width": 10,
+  "height": 5,
+  "background": {
+    "image": "Operation 1-2.png",
+    "alpha": 0.82
+  },
+  "camera": {
+    "projection_scale_x": 1.0,
+    "projection_scale_y": 1.0,
+    "projection_skew_x": 0.0,
+    "zoom": 0.98,
+    "min_zoom": 0.75,
+    "max_zoom": 1.8,
+    "pan_x": -35.0,
+    "pan_y": 0.0
+  },
+  "tiles": [
+    ["empty", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "highground", "empty"],
+    ["highground", "ground", "ground", "ground", "spawn", "road", "road", "road", "road", "goal"],
+    ["road", "road", "road", "road", "road", "road", "spawn", "road", "road", "highground"],
+    ["spawn", "road", "ground", "ground", "highground", "road", "ground", "highground", "highground", "empty"],
+    ["highground", "highground", "highground", "empty", "ground", "goal", "ground", "highground", "empty", "empty"]
+  ],
+  "routes": {
+    "left_main": [
+      {"x": 0, "y": 3, "wait": 0.0},
+      {"x": 1, "y": 3, "wait": 0.0},
+      {"x": 1, "y": 2, "wait": 0.0},
+      {"x": 2, "y": 2, "wait": 0.0},
+      {"x": 3, "y": 2, "wait": 0.0},
+      {"x": 4, "y": 2, "wait": 0.0},
+      {"x": 5, "y": 2, "wait": 0.0},
+      {"x": 6, "y": 2, "wait": 0.0},
+      {"x": 7, "y": 2, "wait": 0.0},
+      {"x": 8, "y": 2, "wait": 0.0},
+      {"x": 8, "y": 1, "wait": 0.0},
+      {"x": 9, "y": 1, "wait": 0.0}
+    ],
+    "top_drop": [
+      {"x": 4, "y": 1, "wait": 0.0},
+      {"x": 4, "y": 2, "wait": 0.0},
+      {"x": 5, "y": 2, "wait": 0.0},
+      {"x": 5, "y": 3, "wait": 0.0},
+      {"x": 5, "y": 4, "wait": 0.0}
+    ],
+    "right_gate": [
+      {"x": 6, "y": 2, "wait": 0.0},
+      {"x": 7, "y": 2, "wait": 0.0},
+      {"x": 8, "y": 2, "wait": 0.0},
+      {"x": 8, "y": 1, "wait": 0.0},
+      {"x": 9, "y": 1, "wait": 0.0}
+    ]
+  },
+  "enemies": {
+    "01": {"hp": 900.0, "speed": 1.9, "damage": 220.0, "attackIntervalMs": 1500.0, "canAttackOperator": true},
+    "02": {"hp": 1850.0, "speed": 1.75, "damage": 400.0, "attackIntervalMs": 1500.0, "canAttackOperator": true},
+    "17": {"hp": 1800.0, "speed": 1.05, "damage": 350.0, "attackIntervalMs": 2200.0, "canAttackOperator": true},
+    "A9": {"hp": 1600.0, "speed": 1.0, "def": 50.0, "damage": 180.0, "attackIntervalMs": 2700.0, "attackRange": 1.75, "isRanged": true, "canAttackOperator": true},
+    "B2": {"hp": 1150.0, "speed": 1.0, "damage": 250.0, "attackIntervalMs": 2000.0, "canAttackOperator": true}
+  },
+  "waves": [
+    {"enemy": "01", "route": "left_main", "count": 5, "start": 2.0, "interval": 2.6},
+    {"enemy": "B2", "route": "top_drop", "count": 4, "start": 6.0, "interval": 3.0},
+    {"enemy": "17", "route": "right_gate", "count": 4, "start": 12.0, "interval": 3.2},
+    {"enemy": "A9", "route": "top_drop", "count": 3, "start": 20.0, "interval": 5.0},
+    {"enemy": "02", "route": "left_main", "count": 4, "start": 26.0, "interval": 3.0}
+  ]
+}

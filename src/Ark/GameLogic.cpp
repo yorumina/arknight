@@ -20,7 +20,7 @@ using namespace Ark;
 namespace {
 constexpr float WAVE_CLEAR_DP        = 5.0F;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
-constexpr float PRE_STAGE_WAIT_MS    = 2000.0F;  // 2 seconds
+constexpr float PRE_STAGE_WAIT_MS    = 1500.0F;  // 2 seconds
 constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
 constexpr float FINISH_BLACKOUT_MS   = 1000.0F;  // 1 second
 constexpr float FINISH_FADE_IN_MS    = 700.0F;
@@ -28,6 +28,7 @@ constexpr float FINISH_FADE_OUT_MS   = 700.0F;
 constexpr float BATTLE_TIME_SCALE     = 0.5F;
 constexpr float DEFAULT_CAMERA_SCALE_X = 1.0F;
 constexpr float DEFAULT_CAMERA_SCALE_Y = PERSPECTIVE_Y_SCALE;
+constexpr float DEFAULT_CAMERA_SKEW_X = PERSPECTIVE_X_SHEAR;
 constexpr float DEFAULT_CAMERA_MIN_ZOOM = 0.7F;
 constexpr float DEFAULT_CAMERA_MAX_ZOOM = 1.8F;
 constexpr const char* STAGE_1_1_FILE = "Operation 1-1/stage";
@@ -100,64 +101,127 @@ void App::LoadOperatorAnimations() {
     m_OperatorAnims.clear();
     m_OperatorAnims.resize(m_OperatorTemplates.size());
 
-    // Helper: load a sequence of PNG frames from a directory as an Animation
-    auto loadAnimFromDir = [](const std::string& dirPath, bool loop) -> std::shared_ptr<Util::Animation> {
-        if (!std::filesystem::exists(dirPath) || !std::filesystem::is_directory(dirPath)) return nullptr;
-        std::vector<std::string> frames;
-        for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".png") {
-                frames.push_back(entry.path().string());
-            }
-        }
-        if (frames.empty()) return nullptr;
-        std::sort(frames.begin(), frames.end());
-        return std::make_shared<Util::Animation>(frames, true, 41, loop, 0); // ~24 FPS
+    auto loadAnimClipFromWebm = [](const std::filesystem::path& webmPath, bool loop) {
+        OperatorAnimClip clip;
+        clip.webmPath = webmPath.string();
+        clip.loop = loop;
+        return clip;
     };
 
-    // Helper: case-insensitive substring match for directory names
+    auto assignClipIfLoaded = [](OperatorAnimClip& target, OperatorAnimClip clip, bool force = false) {
+        if (clip.Empty()) return;
+        if (force || target.Empty()) {
+            target = std::move(clip);
+        }
+    };
+
+    // Helper: case-insensitive string
     auto toLower = [](std::string s) {
         std::transform(s.begin(), s.end(), s.begin(), ::tolower);
         return s;
     };
 
-    // For each operator, scan its sprite folder for animation directories
+    // Helper: classify a single WebM file and assign it to the correct clip
+    // in the given set of 5 slots (start, def, attack, skill, die).
+    auto classifyAndAssign = [&](const std::filesystem::path& webmPath,
+                                 OperatorAnimClip& start, OperatorAnimClip& def,
+                                 OperatorAnimClip& attack, OperatorAnimClip& skill,
+                                 OperatorAnimClip& die) {
+        std::string animName = toLower(webmPath.stem().string());
+
+        const bool isDefaultAnim = animName.find("default") != std::string::npos;
+        const bool isIdleAnim    = animName.find("idle") != std::string::npos;
+
+        if (isDefaultAnim || isIdleAnim) {
+            assignClipIfLoaded(def, loadAnimClipFromWebm(webmPath, true), isDefaultAnim);
+        } else if (animName.find("start") != std::string::npos
+                   && animName.find("skill") == std::string::npos) {
+            assignClipIfLoaded(start, loadAnimClipFromWebm(webmPath, false));
+        } else if (animName.find("attack") != std::string::npos) {
+            // Prefer "attackloop" or "attack" over "attackbegin"/"attackend"
+            if (animName.find("begin") != std::string::npos || animName.find("end") != std::string::npos) {
+                assignClipIfLoaded(attack, loadAnimClipFromWebm(webmPath, false));
+            } else {
+                assignClipIfLoaded(attack, loadAnimClipFromWebm(webmPath, false), true);
+            }
+        } else if (animName.find("skill") != std::string::npos) {
+            // "skillloop" or "skill" (prefer loop for the main skill anim)
+            assignClipIfLoaded(skill, loadAnimClipFromWebm(webmPath, true),
+                               animName.find("loop") != std::string::npos);
+        } else if (animName.find("die") != std::string::npos) {
+            assignClipIfLoaded(die, loadAnimClipFromWebm(webmPath, false));
+        }
+    };
+
+    // Helper: scan all .webm files in a single directory (non-recursive)
+    auto scanDir = [&](const std::filesystem::path& dir,
+                       OperatorAnimClip& start, OperatorAnimClip& def,
+                       OperatorAnimClip& attack, OperatorAnimClip& skill,
+                       OperatorAnimClip& die) {
+        if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) return;
+        for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+            if (!entry.is_regular_file()) continue;
+            if (toLower(entry.path().extension().string()) != ".webm") continue;
+            classifyAndAssign(entry.path(), start, def, attack, skill, die);
+        }
+    };
+
+    const auto operatorDir = Ark::ResolveOperatorDir();
+    if (operatorDir.empty()) return;
+
+    // For each operator, scan the three subdirectories explicitly:
+    //   front/       → front-facing clips (operator faces RIGHT)
+    //   back/        → back-facing clips  (operator faces UP)
+    //   front_flip/  → flipped front clips (operator faces LEFT or DOWN)
     for (std::size_t i = 0; i < m_OperatorTemplates.size(); ++i) {
         const auto& op = m_OperatorTemplates[i];
-        std::string opSpriteDir = std::string(ASSETS_DIR) + "/sprites/operators/" + op.id;
-        
-        if (!std::filesystem::exists(opSpriteDir)) continue;
+        const auto photoDir = operatorDir / op.id / "photo";
+        if (!std::filesystem::exists(photoDir) || !std::filesystem::is_directory(photoDir)) continue;
 
-        // Scan all subdirectories and match them by keywords in their name
-        for (const auto& entry : std::filesystem::directory_iterator(opSpriteDir)) {
-            if (!entry.is_directory()) continue;
-            std::string dirName = toLower(entry.path().filename().string());
-            
-            // Match by keyword: order matters (check "skillloop"/"skill" before "start")
-            if (dirName.find("default") != std::string::npos) {
-                if (!m_OperatorAnims[i].def)
-                    m_OperatorAnims[i].def = loadAnimFromDir(entry.path().string(), true);
-            } else if (dirName.find("start") != std::string::npos 
-                       && dirName.find("skill") == std::string::npos) {
-                if (!m_OperatorAnims[i].start)
-                    m_OperatorAnims[i].start = loadAnimFromDir(entry.path().string(), false);
-            } else if (dirName.find("attack") != std::string::npos) {
-                // Prefer "attackloop" or "attack" over "attackbegin"/"attackend"
-                if (dirName.find("begin") != std::string::npos || dirName.find("end") != std::string::npos) {
-                    // Skip begin/end variants ??the loop/main clip is far more useful
-                    if (!m_OperatorAnims[i].attack)
-                        m_OperatorAnims[i].attack = loadAnimFromDir(entry.path().string(), false);
-                } else {
-                    m_OperatorAnims[i].attack = loadAnimFromDir(entry.path().string(), false);
-                }
-            } else if (dirName.find("skill") != std::string::npos) {
-                // "skillloop" or "skill" (prefer loop for the main skill anim)
-                if (dirName.find("loop") != std::string::npos || !m_OperatorAnims[i].skill)
-                    m_OperatorAnims[i].skill = loadAnimFromDir(entry.path().string(), true);
-            } else if (dirName.find("die") != std::string::npos) {
-                if (!m_OperatorAnims[i].die)
-                    m_OperatorAnims[i].die = loadAnimFromDir(entry.path().string(), false);
-            }
+        auto& pack = m_OperatorAnims[i];
+
+        // front/ → RIGHT-facing
+        scanDir(photoDir / "front",
+                pack.start, pack.def, pack.attack, pack.skill, pack.die);
+
+        // back/ → UP-facing
+        scanDir(photoDir / "back",
+                pack.startBack, pack.defBack, pack.attackBack, pack.skillBack, pack.dieBack);
+
+        // front_flip/ → LEFT/DOWN-facing (pre-generated horizontally-flipped front)
+        scanDir(photoDir / "front_flip",
+                pack.startFlip, pack.defFlip, pack.attackFlip, pack.skillFlip, pack.dieFlip);
+    }
+
+    // Pre-cache ALL animations (start, default, attack, skill, die) for each direction.
+    // This happens while the loading screen is up, preventing any mid-gameplay stutters
+    // when an operator performs an action for the first time.
+    auto warmClip = [](const OperatorAnimClip& clip) {
+        if (!clip.Empty()) {
+            Util::Animation warmup(clip.webmPath, false, clip.loop, false);
         }
+    };
+    for (const auto& pack : m_OperatorAnims) {
+        // Front
+        warmClip(pack.start);
+        warmClip(pack.def);
+        warmClip(pack.attack);
+        warmClip(pack.skill);
+        warmClip(pack.die);
+        
+        // Back
+        warmClip(pack.startBack);
+        warmClip(pack.defBack);
+        warmClip(pack.attackBack);
+        warmClip(pack.skillBack);
+        warmClip(pack.dieBack);
+        
+        // Flipped Front
+        warmClip(pack.startFlip);
+        warmClip(pack.defFlip);
+        warmClip(pack.attackFlip);
+        warmClip(pack.skillFlip);
+        warmClip(pack.dieFlip);
     }
 }
 
@@ -171,6 +235,7 @@ bool App::LoadStageFromJsonModule() {
     m_StageName     = d.name;
     m_StageLoadSource = d.sourceFile;
     m_TileMap       = std::move(d.tileMap);
+    m_TileImageMap  = std::move(d.tileImages);
     m_Routes        = std::move(d.routes);
     m_EnemyTemplates= std::move(d.enemyTemplates);
     m_WavePlans     = std::move(d.wavePlans);
@@ -182,9 +247,9 @@ bool App::LoadStageFromJsonModule() {
         m_BoardLayoutOverride = d.boardLayoutOverride;
     }
 
-    const float stageProjection = std::max(0.05F, d.camera.projectionScaleX);
-    m_Camera.projectionScaleX = stageProjection;
-    m_Camera.projectionScaleY = stageProjection;
+    m_Camera.projectionScaleX = std::max(0.05F, d.camera.projectionScaleX);
+    m_Camera.projectionScaleY = std::max(0.05F, d.camera.projectionScaleY);
+    m_Camera.projectionSkewX = d.camera.projectionSkewX;
     m_Camera.minZoom = std::max(0.2F, d.camera.minZoom);
     m_Camera.maxZoom = std::max(m_Camera.minZoom, d.camera.maxZoom);
     m_Camera.defaultZoom = std::clamp(d.camera.zoom, m_Camera.minZoom, m_Camera.maxZoom);
@@ -195,10 +260,11 @@ bool App::LoadStageFromJsonModule() {
     m_StageLoadingAlpha = d.loadingAlpha;
     m_StageFinishPath = d.finishImage;
     m_StageFinishAlpha = d.finishAlpha;
-    m_StageBackgroundPath.clear();
-    m_StageBackgroundAlpha = 1.0F;
+    m_StageBackgroundPath = d.backgroundImage;
+    m_StageBackgroundAlpha = d.backgroundAlpha;
     m_StageOverlayLoadedPath.clear();
     m_StageBackground.reset();
+    m_TileImageCache.clear();
     return true;
 }
 
@@ -211,12 +277,14 @@ void App::BuildFallbackStage() {
     m_StageBackgroundAlpha = 1.0F;
     m_StageBackground.reset();
     m_StageOverlayLoadedPath.clear();
+    m_TileImageCache.clear();
     m_StageLoadingPath.clear();
     m_StageFinishPath.clear();
     m_StageLoadingAlpha = 1.0F;
     m_StageFinishAlpha = 1.0F;
     m_Camera.projectionScaleX = DEFAULT_CAMERA_SCALE_X;
     m_Camera.projectionScaleY = DEFAULT_CAMERA_SCALE_Y;
+    m_Camera.projectionSkewX = DEFAULT_CAMERA_SKEW_X;
     m_Camera.minZoom = DEFAULT_CAMERA_MIN_ZOOM;
     m_Camera.maxZoom = DEFAULT_CAMERA_MAX_ZOOM;
     m_Camera.defaultZoom = 1.0F;
@@ -225,6 +293,8 @@ void App::BuildFallbackStage() {
 
     m_TileMap.assign(static_cast<std::size_t>(m_StageHeight),
                      std::vector<TileType>(static_cast<std::size_t>(m_StageWidth), TileType::GROUND));
+    m_TileImageMap.assign(static_cast<std::size_t>(m_StageHeight),
+                          std::vector<std::string>(static_cast<std::size_t>(m_StageWidth)));
     for (int x = 0; x < m_StageWidth; ++x)
         m_TileMap[5][static_cast<std::size_t>(x)] = TileType::HIGHGROUND;
 
@@ -329,8 +399,19 @@ void App::UpdateGame(float dtMs) {
                 if (m_FinishExitTimerMs >= FINISH_FADE_OUT_MS) {
                     if (Ark::ResolveStagePath(STAGE_1_2_FILE).has_value()) {
                         m_CurrentStageFile = STAGE_1_2_FILE;
-                        InitializeStage();
+                        // Reload stage JSON (lightweight), then go through LOADING for animations
+                        m_OperatorTemplates = Ark::LoadOperators();
+                        if (m_OperatorTemplates.empty()) {
+                            m_OperatorTemplates = {
+                                OperatorTemplate{"Bagpipe","風笛",  11,2664,769,382,1000,1,4,2,1000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
+                                OperatorTemplate{"Sniper","Sniper",   11,1200,500,150,1000,0,0,0,0, IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false},
+                                OperatorTemplate{"Myrtle","桃金娘",  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
+                            };
+                        }
+                        if (!LoadStageFromJsonModule()) BuildFallbackStage();
                         ResetDemo();
+                        m_LoadingPhase = 0;
+                        m_CurrentState = State::LOADING;
                     } else {
                         m_CurrentState = State::END;
                     }

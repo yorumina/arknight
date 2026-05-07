@@ -28,10 +28,10 @@ inline constexpr float FINISH_BLACKOUT_MS = 1000.0F;
 inline constexpr float FINISH_FADE_IN_MS = 700.0F;
 inline constexpr float FINISH_FADE_OUT_MS = 700.0F;
 
-inline constexpr float OP_BAR_HEIGHT = 100.0F;
-inline constexpr float OP_CARD_WIDTH = 80.0F;
-inline constexpr float OP_CARD_HEIGHT = 95.0F;
-inline constexpr float OP_CARD_SPACING = 6.0F;
+inline constexpr float OP_BAR_HEIGHT = 116.0F;
+inline constexpr float OP_CARD_WIDTH = 106.0F;
+inline constexpr float OP_CARD_HEIGHT = 116.0F;
+inline constexpr float OP_CARD_SPACING = 5.0F;
 inline constexpr float OP_CARD_PORTRAIT_HEIGHT = 60.0F;
 inline constexpr float OP_CARD_INFO_HEIGHT = 35.0F;
 inline constexpr float OP_CARD_ROUNDING = 4.0F;

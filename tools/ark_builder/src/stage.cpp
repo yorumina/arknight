@@ -49,8 +49,12 @@ auto IsTileInBounds(int x, int y, int width, int height) -> bool {
 }
 
 auto GetTile(const json& stage, int x, int y) -> std::string {
-    return stage.at("tiles").at(static_cast<size_t>(y)).at(static_cast<size_t>(x))
-        .get<std::string>();
+    const auto& cell =
+        stage.at("tiles").at(static_cast<size_t>(y)).at(static_cast<size_t>(x));
+    if (cell.is_object()) {
+        return cell.value("type", std::string{"empty"});
+    }
+    return cell.get<std::string>();
 }
 
 void SetTile(json& stage, int x, int y, const std::string& tile) {

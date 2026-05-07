@@ -28,6 +28,7 @@ struct StageData {
     std::string sourceFile;
     int width = 0; int height = 0;
     std::vector<std::vector<TileType>> tileMap;
+    std::vector<std::vector<std::string>> tileImages;
     std::vector<Route> routes;
     std::vector<EnemyTemplate> enemyTemplates;
     std::vector<WavePlan> wavePlans;
@@ -36,6 +37,7 @@ struct StageData {
     struct CameraConfig {
         float projectionScaleX = 1.0F;
         float projectionScaleY = 1.0F;
+        float projectionSkewX = 0.0F;
         float zoom = 1.0F;
         float minZoom = 0.7F;
         float maxZoom = 1.8F;

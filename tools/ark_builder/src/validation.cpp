@@ -73,12 +73,20 @@ void ValidateTiles(const json& stage, std::vector<std::string>& errors) {
         const int limit = std::min(static_cast<int>(row.size()), width);
         for (int x = 0; x < limit; ++x) {
             const auto& cell = row[static_cast<size_t>(x)];
-            if (!cell.is_string()) {
+            std::string tile;
+            if (cell.is_string()) {
+                tile = cell.get<std::string>();
+            } else if (cell.is_object() && cell.contains("type") && cell["type"].is_string()) {
+                tile = cell["type"].get<std::string>();
+                if (cell.contains("image") && !cell["image"].is_string()) {
+                    errors.push_back("tile image at (" + std::to_string(x) + "," +
+                                     std::to_string(y) + ") must be string");
+                }
+            } else {
                 errors.push_back("tile at (" + std::to_string(x) + "," +
-                                 std::to_string(y) + ") must be string");
+                                 std::to_string(y) + ") must be string or object with type");
                 continue;
             }
-            const std::string tile = cell.get<std::string>();
             if (!IsKnownTile(tile)) {
                 errors.push_back("unknown tile type at (" + std::to_string(x) +
                                  "," + std::to_string(y) + "): " + tile);
@@ -88,6 +96,34 @@ void ValidateTiles(const json& stage, std::vector<std::string>& errors) {
             }
             if (tile == "goal") {
                 ++goalCount;
+            }
+        }
+    }
+
+    if (stage.contains("tile_images")) {
+        if (!stage["tile_images"].is_array()) {
+            errors.push_back("tile_images must be a 2D array when present");
+        } else if (static_cast<int>(stage["tile_images"].size()) != height) {
+            errors.push_back("tile_images row count does not match height");
+        } else {
+            const auto& tileImages = stage["tile_images"];
+            for (int y = 0; y < height; ++y) {
+                const auto& row = tileImages[static_cast<size_t>(y)];
+                if (!row.is_array()) {
+                    errors.push_back("tile_images[" + std::to_string(y) + "] must be an array");
+                    continue;
+                }
+                if (static_cast<int>(row.size()) != width) {
+                    errors.push_back("tile_images[" + std::to_string(y) +
+                                     "] length does not match width");
+                    continue;
+                }
+                for (int x = 0; x < width; ++x) {
+                    if (!row[static_cast<size_t>(x)].is_string()) {
+                        errors.push_back("tile_images at (" + std::to_string(x) + "," +
+                                         std::to_string(y) + ") must be string");
+                    }
+                }
             }
         }
     }

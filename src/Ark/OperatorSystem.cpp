@@ -44,14 +44,53 @@ void App::UpdateOperators(float dtMs) {
         });
 
     const float dtSec = dtMs / 1000.0F;
+    auto selectOperatorAnim = [](auto& pack, const Operator& op, Operator::AnimState state) -> const OperatorAnimClip* {
+        // Direction mapping:
+        //   UP    (0,-1) → back   animations
+        //   RIGHT (1, 0) → front  animations
+        //   LEFT  (-1,0) → flip   animations (pre-generated flipped front)
+        //   DOWN  (0, 1) → flip   animations
+        const bool useBack = (op.direction.y < 0);                       // facing UP
+        const bool useFlip = (op.direction.x < 0 || op.direction.y > 0); // facing LEFT or DOWN
+
+        auto choose = [useBack, useFlip](const OperatorAnimClip& front,
+                                         const OperatorAnimClip& back,
+                                         const OperatorAnimClip& flip) -> const OperatorAnimClip* {
+            if (useBack && !back.Empty())  return &back;
+            if (useFlip && !flip.Empty())  return &flip;
+            // Fallback: always try front, then back
+            if (!front.Empty()) return &front;
+            if (!back.Empty())  return &back;
+            return nullptr;
+        };
+
+        switch (state) {
+        case Operator::AnimState::START:
+            return choose(pack.start, pack.startBack, pack.startFlip);
+        case Operator::AnimState::DEFAULT:
+            return choose(pack.def, pack.defBack, pack.defFlip);
+        case Operator::AnimState::ATTACK:
+            return choose(pack.attack, pack.attackBack, pack.attackFlip);
+        case Operator::AnimState::SKILL:
+            return choose(pack.skill, pack.skillBack, pack.skillFlip);
+        case Operator::AnimState::DIE:
+            return choose(pack.die, pack.dieBack, pack.dieFlip);
+        }
+        return nullptr;
+    };
+    auto makeOperatorAnimInstance = [&](auto& pack, const Operator& op, Operator::AnimState state) {
+        const auto* clip = selectOperatorAnim(pack, op, state);
+        if (clip == nullptr) return std::shared_ptr<Util::Animation>{};
+        return std::make_shared<Util::Animation>(clip->webmPath, true, clip->loop, false);
+    };
 
     for (auto& op : m_Operators) {
         if (op.hp <= 0) {
             if (op.animState != Ark::Operator::AnimState::DIE) {
                 op.animState = Ark::Operator::AnimState::DIE;
-                if (m_OperatorAnims[op.typeIndex].die) {
-                    m_OperatorAnims[op.typeIndex].activeInstances[op.id] = std::make_shared<Util::Animation>(
-                        m_OperatorAnims[op.typeIndex].die->GetFrames(), true, 41, false, 0);
+                auto& pack = m_OperatorAnims[op.typeIndex];
+                if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::DIE)) {
+                    pack.activeInstances[op.id] = anim;
                 }
             }
             // Keep updating death animation until gone
@@ -65,12 +104,12 @@ void App::UpdateOperators(float dtMs) {
 
         // Initialize state if missing
         if (pack.activeInstances.find(op.id) == pack.activeInstances.end()) {
-            if (pack.start) {
+            if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::START)) {
                 op.animState = Ark::Operator::AnimState::START;
-                pack.activeInstances[op.id] = std::make_shared<Util::Animation>(pack.start->GetFrames(), true, 41, false, 0);
-            } else if (pack.def) {
+                pack.activeInstances[op.id] = anim;
+            } else if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::DEFAULT)) {
                 op.animState = Ark::Operator::AnimState::DEFAULT;
-                pack.activeInstances[op.id] = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+                pack.activeInstances[op.id] = anim;
             } else {
                 op.animState = Ark::Operator::AnimState::DEFAULT;
             }
@@ -82,19 +121,28 @@ void App::UpdateOperators(float dtMs) {
         if (animInst) {
             if (op.animState == Ark::Operator::AnimState::START && animInst->GetState() == Util::Animation::State::ENDED) {
                 op.animState = Ark::Operator::AnimState::DEFAULT;
-                if (pack.def) animInst = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+                if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::DEFAULT)) {
+                    animInst = anim;
+                }
             } else if (op.animState == Ark::Operator::AnimState::ATTACK && animInst->GetState() == Util::Animation::State::ENDED) {
                 op.animState = Ark::Operator::AnimState::DEFAULT;
-                if (pack.def) animInst = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+                if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::DEFAULT)) {
+                    animInst = anim;
+                }
             }
             
             // Skill state tracking
-            if (op.skillActive && op.animState != Ark::Operator::AnimState::SKILL && pack.skill) {
+            if (op.skillActive && op.animState != Ark::Operator::AnimState::SKILL &&
+                selectOperatorAnim(pack, op, Ark::Operator::AnimState::SKILL)) {
                 op.animState = Ark::Operator::AnimState::SKILL;
-                animInst = std::make_shared<Util::Animation>(pack.skill->GetFrames(), true, 41, true, 0);
+                if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::SKILL)) {
+                    animInst = anim;
+                }
             } else if (!op.skillActive && op.animState == Ark::Operator::AnimState::SKILL) {
                 op.animState = Ark::Operator::AnimState::DEFAULT;
-                if (pack.def) animInst = std::make_shared<Util::Animation>(pack.def->GetFrames(), true, 41, true, 0);
+                if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::DEFAULT)) {
+                    animInst = anim;
+                }
             }
 
             animInst->Update();
@@ -243,8 +291,8 @@ void App::UpdateOperators(float dtMs) {
         if (op.animState != Ark::Operator::AnimState::SKILL) { // Skill animations override attack
             op.animState = Ark::Operator::AnimState::ATTACK;
             auto& pack2 = m_OperatorAnims[op.typeIndex];
-            if (pack2.attack) {
-                pack2.activeInstances[op.id] = std::make_shared<Util::Animation>(pack2.attack->GetFrames(), true, 41, false, 0);
+            if (auto anim = makeOperatorAnimInstance(pack2, op, Ark::Operator::AnimState::ATTACK)) {
+                pack2.activeInstances[op.id] = anim;
             }
         }
     }

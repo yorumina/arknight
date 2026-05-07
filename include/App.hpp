@@ -12,8 +12,9 @@
 #include "Util/Animation.hpp"
 #include "Util/Image.hpp"
 
-// Top-down orthographic board projection (no perspective foreshortening).
+// Top-down orthographic battle board projection.
 constexpr float PERSPECTIVE_Y_SCALE = 1.0F;
+constexpr float PERSPECTIVE_X_SHEAR = 0.0F;
 
 namespace Ark {
 class AppRenderer;
@@ -24,10 +25,11 @@ class App {
     friend class Ark::AppRenderer;
     friend class Ark::GameLogic;
 public:
-    enum class State { START, UPDATE, END };
+    enum class State { START, LOADING, UPDATE, END };
     State GetCurrentState() const { return m_CurrentState; }
 
     void Start();
+    void Loading();
     void Update();
     void End(); // NOLINT(readability-convert-member-functions-to-static)
 
@@ -35,6 +37,7 @@ private:
     struct CameraState {
         float projectionScaleX = 1.0F;
         float projectionScaleY = PERSPECTIVE_Y_SCALE;
+        float projectionSkewX = PERSPECTIVE_X_SHEAR;
         float zoom = 1.0F;
         float minZoom = 0.7F;
         float maxZoom = 1.8F;
@@ -94,6 +97,7 @@ private:
     std::string m_CurrentStageFile = "Operation 1-1/stage";
 
     std::vector<std::vector<Ark::TileType>> m_TileMap;
+    std::vector<std::vector<std::string>>   m_TileImageMap;
     std::vector<Ark::Route>                 m_Routes;
     std::vector<Ark::EnemyTemplate>         m_EnemyTemplates;
     std::vector<Ark::WavePlan>              m_WavePlans;
@@ -103,6 +107,7 @@ private:
     std::string m_StageBackgroundPath;
     float m_StageBackgroundAlpha = 1.0F;
     std::shared_ptr<Util::Image> m_StageBackground;
+    std::map<std::string, std::shared_ptr<Util::Image>> m_TileImageCache;
     std::string m_StageOverlayLoadedPath;
     std::string m_StageLoadingPath;
     float m_StageLoadingAlpha = 1.0F;
@@ -125,6 +130,7 @@ private:
     float m_PreStageTimerMs = 0.0F;
     bool  m_FinishExitRequested = false;
     float m_FinishExitTimerMs = 0.0F;
+    int   m_LoadingPhase = 0;  // 0=show loading screen, 1=do heavy work, 2=done
 
     // ?€?€ Economy ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     float m_DP            = 10.0F;
@@ -174,12 +180,33 @@ private:
     std::map<int, float> m_OperatorRedeployCooldownMs;
 
     // ?? Models ?????????????????????????????????????????????????????
+    struct OperatorAnimClip {
+        std::string webmPath;
+        bool loop = true;
+
+        bool Empty() const { return webmPath.empty(); }
+    };
+
     struct OperatorAnimPack {
-        std::shared_ptr<Util::Animation> start;
-        std::shared_ptr<Util::Animation> def;
-        std::shared_ptr<Util::Animation> attack;
-        std::shared_ptr<Util::Animation> skill;
-        std::shared_ptr<Util::Animation> die;
+        // front-facing (operator faces RIGHT)
+        OperatorAnimClip start;
+        OperatorAnimClip def;
+        OperatorAnimClip attack;
+        OperatorAnimClip skill;
+        OperatorAnimClip die;
+        // back-facing (operator faces UP)
+        OperatorAnimClip startBack;
+        OperatorAnimClip defBack;
+        OperatorAnimClip attackBack;
+        OperatorAnimClip skillBack;
+        OperatorAnimClip dieBack;
+        // flipped front-facing (operator faces LEFT or DOWN)
+        // Pre-generated via tools/generate_flipped_front.sh
+        OperatorAnimClip startFlip;
+        OperatorAnimClip defFlip;
+        OperatorAnimClip attackFlip;
+        OperatorAnimClip skillFlip;
+        OperatorAnimClip dieFlip;
         // Tracking active animations for currently deployed operators
         std::map<int, std::shared_ptr<Util::Animation>> activeInstances; 
     };
@@ -190,6 +217,7 @@ private:
     std::shared_ptr<Util::Image>     m_ModelEnemy;
 
     std::vector<std::shared_ptr<Util::Image>> m_OperatorThumbnails;
+    std::vector<std::shared_ptr<Util::Image>> m_OperatorCards;
     std::shared_ptr<Ark::AppRenderer> m_Renderer;
 };
 

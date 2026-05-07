@@ -224,6 +224,7 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
             const auto& cam = stage["camera"];
             data.camera.projectionScaleX = cam.value("projection_scale_x", data.camera.projectionScaleX);
             data.camera.projectionScaleY = cam.value("projection_scale_y", data.camera.projectionScaleY);
+            data.camera.projectionSkewX = cam.value("projection_skew_x", data.camera.projectionSkewX);
             data.camera.zoom = cam.value("zoom", data.camera.zoom);
             data.camera.minZoom = cam.value("min_zoom", data.camera.minZoom);
             data.camera.maxZoom = cam.value("max_zoom", data.camera.maxZoom);
@@ -257,15 +258,40 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
         }
         data.tileMap.assign(static_cast<std::size_t>(H),
                             std::vector<TileType>(static_cast<std::size_t>(W), TileType::EMPTY));
+        data.tileImages.assign(static_cast<std::size_t>(H),
+                               std::vector<std::string>(static_cast<std::size_t>(W)));
 
         for (int y = 0; y < H; ++y) {
             const auto& row = stage["tiles"][static_cast<std::size_t>(y)];
             if (!row.is_array() || static_cast<int>(row.size()) != W) return std::nullopt;
             for (int x = 0; x < W; ++x) {
                 const auto& cell = row[static_cast<std::size_t>(x)];
-                if (cell.is_string())
+                if (cell.is_string()) {
                     data.tileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] =
                         ParseTile(cell.get<std::string>());
+                } else if (cell.is_object()) {
+                    data.tileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] =
+                        ParseTile(cell.value("type", std::string{"empty"}));
+                    const auto imagePath = ResolveAssetPath(*stagePath, cell.value("image", std::string{}));
+                    if (!imagePath.empty()) {
+                        data.tileImages[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] = imagePath.string();
+                    }
+                }
+            }
+        }
+        if (stage.contains("tile_images") && stage["tile_images"].is_array() &&
+            static_cast<int>(stage["tile_images"].size()) == H) {
+            for (int y = 0; y < H; ++y) {
+                const auto& row = stage["tile_images"][static_cast<std::size_t>(y)];
+                if (!row.is_array() || static_cast<int>(row.size()) != W) continue;
+                for (int x = 0; x < W; ++x) {
+                    const auto& cell = row[static_cast<std::size_t>(x)];
+                    if (!cell.is_string()) continue;
+                    const auto imagePath = ResolveAssetPath(*stagePath, cell.get<std::string>());
+                    if (!imagePath.empty()) {
+                        data.tileImages[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] = imagePath.string();
+                    }
+                }
             }
         }
 

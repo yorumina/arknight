@@ -24,9 +24,9 @@ void App::ResetCameraToStageDefaults() {
 glm::vec2 App::RawCursorToPtsd(const glm::vec2& rawCursor) const {
     const float sx = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX * m_Camera.zoom);
     const float sy = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY * m_Camera.zoom);
-    const float u = rawCursor.x / sx;
-    const float v = rawCursor.y / sy;
-    return {u - m_Camera.pan.x, v - m_Camera.pan.y};
+    const float worldY = rawCursor.y / sy;
+    const float worldX = rawCursor.x / sx - worldY * m_Camera.projectionSkewX;
+    return {worldX - m_Camera.pan.x, worldY - m_Camera.pan.y};
 }
 
 void App::UpdateCameraControls(float deltaTimeMs, const glm::vec2& rawCursor) {
@@ -49,12 +49,15 @@ void App::UpdateCameraControls(float deltaTimeMs, const glm::vec2& rawCursor) {
         panRawDelta.y -= KEYBOARD_PAN_SPEED * dtSec;
     }
 
-    {
+    auto rawDeltaToWorld = [&](const glm::vec2& rawDelta) {
         const float sx = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX * m_Camera.zoom);
         const float sy = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY * m_Camera.zoom);
-        m_Camera.pan.x += panRawDelta.x / sx;
-        m_Camera.pan.y += panRawDelta.y / sy;
-    }
+        const float worldY = rawDelta.y / sy;
+        const float worldX = rawDelta.x / sx - worldY * m_Camera.projectionSkewX;
+        return glm::vec2{worldX, worldY};
+    };
+
+    m_Camera.pan += rawDeltaToWorld(panRawDelta);
 
     if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_MB)) {
         m_Camera.dragging = true;
@@ -63,10 +66,7 @@ void App::UpdateCameraControls(float deltaTimeMs, const glm::vec2& rawCursor) {
     }
     if (m_Camera.dragging && Util::Input::IsKeyPressed(Util::Keycode::MOUSE_MB)) {
         const glm::vec2 rawDelta = rawCursor - m_Camera.dragCursorStart;
-        const float sx = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX * m_Camera.zoom);
-        const float sy = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY * m_Camera.zoom);
-        m_Camera.pan.x = m_Camera.dragPanStart.x + rawDelta.x / sx;
-        m_Camera.pan.y = m_Camera.dragPanStart.y + rawDelta.y / sy;
+        m_Camera.pan = m_Camera.dragPanStart + rawDeltaToWorld(rawDelta);
     }
     if (Util::Input::IsKeyUp(Util::Keycode::MOUSE_MB)) {
         m_Camera.dragging = false;
@@ -82,7 +82,7 @@ ImVec2 App::ToScreenPosition(const glm::vec2& p) const {
     const float sy = m_Camera.projectionScaleY * m_Camera.zoom;
     const float worldX = p.x + m_Camera.pan.x;
     const float worldY = p.y + m_Camera.pan.y;
-    return {W * 0.5F + worldX * sx,
+    return {W * 0.5F + (worldX + worldY * m_Camera.projectionSkewX) * sx,
             H * 0.5F - worldY * sy};
 }
 
@@ -94,24 +94,21 @@ BoardLayout App::GetBoardLayout() const {
     const float W = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
     const float H = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
 
-    const float hudRW = 362.0F;
     const float marginL = 24.0F;
     const float marginR = 22.0F;
-    const float marginT = 46.0F;
-    const float marginB = 28.0F;
-    const float availW = std::max(220.0F, W - hudRW - marginL - marginR);
-    const float availH = std::max(220.0F, H - marginT - marginB);
+    const float availW = std::max(220.0F, W - marginL - marginR);
+    const float availH = std::max(220.0F, H);
 
     const float cols = static_cast<float>(std::max(1, m_StageWidth));
     const float rows = static_cast<float>(std::max(1, m_StageHeight));
     const float projX = std::max(CAMERA_EPSILON, m_Camera.projectionScaleX);
     const float projY = std::max(CAMERA_EPSILON, m_Camera.projectionScaleY);
-    const float boardProjW = cols * projX;
+    const float boardProjW = (cols + std::abs(m_Camera.projectionSkewX) * rows) * projX;
     const float boardProjH = rows * projY;
     const float cellSizeRaw = std::floor(std::min(availW / boardProjW, availH / boardProjH));
 
     BoardLayout layout;
-    layout.cellSize = std::clamp(cellSizeRaw, 24.0F, 120.0F);
+    layout.cellSize = std::clamp(cellSizeRaw, 24.0F, 180.0F);
     layout.topLeftX = -(cols * 0.5F) * layout.cellSize;
     layout.topLeftY = (rows * 0.5F) * layout.cellSize;
     return layout;

@@ -1,5 +1,6 @@
 #include "App.hpp"
 #include "Ark/Renderer.hpp"
+#include "Ark/StageLoader.hpp"
 #include "RendererShared.hpp"
 
 #include <algorithm>
@@ -14,8 +15,30 @@ using namespace Ark::RendererConst;
 void Ark::AppRenderer::LoadOperatorThumbnails() {
     m_App.m_OperatorThumbnails.clear();
     m_App.m_OperatorThumbnails.resize(m_App.m_OperatorTemplates.size());
+    m_App.m_OperatorCards.clear();
+    m_App.m_OperatorCards.resize(m_App.m_OperatorTemplates.size());
+    const auto operatorDir = Ark::ResolveOperatorDir();
     for (std::size_t i = 0; i < m_App.m_OperatorTemplates.size(); ++i) {
         const auto& op = m_App.m_OperatorTemplates[i];
+        if (!operatorDir.empty()) {
+            const auto photoDir = operatorDir / op.id / "photo";
+            const auto preferredCard = photoDir / (op.id + ".png");
+            if (std::filesystem::exists(preferredCard)) {
+                m_App.m_OperatorCards[i] = std::make_shared<Util::Image>(preferredCard.string());
+            } else if (std::filesystem::exists(photoDir) && std::filesystem::is_directory(photoDir)) {
+                std::vector<std::filesystem::path> cards;
+                for (const auto& entry : std::filesystem::directory_iterator(photoDir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".png") {
+                        cards.push_back(entry.path());
+                    }
+                }
+                if (!cards.empty()) {
+                    std::sort(cards.begin(), cards.end());
+                    m_App.m_OperatorCards[i] = std::make_shared<Util::Image>(cards.front().string());
+                }
+            }
+        }
+
         // Try to load the first frame of the default animation as a thumbnail
         std::string thumbnailPath = std::string(ASSETS_DIR) + "/sprites/operators/" + op.id;
         if (!std::filesystem::exists(thumbnailPath)) continue;
@@ -27,6 +50,7 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
             // Convert to lowercase
             std::string lower = dirName;
             std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            if (lower.find("back") != std::string::npos) continue;
             if (lower.find("default") != std::string::npos) {
                 // Find first PNG
                 std::vector<std::string> frames;
@@ -103,6 +127,7 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
 
         if (tex != 0) {
             float imgS = layout.cellSize * 0.8F;
+            // No runtime UV flip needed — pre-generated front_flip/ handles LEFT/DOWN
             draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)), 
                            {center.x - imgS, center.y - imgS}, 
                            {center.x + imgS, center.y + imgS});

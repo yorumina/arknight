@@ -19,6 +19,10 @@ int main(int, char **) {
             app.Start();
             break;
 
+        case App::State::LOADING:
+            app.Loading();
+            break;
+
         case App::State::UPDATE:
             app.Update();
             break;

@@ -14,6 +14,7 @@ public:
 
     void LoadOperatorThumbnails();
     void DrawScene(const glm::vec2& cursorPtsd);
+    void DrawStageBackground();
     void DrawGrid();
     void DrawOperators(const BoardLayout& layout, bool drawHighgroundOnly);
     void DrawEnemies(const BoardLayout& layout);
@@ -26,6 +27,8 @@ public:
     void DrawDeploymentInfo(float screenW, float screenH);
     void DrawOperatorDetails(const OperatorTemplate& t, const Operator* opOnField, float screenH);
     void DrawLoadingScreen();
+    void DrawImageCover(const std::string& imagePath, float alpha, bool drawBlackFill);
+    std::shared_ptr<Util::Image> GetTileImage(const std::string& imagePath);
 
 private:
     App& m_App;

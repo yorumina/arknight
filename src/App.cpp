@@ -16,6 +16,7 @@
 
 #include "Ark/Renderer.hpp"
 #include "Ark/Renderer/RendererShared.hpp"
+#include "Ark/StageLoader.hpp"
 #include "Util/Input.hpp"
 #include "Util/Keycode.hpp"
 #include "Util/Time.hpp"
@@ -28,19 +29,29 @@ constexpr int   MAX_OPS          = 12;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
 
 // Bottom operator bar layout constants (screen-space)
-constexpr float OP_BAR_HEIGHT     = 100.0F;
-constexpr float OP_CARD_WIDTH     = 80.0F;
-constexpr float OP_CARD_HEIGHT    = 95.0F;
-constexpr float OP_CARD_SPACING   = 6.0F;
+constexpr float OP_BAR_HEIGHT     = Ark::RendererConst::OP_BAR_HEIGHT;
+constexpr float OP_CARD_WIDTH     = Ark::RendererConst::OP_CARD_WIDTH;
+constexpr float OP_CARD_HEIGHT    = Ark::RendererConst::OP_CARD_HEIGHT;
+constexpr float OP_CARD_SPACING   = Ark::RendererConst::OP_CARD_SPACING;
 } // namespace
 
 void App::Start() {
     if (!m_Renderer) {
         m_Renderer = std::make_shared<Ark::AppRenderer>(*this);
     }
-    InitializeStage();
+
+    // Phase 1: Lightweight stage JSON loading (fast — sets m_StageLoadingPath so
+    // the loading screen image is available for rendering immediately).
+    m_OperatorTemplates = Ark::LoadOperators();
+    if (m_OperatorTemplates.empty()) {
+        m_OperatorTemplates = {
+            OperatorTemplate{"Bagpipe","風笛",  11,2664,769,382,1000,1,4,2,1000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
+            OperatorTemplate{"Sniper","Sniper",   11,1200,500,150,1000,0,0,0,0, IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false},
+            OperatorTemplate{"Myrtle","桃金娘",  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
+        };
+    }
+    if (!LoadStageFromJsonModule()) BuildFallbackStage();
     ResetDemo();
-    m_CurrentState = State::UPDATE;
 
     m_ModelVanguard = std::make_shared<Util::Animation>(
         std::vector<std::string>{
@@ -53,9 +64,53 @@ void App::Start() {
             ASSETS_DIR "/sprites/cat/cat-6.bmp",
             ASSETS_DIR "/sprites/cat/cat-7.bmp",
         }, true, 100, true, 0);
-    // You can swap this for any other model available
     m_ModelGuard = std::make_shared<Util::Image>(ASSETS_DIR "/sprites/giraffe.png");
     m_ModelEnemy = std::make_shared<Util::Image>(ASSETS_DIR "/sprites/giraffe.png");
+
+    // Transition to LOADING state — the loading screen will be rendered on the
+    // next frame, then heavy work (animation decoding) happens afterwards.
+    m_LoadingPhase = 0;
+    m_CurrentState = State::LOADING;
+}
+
+void App::Loading() {
+    if (Util::Input::IfExit() || Util::Input::IsKeyUp(Util::Keycode::ESCAPE)) {
+        m_CurrentState = State::END;
+        return;
+    }
+
+    // Phase 0: First frame — just render the loading screen so it appears
+    // immediately. The heavy work is deferred to the next frame.
+    if (m_LoadingPhase == 0) {
+        if (m_Renderer && !m_StageLoadingPath.empty()) {
+            m_Renderer->DrawImageCover(m_StageLoadingPath, m_StageLoadingAlpha, true);
+        }
+        m_LoadingPhase = 1;
+        return;
+    }
+
+    // Phase 1: Do the heavy initialization work (animation decoding, thumbnails).
+    // The loading screen from the previous frame is still visible.
+    if (m_LoadingPhase == 1) {
+        if (m_Renderer && !m_StageLoadingPath.empty()) {
+            m_Renderer->DrawImageCover(m_StageLoadingPath, m_StageLoadingAlpha, true);
+        }
+        LoadOperatorAnimations();
+        if (m_Renderer) {
+            m_Renderer->LoadOperatorThumbnails();
+        }
+        m_LoadingPhase = 2;
+        return;
+    }
+
+    // Phase 2: Done — transition to game. Since the loading screen was already shown
+    // during decoding, we skip the pre-stage wait.
+    m_PreStageWaiting = false;
+    m_PreStageTimerMs = 0.0F;
+    if (!m_WaveRunning && !m_GameOver && !m_MissionClear) {
+        StartWave();
+    }
+    m_CurrentState = State::UPDATE;
 }
 
 void App::Update() {

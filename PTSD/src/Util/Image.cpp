@@ -23,9 +23,37 @@ std::shared_ptr<SDL_Surface> LoadSurface(const std::string &filepath) {
     return surface;
 }
 
+bool IsSupportedTextureSurfaceFormat(Uint32 format) {
+    switch (format) {
+    case SDL_PIXELFORMAT_RGB24:
+    case SDL_PIXELFORMAT_BGR24:
+    case SDL_PIXELFORMAT_XRGB8888:
+    case SDL_PIXELFORMAT_ARGB8888:
+    case SDL_PIXELFORMAT_XBGR8888:
+    case SDL_PIXELFORMAT_ABGR8888:
+        return true;
+    default:
+        return false;
+    }
+}
+
 namespace Util {
 Image::Image(const std::string &filepath, bool useAA)
-    : m_Path(filepath) {
+    : m_Path(filepath), m_UseAA(useAA) {
+    InitDrawableResources();
+
+    auto surface = LoadSurface(filepath);
+    SetSurface(surface.get());
+    UseAntiAliasing(useAA);
+}
+
+Image::Image(SDL_Surface *surface, bool useAA) {
+    m_UseAA = useAA;
+    InitDrawableResources();
+    SetSurface(surface);
+}
+
+void Image::InitDrawableResources() {
     if (s_Program == nullptr) {
         InitProgram();
     }
@@ -35,30 +63,43 @@ Image::Image(const std::string &filepath, bool useAA)
 
     m_UniformBuffer = std::make_unique<Core::UniformBuffer<Core::Matrices>>(
         *s_Program, "Matrices", 0);
+}
 
-    auto surface = s_Store.Get(filepath);
-
+void Image::SetSurface(SDL_Surface *surface) {
     if (surface == nullptr) {
-        LOG_ERROR("Failed to load image: '{}'", filepath);
-        LOG_ERROR("{}", IMG_GetError());
-        surface = {GetMissingImageTextureSDLSurface(), SDL_FreeSurface};
+        surface = GetMissingImageTextureSDLSurface();
     }
 
-    m_Texture = std::make_unique<Core::Texture>(
-        Core::SdlFormatToGlFormat(surface->format->format), surface->w,
-        surface->h, surface->pixels, useAA);
+    auto converted = std::unique_ptr<SDL_Surface, decltype(&SDL_FreeSurface)>{nullptr, SDL_FreeSurface};
+    if (!IsSupportedTextureSurfaceFormat(surface->format->format)) {
+        converted.reset(SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_ABGR8888, 0));
+        if (converted == nullptr) {
+            LOG_ERROR("Failed to convert image surface");
+            surface = GetMissingImageTextureSDLSurface();
+        } else {
+            surface = converted.get();
+        }
+    }
+    const GLint format = Core::SdlFormatToGlFormat(surface->format->format);
+
+    if (m_Texture == nullptr) {
+        m_Texture = std::make_unique<Core::Texture>(
+            format, surface->w, surface->h, surface->pixels, m_UseAA);
+    } else {
+        m_Texture->UpdateData(format, surface->w, surface->h, surface->pixels);
+    }
     m_Size = {surface->w, surface->h};
 }
 
 void Image::SetImage(const std::string &filepath) {
-    auto surface = s_Store.Get(filepath);
+    auto surface = LoadSurface(filepath);
 
-    m_Texture->UpdateData(Core::SdlFormatToGlFormat(surface->format->format),
-                          surface->w, surface->h, surface->pixels);
-    m_Size = {surface->w, surface->h};
+    SetSurface(surface.get());
+    m_Path = filepath;
 }
 
 void Image::UseAntiAliasing(bool useAA) {
+    m_UseAA = useAA;
     m_Texture->UseAntiAliasing(useAA);
 }
 
