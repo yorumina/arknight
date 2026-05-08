@@ -168,17 +168,19 @@ public:
      */
     void Update();
 
+    static void ClearDecodedMediaCache();
+
 private:
     std::shared_ptr<Util::Image> GetCurrentImage() const;
     void EnsureStreamFrameLoaded() const;
     void EnsureGifFrameLoaded() const;
     void EnsureVideoFrameLoaded() const;
-    bool LoadVideoPosterFrame(const std::string &mediaPath);
+    bool LoadFfmpegFrames(const std::string &mediaPath);
     double GetCurrentFrameInterval() const;
 
     std::vector<std::shared_ptr<Util::Image>> m_Frames;
     std::vector<std::string> m_FramePaths;
-    std::vector<SDL_Surface*> m_VideoFrames;
+    std::vector<std::shared_ptr<SDL_Surface>> m_VideoFrames;
     mutable std::shared_ptr<Util::Image> m_StreamFrame;
     mutable std::size_t m_LoadedStreamIndex = static_cast<std::size_t>(-1);
     using GifAnimationPtr = std::unique_ptr<IMG_Animation, void (*)(IMG_Animation*)>;

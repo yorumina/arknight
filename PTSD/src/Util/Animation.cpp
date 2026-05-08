@@ -5,15 +5,76 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace {
 constexpr int VIDEO_MAX_DIMENSION = 256;
+constexpr std::size_t BYTES_PER_MIB = 1024U * 1024U;
+constexpr const char *VIDEO_CACHE_LIMIT_ENV = "ARKNIGHT_ANIMATION_CACHE_MB";
+
+using SurfacePtr = std::shared_ptr<SDL_Surface>;
+
+struct VideoCache {
+    std::vector<SurfacePtr> surfaces;
+    double intervalMs = 41.0;
+    std::size_t bytes = 0;
+    std::uint64_t lastUsed = 0;
+};
+
+std::unordered_map<std::string, VideoCache> &GetVideoCache() {
+    static std::unordered_map<std::string, VideoCache> cache;
+    return cache;
+}
+
+std::size_t &GetVideoCacheBytes() {
+    static std::size_t bytes = 0;
+    return bytes;
+}
+
+std::uint64_t NextVideoCacheUse() {
+    static std::uint64_t counter = 0;
+    return ++counter;
+}
+
+std::size_t GetVideoCacheLimitBytes() {
+    const char *value = std::getenv(VIDEO_CACHE_LIMIT_ENV);
+    if (value == nullptr || *value == '\0') return 0;
+
+    char *end = nullptr;
+    const auto mib = std::strtoull(value, &end, 10);
+    if (end == value || mib == 0) return 0;
+    return static_cast<std::size_t>(mib) * BYTES_PER_MIB;
+}
+
+void PruneVideoCache(const std::string &protectedPath) {
+    const auto cacheLimitBytes = GetVideoCacheLimitBytes();
+    if (cacheLimitBytes == 0) return;
+
+    auto &cache = GetVideoCache();
+    auto &cachedBytes = GetVideoCacheBytes();
+
+    while (cachedBytes > cacheLimitBytes && cache.size() > 1) {
+        auto victim = cache.end();
+        for (auto it = cache.begin(); it != cache.end(); ++it) {
+            if (it->first == protectedPath) continue;
+            if (victim == cache.end() || it->second.lastUsed < victim->second.lastUsed) {
+                victim = it;
+            }
+        }
+
+        if (victim == cache.end()) break;
+        cachedBytes -= victim->second.bytes;
+        cache.erase(victim);
+    }
+}
 
 std::string ShellQuote(const std::string &value) {
     std::string quoted = "'";
@@ -31,8 +92,83 @@ std::string ToLower(std::string value) {
     return value;
 }
 
-bool IsWebmPath(const std::string &path) {
-    return ToLower(std::filesystem::path(path).extension().string()) == ".webm";
+std::string BuildFfmpegHwAccelArgs() {
+    const char *rawArgs = std::getenv("ARKNIGHT_FFMPEG_HWACCEL_ARGS");
+    if (rawArgs != nullptr && rawArgs[0] != '\0') {
+        return std::string(rawArgs) + " ";
+    }
+
+    const char *accelEnv = std::getenv("ARKNIGHT_FFMPEG_HWACCEL");
+    const std::string accel = accelEnv != nullptr ? ToLower(accelEnv) : "auto";
+    if (accel.empty() || accel == "0" || accel == "false" ||
+        accel == "none" || accel == "off") {
+        return "";
+    }
+    return "-hwaccel " + ShellQuote(accel) + " ";
+}
+
+std::string BuildFfmpegDecodeCommand(const std::string &mediaPath,
+                                     const std::string &filter,
+                                     const std::string &hwAccelArgs) {
+    return "ffmpeg -nostdin -hide_banner -loglevel quiet " +
+           hwAccelArgs +
+           "-i " + ShellQuote(mediaPath) +
+           " -an -vf " + ShellQuote(filter) +
+           " -f rawvideo -pix_fmt rgba -";
+}
+
+bool ReadDecodedFfmpegFrames(const std::string &command,
+                             std::size_t frameSizeBytes,
+                             int frameWidth,
+                             int frameHeight,
+                             std::vector<SurfacePtr> &surfaces) {
+    FILE *pipe = popen(command.c_str(), "r");
+    if (pipe == nullptr) return false;
+
+    std::vector<unsigned char> frameBuffer(frameSizeBytes);
+    bool decodeFailed = false;
+
+    while (true) {
+        std::size_t totalRead = 0;
+        while (totalRead < frameSizeBytes) {
+            const std::size_t readNow = fread(frameBuffer.data() + totalRead, 1,
+                                               frameSizeBytes - totalRead, pipe);
+            if (readNow == 0) break;
+            totalRead += readNow;
+        }
+        if (totalRead != frameSizeBytes) break; // EOF or short read -> done
+
+        SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
+            frameBuffer.data(),
+            frameWidth,
+            frameHeight,
+            32,
+            frameWidth * 4,
+            SDL_PIXELFORMAT_ABGR8888);
+        if (surface == nullptr) {
+            decodeFailed = true;
+            break;
+        }
+
+        auto copiedSurface = SurfacePtr(
+            SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_ABGR8888, 0),
+            SDL_FreeSurface);
+        SDL_FreeSurface(surface);
+
+        if (copiedSurface == nullptr) {
+            decodeFailed = true;
+            break;
+        }
+        surfaces.push_back(std::move(copiedSurface));
+    }
+    pclose(pipe);
+
+    return !decodeFailed && !surfaces.empty();
+}
+
+bool IsFfmpegDecodedPath(const std::string &path) {
+    const auto extension = ToLower(std::filesystem::path(path).extension().string());
+    return extension == ".webm" || extension == ".apng";
 }
 
 bool ProbeVideoSize(const std::string &path, int &width, int &height) {
@@ -103,16 +239,16 @@ Animation::Animation(const std::string &mediaPath, bool play, bool looping, bool
       m_Interval(41),
       m_Looping(looping),
       m_Cooldown(0) {
-    if (IsWebmPath(mediaPath)) {
-        if (!LoadVideoPosterFrame(mediaPath)) {
-            LOG_ERROR("Failed to load WebM animation: '{}'", mediaPath);
+    if (IsFfmpegDecodedPath(mediaPath)) {
+        if (!LoadFfmpegFrames(mediaPath)) {
+            LOG_ERROR("Failed to load media animation: '{}'", mediaPath);
         }
         return;
     }
 
     m_GifAnimation.reset(IMG_LoadAnimation(mediaPath.c_str()));
     if (!m_GifAnimation || m_GifAnimation->count <= 0) {
-        LOG_ERROR("Failed to load GIF animation: '{}'", mediaPath);
+        LOG_ERROR("Failed to load image animation: '{}'", mediaPath);
         LOG_ERROR("{}", IMG_GetError());
         m_FramePaths = {mediaPath};
         m_StreamFrames = true;
@@ -177,7 +313,7 @@ void Animation::EnsureGifFrameLoaded() const {
 void Animation::EnsureVideoFrameLoaded() const {
     if (m_VideoFrames.empty()) return;
     const auto targetIndex = std::min(m_Index, m_VideoFrames.size() - 1);
-    SDL_Surface *surface = m_VideoFrames[targetIndex];
+    SDL_Surface *surface = m_VideoFrames[targetIndex].get();
     if (!m_StreamFrame) {
         m_StreamFrame = std::make_shared<Util::Image>(surface, m_UseAA);
         m_LoadedVideoIndex = targetIndex;
@@ -188,17 +324,13 @@ void Animation::EnsureVideoFrameLoaded() const {
     m_LoadedVideoIndex = targetIndex;
 }
 
-bool Animation::LoadVideoPosterFrame(const std::string &mediaPath) {
-    // Cache decoded frames across Animation instances sharing the same video.
-    // Kept alive for the process lifetime to avoid GL teardown issues.
-    struct VideoCache {
-        std::vector<SDL_Surface*> surfaces;
-        double intervalMs = 41.0;
-    };
-    static auto& videoCache =
-        *new std::unordered_map<std::string, VideoCache>();
+bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
+    // Cache decoded frames across Animation instances sharing the same media,
+    // keeping warm-up work in memory unless an explicit cache budget is configured.
+    auto &videoCache = GetVideoCache();
 
     if (const auto it = videoCache.find(mediaPath); it != videoCache.end()) {
+        it->second.lastUsed = NextVideoCacheUse();
         m_VideoFrames = it->second.surfaces;
         m_Interval = it->second.intervalMs;
         return !m_VideoFrames.empty();
@@ -243,50 +375,35 @@ bool Animation::LoadVideoPosterFrame(const std::string &mediaPath) {
     const std::string filter =
         "scale=" + std::to_string(frameWidth) + ":" + std::to_string(frameHeight) +
         ":flags=fast_bilinear,format=rgba";
-    const std::string command =
-        "ffmpeg -nostdin -hide_banner -loglevel quiet -i " + ShellQuote(mediaPath) +
-        " -an -vf " + ShellQuote(filter) +
-        " -f rawvideo -pix_fmt rgba -";
-
-    FILE *pipe = popen(command.c_str(), "r");
-    if (pipe == nullptr) return false;
-
-    std::vector<unsigned char> frameBuffer(frameSizeBytes);
-    std::vector<SDL_Surface*> surfaces;
-
-    while (true) {
-        std::size_t totalRead = 0;
-        while (totalRead < frameSizeBytes) {
-            const std::size_t readNow = fread(frameBuffer.data() + totalRead, 1,
-                                               frameSizeBytes - totalRead, pipe);
-            if (readNow == 0) break;
-            totalRead += readNow;
+    std::vector<SurfacePtr> surfaces;
+    const auto hwAccelArgs = BuildFfmpegHwAccelArgs();
+    const bool decoded = ReadDecodedFfmpegFrames(
+        BuildFfmpegDecodeCommand(mediaPath, filter, hwAccelArgs),
+        frameSizeBytes, frameWidth, frameHeight, surfaces);
+    if (!decoded && !hwAccelArgs.empty()) {
+        surfaces.clear();
+        if (!ReadDecodedFfmpegFrames(
+                BuildFfmpegDecodeCommand(mediaPath, filter, ""),
+                frameSizeBytes, frameWidth, frameHeight, surfaces)) {
+            return false;
         }
-        if (totalRead != frameSizeBytes) break; // EOF or short read → done
-
-        SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
-            frameBuffer.data(),
-            frameWidth,
-            frameHeight,
-            32,
-            frameWidth * 4,
-            SDL_PIXELFORMAT_ABGR8888);
-        if (surface == nullptr) break;
-
-        SDL_Surface *copiedSurface = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_ABGR8888, 0);
-        SDL_FreeSurface(surface);
-        
-        if (copiedSurface == nullptr) break;
-        surfaces.push_back(copiedSurface);
+    } else if (!decoded) {
+        return false;
     }
-    pclose(pipe);
-
-    if (surfaces.empty()) return false;
 
     // Cache and apply
-    videoCache[mediaPath] = {surfaces, intervalMs};
+    auto &cachedBytes = GetVideoCacheBytes();
+    cachedBytes += frameSizeBytes * surfaces.size();
+    videoCache[mediaPath] = {surfaces, intervalMs, frameSizeBytes * surfaces.size(),
+                             NextVideoCacheUse()};
+    PruneVideoCache(mediaPath);
     m_VideoFrames = surfaces;
     return true;
+}
+
+void Animation::ClearDecodedMediaCache() {
+    GetVideoCache().clear();
+    GetVideoCacheBytes() = 0;
 }
 
 double Animation::GetCurrentFrameInterval() const {

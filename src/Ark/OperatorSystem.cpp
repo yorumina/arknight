@@ -81,7 +81,7 @@ void App::UpdateOperators(float dtMs) {
     auto makeOperatorAnimInstance = [&](auto& pack, const Operator& op, Operator::AnimState state) {
         const auto* clip = selectOperatorAnim(pack, op, state);
         if (clip == nullptr) return std::shared_ptr<Util::Animation>{};
-        return std::make_shared<Util::Animation>(clip->webmPath, true, clip->loop, false);
+        return std::make_shared<Util::Animation>(clip->mediaPath, true, clip->loop, false);
     };
 
     for (auto& op : m_Operators) {

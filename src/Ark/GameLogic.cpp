@@ -5,6 +5,7 @@
 #include "Ark/Renderer.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -98,62 +99,92 @@ void App::InitializeStage() {
 }
 
 void App::LoadOperatorAnimations() {
+    Util::Animation::ClearDecodedMediaCache();
     m_OperatorAnims.clear();
     m_OperatorAnims.resize(m_OperatorTemplates.size());
 
-    auto loadAnimClipFromWebm = [](const std::filesystem::path& webmPath, bool loop) {
+    // Helper: case-insensitive string
+    auto toLower = [](std::string s) {
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    };
+
+    auto extensionOf = [&](const std::filesystem::path& path) {
+        return toLower(path.extension().string());
+    };
+
+    auto isApngPath = [&](const std::filesystem::path& path) {
+        return extensionOf(path) == ".apng";
+    };
+
+    auto isSupportedAnimationPath = [&](const std::filesystem::path& path) {
+        const auto ext = extensionOf(path);
+        return ext == ".webm" || ext == ".apng";
+    };
+
+    auto sameStem = [&](const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
+        return toLower(lhs.stem().string()) == toLower(rhs.stem().string());
+    };
+
+    auto loadAnimClipFromMedia = [](const std::filesystem::path& mediaPath, bool loop) {
         OperatorAnimClip clip;
-        clip.webmPath = webmPath.string();
+        clip.mediaPath = mediaPath.string();
         clip.loop = loop;
         return clip;
     };
 
-    auto assignClipIfLoaded = [](OperatorAnimClip& target, OperatorAnimClip clip, bool force = false) {
+    auto shouldPreferClip = [&](const OperatorAnimClip& target, const OperatorAnimClip& clip) {
+        if (target.Empty() || clip.Empty()) return false;
+        const std::filesystem::path targetPath(target.mediaPath);
+        const std::filesystem::path clipPath(clip.mediaPath);
+        return sameStem(targetPath, clipPath) &&
+               !isApngPath(targetPath) &&
+               isApngPath(clipPath);
+    };
+
+    auto assignClipIfLoaded = [&](OperatorAnimClip& target, OperatorAnimClip clip, bool force = false) {
         if (clip.Empty()) return;
-        if (force || target.Empty()) {
+        if (target.Empty() ||
+            shouldPreferClip(target, clip) ||
+            (force && !shouldPreferClip(clip, target))) {
             target = std::move(clip);
         }
     };
 
-    // Helper: case-insensitive string
-    auto toLower = [](std::string s) {
-        std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-        return s;
-    };
-
-    // Helper: classify a single WebM file and assign it to the correct clip
+    // Helper: classify a single animation file and assign it to the correct clip
     // in the given set of 5 slots (start, def, attack, skill, die).
-    auto classifyAndAssign = [&](const std::filesystem::path& webmPath,
+    auto classifyAndAssign = [&](const std::filesystem::path& mediaPath,
                                  OperatorAnimClip& start, OperatorAnimClip& def,
                                  OperatorAnimClip& attack, OperatorAnimClip& skill,
                                  OperatorAnimClip& die) {
-        std::string animName = toLower(webmPath.stem().string());
+        std::string animName = toLower(mediaPath.stem().string());
 
         const bool isDefaultAnim = animName.find("default") != std::string::npos;
         const bool isIdleAnim    = animName.find("idle") != std::string::npos;
 
         if (isDefaultAnim || isIdleAnim) {
-            assignClipIfLoaded(def, loadAnimClipFromWebm(webmPath, true), isDefaultAnim);
+            assignClipIfLoaded(def, loadAnimClipFromMedia(mediaPath, true), isDefaultAnim);
         } else if (animName.find("start") != std::string::npos
                    && animName.find("skill") == std::string::npos) {
-            assignClipIfLoaded(start, loadAnimClipFromWebm(webmPath, false));
+            assignClipIfLoaded(start, loadAnimClipFromMedia(mediaPath, false));
         } else if (animName.find("attack") != std::string::npos) {
             // Prefer "attackloop" or "attack" over "attackbegin"/"attackend"
             if (animName.find("begin") != std::string::npos || animName.find("end") != std::string::npos) {
-                assignClipIfLoaded(attack, loadAnimClipFromWebm(webmPath, false));
+                assignClipIfLoaded(attack, loadAnimClipFromMedia(mediaPath, false));
             } else {
-                assignClipIfLoaded(attack, loadAnimClipFromWebm(webmPath, false), true);
+                assignClipIfLoaded(attack, loadAnimClipFromMedia(mediaPath, false), true);
             }
         } else if (animName.find("skill") != std::string::npos) {
             // "skillloop" or "skill" (prefer loop for the main skill anim)
-            assignClipIfLoaded(skill, loadAnimClipFromWebm(webmPath, true),
+            assignClipIfLoaded(skill, loadAnimClipFromMedia(mediaPath, true),
                                animName.find("loop") != std::string::npos);
         } else if (animName.find("die") != std::string::npos) {
-            assignClipIfLoaded(die, loadAnimClipFromWebm(webmPath, false));
+            assignClipIfLoaded(die, loadAnimClipFromMedia(mediaPath, false));
         }
     };
 
-    // Helper: scan all .webm files in a single directory (non-recursive)
+    // Helper: scan all supported animation files in a single directory (non-recursive)
     auto scanDir = [&](const std::filesystem::path& dir,
                        OperatorAnimClip& start, OperatorAnimClip& def,
                        OperatorAnimClip& attack, OperatorAnimClip& skill,
@@ -161,7 +192,7 @@ void App::LoadOperatorAnimations() {
         if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) return;
         for (const auto& entry : std::filesystem::directory_iterator(dir)) {
             if (!entry.is_regular_file()) continue;
-            if (toLower(entry.path().extension().string()) != ".webm") continue;
+            if (!isSupportedAnimationPath(entry.path())) continue;
             classifyAndAssign(entry.path(), start, def, attack, skill, die);
         }
     };
@@ -193,12 +224,12 @@ void App::LoadOperatorAnimations() {
                 pack.startFlip, pack.defFlip, pack.attackFlip, pack.skillFlip, pack.dieFlip);
     }
 
-    // Pre-cache ALL animations (start, default, attack, skill, die) for each direction.
-    // This happens while the loading screen is up, preventing any mid-gameplay stutters
-    // when an operator performs an action for the first time.
+    // Warm animations while the loading screen is up. By default decoded frames stay
+    // resident to avoid first-use stalls; set ARKNIGHT_ANIMATION_CACHE_MB to opt into
+    // a bounded cache on memory-constrained machines.
     auto warmClip = [](const OperatorAnimClip& clip) {
         if (!clip.Empty()) {
-            Util::Animation warmup(clip.webmPath, false, clip.loop, false);
+            Util::Animation warmup(clip.mediaPath, false, clip.loop, false);
         }
     };
     for (const auto& pack : m_OperatorAnims) {
