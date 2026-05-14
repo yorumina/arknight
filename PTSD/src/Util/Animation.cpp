@@ -9,6 +9,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -17,15 +19,26 @@
 
 namespace {
 constexpr int VIDEO_MAX_DIMENSION = 256;
+constexpr std::size_t DEFAULT_VIDEO_CACHE_LIMIT_MIB = 768U;
 constexpr std::size_t BYTES_PER_MIB = 1024U * 1024U;
 constexpr const char *VIDEO_CACHE_LIMIT_ENV = "ARKNIGHT_ANIMATION_CACHE_MB";
+constexpr const char *VIDEO_TEXTURE_CACHE_ENV = "ARKNIGHT_ANIMATION_TEXTURE_CACHE";
+constexpr const char *VIDEO_DROP_CPU_FRAMES_ENV = "ARKNIGHT_ANIMATION_DROP_CPU_FRAMES";
+constexpr const char *VIDEO_DISK_CACHE_ENV = "ARKNIGHT_ANIMATION_DISK_CACHE";
+constexpr const char *VIDEO_DISK_CACHE_DIR_ENV = "ARKNIGHT_ANIMATION_DISK_CACHE_DIR";
+constexpr const char *DISK_CACHE_MAGIC = "AKANIM2";
+constexpr std::uint32_t DISK_CACHE_VERSION = 2;
 
 using SurfacePtr = std::shared_ptr<SDL_Surface>;
+using ImagePtr = std::shared_ptr<Util::Image>;
 
 struct VideoCache {
     std::vector<SurfacePtr> surfaces;
+    std::vector<ImagePtr> textureFramesAA;
+    std::vector<ImagePtr> textureFramesNearest;
     double intervalMs = 41.0;
     std::size_t bytes = 0;
+    std::size_t surfaceBytes = 0;
     std::uint64_t lastUsed = 0;
 };
 
@@ -46,11 +59,14 @@ std::uint64_t NextVideoCacheUse() {
 
 std::size_t GetVideoCacheLimitBytes() {
     const char *value = std::getenv(VIDEO_CACHE_LIMIT_ENV);
-    if (value == nullptr || *value == '\0') return 0;
+    if (value == nullptr || *value == '\0') {
+        return DEFAULT_VIDEO_CACHE_LIMIT_MIB * BYTES_PER_MIB;
+    }
 
     char *end = nullptr;
     const auto mib = std::strtoull(value, &end, 10);
-    if (end == value || mib == 0) return 0;
+    if (end == value) return DEFAULT_VIDEO_CACHE_LIMIT_MIB * BYTES_PER_MIB;
+    if (mib == 0) return 0;
     return static_cast<std::size_t>(mib) * BYTES_PER_MIB;
 }
 
@@ -90,6 +106,293 @@ std::string ToLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
+}
+
+bool IsEnvDisabled(const char *value) {
+    if (value == nullptr || *value == '\0') return false;
+    const std::string normalized = ToLower(value);
+    return normalized == "0" || normalized == "false" ||
+           normalized == "none" || normalized == "off";
+}
+
+bool IsVideoTextureCacheEnabled() {
+    return !IsEnvDisabled(std::getenv(VIDEO_TEXTURE_CACHE_ENV));
+}
+
+bool ShouldDropCpuFramesAfterTextureUpload() {
+    return !IsEnvDisabled(std::getenv(VIDEO_DROP_CPU_FRAMES_ENV));
+}
+
+bool IsDiskCacheEnabled() {
+    return !IsEnvDisabled(std::getenv(VIDEO_DISK_CACHE_ENV));
+}
+
+std::vector<ImagePtr> &SelectTextureFrames(VideoCache &cache, bool useAA) {
+    return useAA ? cache.textureFramesAA : cache.textureFramesNearest;
+}
+
+std::vector<ImagePtr> &SelectReusableTextureFrames(VideoCache &cache, bool useAA) {
+    auto &preferred = SelectTextureFrames(cache, useAA);
+    if (!preferred.empty()) return preferred;
+
+    auto &alternate = useAA ? cache.textureFramesNearest : cache.textureFramesAA;
+    if (!alternate.empty()) {
+        for (const auto &frame : alternate) {
+            frame->UseAntiAliasing(useAA);
+        }
+    }
+    return alternate.empty() ? preferred : alternate;
+}
+
+void EnsureTextureFramesCached(VideoCache &cache,
+                               const std::string &protectedPath,
+                               bool useAA) {
+    if (!IsVideoTextureCacheEnabled()) return;
+    if (cache.surfaces.empty()) {
+        (void) SelectReusableTextureFrames(cache, useAA);
+        return;
+    }
+
+    auto &textureFrames = SelectTextureFrames(cache, useAA);
+    if (!textureFrames.empty()) return;
+
+    textureFrames.reserve(cache.surfaces.size());
+    for (const auto &surface : cache.surfaces) {
+        if (surface == nullptr) continue;
+        textureFrames.push_back(std::make_shared<Util::Image>(surface.get(), useAA));
+    }
+    if (textureFrames.empty()) return;
+
+    cache.bytes += cache.surfaceBytes;
+    GetVideoCacheBytes() += cache.surfaceBytes;
+    cache.lastUsed = NextVideoCacheUse();
+
+    if (ShouldDropCpuFramesAfterTextureUpload() &&
+        textureFrames.size() == cache.surfaces.size()) {
+        cache.surfaces.clear();
+        cache.surfaces.shrink_to_fit();
+        if (cache.bytes >= cache.surfaceBytes) cache.bytes -= cache.surfaceBytes;
+        auto &cachedBytes = GetVideoCacheBytes();
+        cachedBytes = cachedBytes >= cache.surfaceBytes ? cachedBytes - cache.surfaceBytes : 0;
+    }
+
+    PruneVideoCache(protectedPath);
+}
+
+std::uint64_t Fnva1Hash(const std::string &value) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char c : value) {
+        hash ^= c;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::string ToHex(std::uint64_t value) {
+    std::ostringstream output;
+    output << std::hex << std::setw(16) << std::setfill('0') << value;
+    return output.str();
+}
+
+std::filesystem::path NormalizedMediaPath(const std::string &mediaPath) {
+    std::error_code ec;
+    auto normalized = std::filesystem::weakly_canonical(mediaPath, ec);
+    if (!ec && !normalized.empty()) return normalized;
+    normalized = std::filesystem::absolute(mediaPath, ec);
+    return ec ? std::filesystem::path(mediaPath) : normalized;
+}
+
+std::filesystem::path GetDiskCacheDir() {
+    if (const char *overrideDir = std::getenv(VIDEO_DISK_CACHE_DIR_ENV);
+        overrideDir != nullptr && overrideDir[0] != '\0') {
+        return std::filesystem::path(overrideDir);
+    }
+    if (const char *xdgCache = std::getenv("XDG_CACHE_HOME");
+        xdgCache != nullptr && xdgCache[0] != '\0') {
+        return std::filesystem::path(xdgCache) / "arknight-linux" / "animation-cache";
+    }
+    if (const char *home = std::getenv("HOME");
+        home != nullptr && home[0] != '\0') {
+        return std::filesystem::path(home) / ".cache" / "arknight-linux" / "animation-cache";
+    }
+
+    std::error_code ec;
+    const auto temp = std::filesystem::temp_directory_path(ec);
+    return (ec ? std::filesystem::path(".") : temp) / "arknight-linux" / "animation-cache";
+}
+
+std::filesystem::path GetDiskCachePath(const std::string &mediaPath) {
+    const auto normalized = NormalizedMediaPath(mediaPath).string();
+    const auto key = normalized + "|" + std::to_string(VIDEO_MAX_DIMENSION);
+    return GetDiskCacheDir() / (ToHex(Fnva1Hash(key)) + ".akanim");
+}
+
+bool GetSourceFingerprint(const std::string &mediaPath,
+                          std::uint64_t &fileSize,
+                          std::int64_t &mtime) {
+    std::error_code ec;
+    fileSize = std::filesystem::file_size(mediaPath, ec);
+    if (ec) return false;
+    const auto writeTime = std::filesystem::last_write_time(mediaPath, ec);
+    if (ec) return false;
+    mtime = static_cast<std::int64_t>(writeTime.time_since_epoch().count());
+    return true;
+}
+
+template <typename T>
+bool ReadValue(std::ifstream &input, T &value) {
+    input.read(reinterpret_cast<char *>(&value), sizeof(T));
+    return input.good();
+}
+
+template <typename T>
+bool WriteValue(std::ofstream &output, const T &value) {
+    output.write(reinterpret_cast<const char *>(&value), sizeof(T));
+    return output.good();
+}
+
+bool LoadFramesFromDiskCache(const std::string &mediaPath,
+                             std::vector<SurfacePtr> &surfaces,
+                             double &intervalMs) {
+    if (!IsDiskCacheEnabled()) return false;
+
+    std::uint64_t sourceSize = 0;
+    std::int64_t sourceMtime = 0;
+    if (!GetSourceFingerprint(mediaPath, sourceSize, sourceMtime)) return false;
+
+    const auto cachePath = GetDiskCachePath(mediaPath);
+    std::ifstream input(cachePath, std::ios::binary);
+    if (!input.is_open()) return false;
+
+    char magic[8] = {};
+    input.read(magic, sizeof(magic));
+    if (!input.good() || std::string(magic, magic + 7) != DISK_CACHE_MAGIC) return false;
+
+    std::uint32_t version = 0;
+    std::uint32_t maxDimension = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::uint32_t frameCount = 0;
+    std::uint32_t frameBytes = 0;
+    std::uint64_t cachedSourceSize = 0;
+    std::int64_t cachedSourceMtime = 0;
+    double cachedIntervalMs = 0.0;
+
+    if (!ReadValue(input, version) ||
+        !ReadValue(input, maxDimension) ||
+        !ReadValue(input, width) ||
+        !ReadValue(input, height) ||
+        !ReadValue(input, frameCount) ||
+        !ReadValue(input, frameBytes) ||
+        !ReadValue(input, cachedSourceSize) ||
+        !ReadValue(input, cachedSourceMtime) ||
+        !ReadValue(input, cachedIntervalMs)) {
+        return false;
+    }
+
+    if (version != DISK_CACHE_VERSION ||
+        maxDimension != static_cast<std::uint32_t>(VIDEO_MAX_DIMENSION) ||
+        cachedSourceSize != sourceSize ||
+        cachedSourceMtime != sourceMtime ||
+        width == 0 || height == 0 || frameCount == 0 ||
+        frameBytes != width * height * 4U ||
+        cachedIntervalMs <= 0.0) {
+        return false;
+    }
+
+    surfaces.clear();
+    surfaces.reserve(frameCount);
+    for (std::uint32_t i = 0; i < frameCount; ++i) {
+        auto surface = SurfacePtr(
+            SDL_CreateRGBSurfaceWithFormat(0,
+                                           static_cast<int>(width),
+                                           static_cast<int>(height),
+                                           32,
+                                           SDL_PIXELFORMAT_ABGR8888),
+            SDL_FreeSurface);
+        if (surface == nullptr) return false;
+
+        auto *pixels = static_cast<char *>(surface->pixels);
+        const int rowBytes = static_cast<int>(width) * 4;
+        for (std::uint32_t y = 0; y < height; ++y) {
+            input.read(pixels + static_cast<int>(y) * surface->pitch, rowBytes);
+            if (!input.good()) return false;
+        }
+        surfaces.push_back(std::move(surface));
+    }
+
+    intervalMs = cachedIntervalMs;
+    return !surfaces.empty();
+}
+
+void SaveFramesToDiskCache(const std::string &mediaPath,
+                           const std::vector<SurfacePtr> &surfaces,
+                           double intervalMs,
+                           int frameWidth,
+                           int frameHeight) {
+    if (!IsDiskCacheEnabled() || surfaces.empty() ||
+        frameWidth <= 0 || frameHeight <= 0 || intervalMs <= 0.0) {
+        return;
+    }
+
+    std::uint64_t sourceSize = 0;
+    std::int64_t sourceMtime = 0;
+    if (!GetSourceFingerprint(mediaPath, sourceSize, sourceMtime)) return;
+
+    const auto cachePath = GetDiskCachePath(mediaPath);
+    std::error_code ec;
+    std::filesystem::create_directories(cachePath.parent_path(), ec);
+    if (ec) return;
+
+    const auto tempPath = cachePath.string() + ".tmp";
+    std::ofstream output(tempPath, std::ios::binary | std::ios::trunc);
+    if (!output.is_open()) return;
+
+    char magic[8] = {};
+    std::copy(DISK_CACHE_MAGIC, DISK_CACHE_MAGIC + 7, magic);
+    output.write(magic, sizeof(magic));
+
+    const std::uint32_t version = DISK_CACHE_VERSION;
+    const std::uint32_t maxDimension = VIDEO_MAX_DIMENSION;
+    const std::uint32_t width = static_cast<std::uint32_t>(frameWidth);
+    const std::uint32_t height = static_cast<std::uint32_t>(frameHeight);
+    const std::uint32_t frameCount = static_cast<std::uint32_t>(surfaces.size());
+    const std::uint32_t frameBytes = width * height * 4U;
+
+    if (!WriteValue(output, version) ||
+        !WriteValue(output, maxDimension) ||
+        !WriteValue(output, width) ||
+        !WriteValue(output, height) ||
+        !WriteValue(output, frameCount) ||
+        !WriteValue(output, frameBytes) ||
+        !WriteValue(output, sourceSize) ||
+        !WriteValue(output, sourceMtime) ||
+        !WriteValue(output, intervalMs)) {
+        return;
+    }
+
+    for (const auto &surface : surfaces) {
+        if (surface == nullptr || surface->pixels == nullptr) return;
+        const auto *pixels = static_cast<const char *>(surface->pixels);
+        const int rowBytes = frameWidth * 4;
+        if (surface->pitch == rowBytes) {
+            output.write(pixels, frameBytes);
+        } else {
+            for (int y = 0; y < frameHeight; ++y) {
+                output.write(pixels + y * surface->pitch, rowBytes);
+            }
+        }
+        if (!output.good()) return;
+    }
+    output.close();
+    if (!output.good()) return;
+
+    std::filesystem::remove(cachePath, ec);
+    ec.clear();
+    std::filesystem::rename(tempPath, cachePath, ec);
+    if (ec) {
+        std::filesystem::remove(tempPath, ec);
+    }
 }
 
 std::string BuildFfmpegHwAccelArgs() {
@@ -261,6 +564,7 @@ Animation::Animation(const std::string &mediaPath, bool play, bool looping, bool
 
 std::size_t Animation::GetFrameCount() const {
     if (m_GifAnimation) return static_cast<std::size_t>(std::max(0, m_GifAnimation->count));
+    if (!m_VideoImageFrames.empty()) return m_VideoImageFrames.size();
     if (!m_VideoFrames.empty()) return m_VideoFrames.size();
     return m_StreamFrames ? m_FramePaths.size() : m_Frames.size();
 }
@@ -269,6 +573,9 @@ std::shared_ptr<Util::Image> Animation::GetCurrentImage() const {
     if (m_GifAnimation) {
         EnsureGifFrameLoaded();
         return m_StreamFrame;
+    }
+    if (!m_VideoImageFrames.empty()) {
+        return m_VideoImageFrames[std::min(m_Index, m_VideoImageFrames.size() - 1)];
     }
     if (!m_VideoFrames.empty()) {
         EnsureVideoFrameLoaded();
@@ -331,9 +638,43 @@ bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
 
     if (const auto it = videoCache.find(mediaPath); it != videoCache.end()) {
         it->second.lastUsed = NextVideoCacheUse();
-        m_VideoFrames = it->second.surfaces;
         m_Interval = it->second.intervalMs;
-        return !m_VideoFrames.empty();
+        EnsureTextureFramesCached(it->second, mediaPath, m_UseAA);
+        const auto &textureFrames = SelectReusableTextureFrames(it->second, m_UseAA);
+        if (!textureFrames.empty()) {
+            m_VideoImageFrames = textureFrames;
+        } else {
+            m_VideoFrames = it->second.surfaces;
+        }
+        return !m_VideoImageFrames.empty() || !m_VideoFrames.empty();
+    }
+
+    std::vector<SurfacePtr> diskSurfaces;
+    double diskIntervalMs = 0.0;
+    if (LoadFramesFromDiskCache(mediaPath, diskSurfaces, diskIntervalMs)) {
+        m_Interval = diskIntervalMs;
+        auto &cachedBytes = GetVideoCacheBytes();
+        std::size_t surfaceBytes = 0;
+        if (!diskSurfaces.empty()) {
+            surfaceBytes = static_cast<std::size_t>(diskSurfaces.front()->w) *
+                           static_cast<std::size_t>(diskSurfaces.front()->h) * 4U *
+                           diskSurfaces.size();
+        }
+        cachedBytes += surfaceBytes;
+        auto [cacheIt, inserted] = videoCache.emplace(
+            mediaPath,
+            VideoCache{diskSurfaces, {}, {}, diskIntervalMs, surfaceBytes, surfaceBytes,
+                       NextVideoCacheUse()});
+        (void) inserted;
+        EnsureTextureFramesCached(cacheIt->second, mediaPath, m_UseAA);
+        PruneVideoCache(mediaPath);
+        const auto &textureFrames = SelectReusableTextureFrames(cacheIt->second, m_UseAA);
+        if (!textureFrames.empty()) {
+            m_VideoImageFrames = textureFrames;
+        } else {
+            m_VideoFrames = cacheIt->second.surfaces;
+        }
+        return !m_VideoImageFrames.empty() || !m_VideoFrames.empty();
     }
 
     int sourceWidth = 0;
@@ -393,12 +734,23 @@ bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
 
     // Cache and apply
     auto &cachedBytes = GetVideoCacheBytes();
-    cachedBytes += frameSizeBytes * surfaces.size();
-    videoCache[mediaPath] = {surfaces, intervalMs, frameSizeBytes * surfaces.size(),
-                             NextVideoCacheUse()};
+    const auto surfaceBytes = frameSizeBytes * surfaces.size();
+    SaveFramesToDiskCache(mediaPath, surfaces, intervalMs, frameWidth, frameHeight);
+    cachedBytes += surfaceBytes;
+    auto [cacheIt, inserted] = videoCache.emplace(
+        mediaPath,
+        VideoCache{surfaces, {}, {}, intervalMs, surfaceBytes, surfaceBytes,
+                   NextVideoCacheUse()});
+    (void) inserted;
+    EnsureTextureFramesCached(cacheIt->second, mediaPath, m_UseAA);
     PruneVideoCache(mediaPath);
-    m_VideoFrames = surfaces;
-    return true;
+    const auto &textureFrames = SelectReusableTextureFrames(cacheIt->second, m_UseAA);
+    if (!textureFrames.empty()) {
+        m_VideoImageFrames = textureFrames;
+    } else {
+        m_VideoFrames = cacheIt->second.surfaces;
+    }
+    return !m_VideoImageFrames.empty() || !m_VideoFrames.empty();
 }
 
 void Animation::ClearDecodedMediaCache() {
@@ -428,7 +780,13 @@ GLuint Animation::GetTextureId() const {
 
 void Animation::UseAntiAliasing(bool useAA) {
     m_UseAA = useAA;
-    if (m_StreamFrames || m_GifAnimation) {
+    if (!m_VideoImageFrames.empty()) {
+        for (const auto &frame : m_VideoImageFrames) {
+            frame->UseAntiAliasing(useAA);
+        }
+        return;
+    }
+    if (m_StreamFrames || m_GifAnimation || !m_VideoFrames.empty()) {
         if (m_StreamFrame) m_StreamFrame->UseAntiAliasing(useAA);
         return;
     }

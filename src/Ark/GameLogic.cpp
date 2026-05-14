@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <tuple>
@@ -224,9 +225,21 @@ void App::LoadOperatorAnimations() {
                 pack.startFlip, pack.defFlip, pack.attackFlip, pack.skillFlip, pack.dieFlip);
     }
 
-    // Warm animations while the loading screen is up. By default decoded frames stay
-    // resident to avoid first-use stalls; set ARKNIGHT_ANIMATION_CACHE_MB to opt into
-    // a bounded cache on memory-constrained machines.
+    // Startup should stay light: by default we only index clip paths here.
+    // Actual media decoding is lazy and backed by a persistent disk cache, so
+    // previously seen clips can be restored quickly without re-running ffmpeg.
+    auto envEnabled = [&](const char* name) {
+        const char* raw = std::getenv(name);
+        if (raw == nullptr || raw[0] == '\0') return false;
+        const std::string value = toLower(raw);
+        return value != "0" && value != "false" && value != "none" && value != "off";
+    };
+    if (!envEnabled("ARKNIGHT_ANIMATION_PRELOAD")) {
+        return;
+    }
+
+    // Optional compatibility path for machines that prefer a longer loading screen
+    // over any first-use animation decode.
     auto warmClip = [](const OperatorAnimClip& clip) {
         if (!clip.Empty()) {
             Util::Animation warmup(clip.mediaPath, false, clip.loop, false);

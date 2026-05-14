@@ -180,6 +180,7 @@ private:
 
     std::vector<std::shared_ptr<Util::Image>> m_Frames;
     std::vector<std::string> m_FramePaths;
+    std::vector<std::shared_ptr<Util::Image>> m_VideoImageFrames;
     std::vector<std::shared_ptr<SDL_Surface>> m_VideoFrames;
     mutable std::shared_ptr<Util::Image> m_StreamFrame;
     mutable std::size_t m_LoadedStreamIndex = static_cast<std::size_t>(-1);

@@ -28,8 +28,10 @@ Texture &Texture::operator=(Texture &&other) {
 }
 
 void Texture::Bind(int slot) const {
-    int maxCount;
-    glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maxCount);
+    static int maxCount = 0;
+    if (maxCount == 0) {
+        glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &maxCount);
+    }
 
     if (slot >= maxCount) {
         LOG_ERROR("Maximum texture count exceeded");
