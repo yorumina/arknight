@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <set>
 #include <tuple>
 
 #include "config.hpp"
@@ -35,6 +36,35 @@ constexpr float DEFAULT_CAMERA_MIN_ZOOM = 0.7F;
 constexpr float DEFAULT_CAMERA_MAX_ZOOM = 1.8F;
 constexpr const char* STAGE_1_1_FILE = "Operation 1-1/stage";
 constexpr const char* STAGE_1_2_FILE = "Operation 1-2/stage";
+
+const char* GetEnvOption(const char* name) {
+    if (const char* value = std::getenv(name);
+        value != nullptr && value[0] != '\0') {
+        return value;
+    }
+
+    std::string lowerName(name);
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (lowerName != name) {
+        if (const char* value = std::getenv(lowerName.c_str());
+            value != nullptr && value[0] != '\0') {
+            return value;
+        }
+    }
+    return nullptr;
+}
+
+bool EnvEnabled(const char* name) {
+    const char* raw = GetEnvOption(name);
+    if (raw == nullptr || raw[0] == '\0') return false;
+
+    std::string value(raw);
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value != "0" && value != "false" && value != "none" && value != "off";
+}
+
 } // namespace
 
 // ?????????????????????????????????????????????????????????????????????????????
@@ -80,6 +110,11 @@ void App::ResetDemo() {
     m_Beams.clear();
     m_OperatorRedeployCooldownMs.clear();
     for (auto& pack : m_OperatorAnims) pack.activeInstances.clear();
+    for (auto& pack : m_EnemyAnims) {
+        pack.activeInstances.clear();
+        pack.attackInstances.clear();
+        pack.dieInstances.clear();
+    }
 }
 
 void App::InitializeStage() {
@@ -94,6 +129,7 @@ void App::InitializeStage() {
     }
     if (!LoadStageFromJsonModule()) BuildFallbackStage();
     LoadOperatorAnimations();
+    LoadEnemyAnimations();
     if (m_Renderer) {
         m_Renderer->LoadOperatorThumbnails();
     }
@@ -228,13 +264,7 @@ void App::LoadOperatorAnimations() {
     // Startup should stay light: by default we only index clip paths here.
     // Actual media decoding is lazy and backed by a persistent disk cache, so
     // previously seen clips can be restored quickly without re-running ffmpeg.
-    auto envEnabled = [&](const char* name) {
-        const char* raw = std::getenv(name);
-        if (raw == nullptr || raw[0] == '\0') return false;
-        const std::string value = toLower(raw);
-        return value != "0" && value != "false" && value != "none" && value != "off";
-    };
-    if (!envEnabled("ARKNIGHT_ANIMATION_PRELOAD")) {
+    if (!EnvEnabled("ARKNIGHT_ANIMATION_PRELOAD")) {
         return;
     }
 
@@ -266,6 +296,160 @@ void App::LoadOperatorAnimations() {
         warmClip(pack.attackFlip);
         warmClip(pack.skillFlip);
         warmClip(pack.dieFlip);
+    }
+}
+
+void App::LoadEnemyAnimations() {
+    m_EnemyAnims.clear();
+    m_EnemyAnims.resize(m_EnemyTemplates.size());
+
+    auto toLower = [](std::string s) {
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return s;
+    };
+
+    auto extensionOf = [&](const std::filesystem::path& path) {
+        return toLower(path.extension().string());
+    };
+
+    auto isApngPath = [&](const std::filesystem::path& path) {
+        return extensionOf(path) == ".apng";
+    };
+
+    auto isSupportedAnimationPath = [&](const std::filesystem::path& path) {
+        const auto ext = extensionOf(path);
+        return ext == ".webm" || ext == ".apng";
+    };
+
+    auto sameStem = [&](const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
+        return toLower(lhs.stem().string()) == toLower(rhs.stem().string());
+    };
+
+    auto loadAnimClipFromMedia = [](const std::filesystem::path& mediaPath, bool loop) {
+        EnemyAnimClip clip;
+        clip.mediaPath = mediaPath.string();
+        clip.loop = loop;
+        return clip;
+    };
+
+    auto shouldPreferClip = [&](const EnemyAnimClip& target, const EnemyAnimClip& clip) {
+        if (target.Empty() || clip.Empty()) return false;
+        const std::filesystem::path targetPath(target.mediaPath);
+        const std::filesystem::path clipPath(clip.mediaPath);
+        return sameStem(targetPath, clipPath) &&
+               !isApngPath(targetPath) &&
+               isApngPath(clipPath);
+    };
+
+    auto assignClipIfLoaded = [&](EnemyAnimClip& target, EnemyAnimClip clip, bool force = false) {
+        if (clip.Empty()) return;
+        if (target.Empty() ||
+            shouldPreferClip(target, clip) ||
+            (force && !shouldPreferClip(clip, target))) {
+            target = std::move(clip);
+        }
+    };
+
+    const auto enemyDir = Ark::ResolveEnemyDir();
+    if (enemyDir.empty()) return;
+
+    for (std::size_t i = 0; i < m_EnemyTemplates.size(); ++i) {
+        const auto& enemyType = m_EnemyTemplates[i];
+        const std::string enemyCode = !enemyType.enemyId.empty() ? enemyType.enemyId : enemyType.id;
+        const std::string enemyCodeLower = toLower(enemyCode);
+        auto& pack = m_EnemyAnims[i];
+
+        auto classifyAndAssign = [&](const std::filesystem::path& mediaPath) {
+            const std::string animName = toLower(mediaPath.stem().string());
+            const bool isExactIdle = animName == enemyCodeLower + "_idle" || animName == "idle";
+            const bool isExactMove = animName == enemyCodeLower + "_move" || animName == "move";
+            const bool isExactAttack = animName == enemyCodeLower + "_attack" || animName == "attack";
+            const bool isExactDie = animName == enemyCodeLower + "_die" || animName == "die";
+
+            if (animName.find("die") != std::string::npos) {
+                assignClipIfLoaded(pack.die, loadAnimClipFromMedia(mediaPath, false), isExactDie);
+            } else if (animName.find("attack") != std::string::npos) {
+                const bool isMainAttack = isExactAttack ||
+                    (animName.find("begin") == std::string::npos &&
+                     animName.find("end") == std::string::npos);
+                assignClipIfLoaded(pack.attack, loadAnimClipFromMedia(mediaPath, false), isMainAttack);
+            } else if (animName.find("idle") != std::string::npos ||
+                       animName.find("default") != std::string::npos) {
+                assignClipIfLoaded(pack.idle, loadAnimClipFromMedia(mediaPath, true), isExactIdle);
+            } else if (animName.find("move") != std::string::npos) {
+                const bool isMainMove = isExactMove ||
+                    animName.find("loop") != std::string::npos;
+                assignClipIfLoaded(pack.move, loadAnimClipFromMedia(mediaPath, true), isMainMove);
+            }
+        };
+
+        auto scanDir = [&](const std::filesystem::path& dir, bool filterToEnemyPrefix) {
+            if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) return;
+            std::vector<std::filesystem::path> mediaFiles;
+            for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+                if (!entry.is_regular_file()) continue;
+                if (!isSupportedAnimationPath(entry.path())) continue;
+                // Keep startup cheap: validation, ffmpeg decode, and disk-cache
+                // population happen lazily inside Util::Animation on first use.
+                if (filterToEnemyPrefix) {
+                    const auto stem = toLower(entry.path().stem().string());
+                    const auto prefix = enemyCodeLower + "_";
+                    if (stem != enemyCodeLower && stem.rfind(prefix, 0) != 0) continue;
+                }
+                mediaFiles.push_back(entry.path());
+            }
+            std::sort(mediaFiles.begin(), mediaFiles.end());
+            for (const auto& mediaPath : mediaFiles) {
+                classifyAndAssign(mediaPath);
+            }
+        };
+
+        scanDir(enemyDir / enemyCode, false);
+        scanDir(enemyDir, true);
+    }
+
+    if (!EnvEnabled("ARKNIGHT_ANIMATION_PRELOAD") &&
+        !EnvEnabled("ARKNIGHT_ENEMY_ANIMATION_PRELOAD")) {
+        return;
+    }
+
+    PreloadEnemyAnimationClips();
+}
+
+void App::PreloadEnemyAnimationClips() {
+    if (m_EnemyAnims.empty()) return;
+
+    std::vector<bool> usedTypes(m_EnemyAnims.size(), false);
+    for (const auto& plan : m_WavePlans) {
+        if (plan.enemyTypeIndex >= 0 &&
+            plan.enemyTypeIndex < static_cast<int>(usedTypes.size())) {
+            usedTypes[static_cast<std::size_t>(plan.enemyTypeIndex)] = true;
+        }
+    }
+
+    if (std::none_of(usedTypes.begin(), usedTypes.end(), [](bool used) { return used; })) {
+        std::fill(usedTypes.begin(), usedTypes.end(), true);
+    }
+
+    std::set<std::string> warmedPaths;
+    auto warmClip = [&](EnemyAnimClip& clip) {
+        if (clip.Empty()) return;
+        if (!warmedPaths.insert(clip.mediaPath).second) return;
+
+        Util::Animation warm(clip.mediaPath, false, clip.loop, false);
+        if (warm.GetFrameCount() == 0) {
+            clip.mediaPath.clear();
+        }
+    };
+
+    for (std::size_t i = 0; i < m_EnemyAnims.size(); ++i) {
+        if (!usedTypes[i]) continue;
+        auto& pack = m_EnemyAnims[i];
+        warmClip(pack.idle);
+        warmClip(pack.move);
+        warmClip(pack.attack);
+        warmClip(pack.die);
     }
 }
 
@@ -393,6 +577,11 @@ void App::StartWave() {
     m_CurrentWave    = 0;
     m_Enemies.clear();
     m_Beams.clear();
+    for (auto& pack : m_EnemyAnims) {
+        pack.activeInstances.clear();
+        pack.attackInstances.clear();
+        pack.dieInstances.clear();
+    }
 }
 
 void App::UpdateWave(float dtSec) {

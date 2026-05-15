@@ -176,13 +176,17 @@ void App::UpdateOperators(float dtMs) {
         // Myrtle skill active: no attacking
         if (isMyrtle && op.skillActive) continue;
 
+        op.cooldownMs = std::max(0.0F, op.cooldownMs - dtMs * OPERATOR_ATTACK_SPEED_SCALE);
+        const bool needsTargetScan = isBagpipe || isMyrtle || op.cooldownMs <= 0.0F;
+        if (!needsTargetScan) continue;
+
         // Attack targeting (used by both auto-skill trigger and regular attacks)
         const auto opPos = ToBoardCenter(op.cell);
         
         struct TargetInfo {
             int idx;
             float distSq;
-            float remainToGoal;
+            float remainToGoal = 0.0F;
         };
         std::vector<TargetInfo> validTargets;
 
@@ -221,7 +225,7 @@ void App::UpdateOperators(float dtMs) {
             if (inRange) {
                 const auto d = e.boardPos - opPos;
                 const float sq = glm::dot(d, d);
-                validTargets.push_back({static_cast<int>(i), sq, computeRemainToGoal(e)});
+                validTargets.push_back({static_cast<int>(i), sq});
             }
         }
 
@@ -242,9 +246,11 @@ void App::UpdateOperators(float dtMs) {
             continue;
         }
 
-        op.cooldownMs = std::max(0.0F, op.cooldownMs - dtMs * OPERATOR_ATTACK_SPEED_SCALE);
         if (op.cooldownMs > 0.0F || validTargets.empty()) continue;
 
+        for (auto& target : validTargets) {
+            target.remainToGoal = computeRemainToGoal(m_Enemies[static_cast<std::size_t>(target.idx)]);
+        }
         std::sort(validTargets.begin(), validTargets.end(), [](const TargetInfo& a, const TargetInfo& b) {
             if (a.remainToGoal != b.remainToGoal) return a.remainToGoal < b.remainToGoal;
             return a.distSq < b.distSq;
@@ -274,7 +280,7 @@ void App::UpdateOperators(float dtMs) {
             m_Beams.push_back(AttackBeam{opPos, tgt.boardPos, BEAM_DURATION_MS});
             
             if (tgt.hp <= 0.0F) {
-                tgt.alive = false;
+                MarkEnemyDefeated(tgt);
                 ++m_KillCount;
                 if (isBagpipe) {
                     m_DP = std::min(m_MaxDP, m_DP + 2.0F);

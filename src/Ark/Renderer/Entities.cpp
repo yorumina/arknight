@@ -205,11 +205,26 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
 void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     for (const auto& e : m_App.m_Enemies) {
-        if (!e.alive) continue;
-        const auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
+        if (!e.alive && e.deathAnimationFinished) continue;
+        auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
+        c.y -= layout.cellSize * 0.18F;
         const float r = layout.cellSize * 0.20F;
-        if (m_App.m_ModelEnemy && m_App.m_ModelEnemy->GetTextureId() != 0) {
-            float imgR = layout.cellSize * 0.4F;
+        const float imgR = layout.cellSize * 0.8F;
+
+        GLuint tex = 0;
+        if (e.typeIndex >= 0 && e.typeIndex < static_cast<int>(m_App.m_EnemyAnims.size())) {
+            auto& pack = m_App.m_EnemyAnims[static_cast<std::size_t>(e.typeIndex)];
+            auto it = pack.activeInstances.find(e.id);
+            if (it != pack.activeInstances.end() && it->second) {
+                tex = it->second->GetTextureId();
+            }
+        }
+
+        if (tex != 0) {
+            draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)),
+                           {c.x - imgR, c.y - imgR},
+                           {c.x + imgR, c.y + imgR});
+        } else if (e.alive && m_App.m_ModelEnemy && m_App.m_ModelEnemy->GetTextureId() != 0) {
             draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_App.m_ModelEnemy->GetTextureId())),
                            {c.x - imgR, c.y - imgR},
                            {c.x + imgR, c.y + imgR});
@@ -217,7 +232,13 @@ void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
             draw->AddCircleFilled(c, r, e.color, 28);
             draw->AddCircle(c, r, IM_COL32(255,255,255,100), 28, 1.0F);
         }
+    }
 
+    for (const auto& e : m_App.m_Enemies) {
+        if (!e.alive) continue;
+        auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
+        c.y -= layout.cellSize * 0.18F;
+        const float r = layout.cellSize * 0.20F;
         const float hpR    = e.maxHp > 0 ? std::clamp(e.hp/e.maxHp, 0.0F, 1.0F) : 0.0F;
         const float barHW  = layout.cellSize * 0.24F;
         const float barTop = c.y - r - 9.0F;

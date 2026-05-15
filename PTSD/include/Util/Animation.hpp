@@ -41,7 +41,8 @@ public:
               bool streamFrames = false);
 
     Animation(const std::string &mediaPath, bool play,
-              bool looping = true, bool useAA = true);
+              bool looping = true, bool useAA = true,
+              bool cacheVideoTextures = true);
 
     ~Animation() override = default;
 
@@ -158,6 +159,11 @@ public:
     void Play();
 
     /**
+     * @brief Restart playback from the first frame.
+     */
+    void Restart();
+
+    /**
      * @brief Pause the animation.
      * If the animation has already been paused, this method won't do anything.
      */
@@ -190,6 +196,7 @@ private:
     mutable std::size_t m_LoadedVideoIndex = static_cast<std::size_t>(-1);
     bool m_StreamFrames = false;
     bool m_UseAA = true;
+    bool m_CacheVideoTextures = true;
     State m_State;
     double m_Interval;
     bool m_Looping;

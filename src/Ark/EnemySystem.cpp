@@ -11,6 +11,7 @@ using namespace Ark;
 namespace {
 constexpr float BEAM_DURATION_MS = 120.0F;
 constexpr float ENEMY_SPEED_SCALE = 0.5F;
+constexpr float MAX_DEATH_ANIMATION_MS = 4500.0F;
 
 float ComputeEnemyToOperatorDamage(float rawDamage, float targetDef) {
     // Keep defense meaningful, but avoid "always 1 damage" stalemates.
@@ -19,6 +20,161 @@ float ComputeEnemyToOperatorDamage(float rawDamage, float targetDef) {
     return std::max(5.0F, std::max(floorByPercent, reduced));
 }
 } // namespace
+
+void App::MarkEnemyDefeated(Enemy& enemy) {
+    enemy.hp = 0.0F;
+    enemy.alive = false;
+    enemy.blockedByOperatorId = -1;
+    enemy.deathAnimationFinished = false;
+    enemy.deathElapsedMs = 0.0F;
+    enemy.animState = Enemy::AnimState::DIE;
+
+    if (enemy.typeIndex < 0 ||
+        enemy.typeIndex >= static_cast<int>(m_EnemyAnims.size())) {
+        enemy.deathAnimationFinished = true;
+        return;
+    }
+
+    auto& pack = m_EnemyAnims[static_cast<std::size_t>(enemy.typeIndex)];
+    if (pack.die.Empty()) {
+        pack.activeInstances.erase(enemy.id);
+        pack.dieInstances.erase(enemy.id);
+        enemy.deathAnimationFinished = true;
+        return;
+    }
+
+    auto& anim = pack.dieInstances[enemy.id];
+    if (!anim) {
+        anim = std::make_shared<Util::Animation>(
+            pack.die.mediaPath, true, pack.die.loop, false);
+    } else {
+        anim->Restart();
+    }
+    if (anim->GetFrameCount() == 0) {
+        pack.die.mediaPath.clear();
+        pack.activeInstances.erase(enemy.id);
+        pack.dieInstances.erase(enemy.id);
+        enemy.deathAnimationFinished = true;
+        return;
+    }
+    pack.activeInstances[enemy.id] = anim;
+}
+
+void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking) {
+    if (enemy.typeIndex < 0 ||
+        enemy.typeIndex >= static_cast<int>(m_EnemyAnims.size())) {
+        if (!enemy.alive) enemy.deathAnimationFinished = true;
+        return;
+    }
+
+    auto& pack = m_EnemyAnims[static_cast<std::size_t>(enemy.typeIndex)];
+
+    auto selectClip = [&](Enemy::AnimState state) -> EnemyAnimClip* {
+        switch (state) {
+        case Enemy::AnimState::IDLE:
+            if (!pack.idle.Empty()) return &pack.idle;
+            if (!pack.move.Empty()) return &pack.move;
+            return nullptr;
+        case Enemy::AnimState::MOVE:
+            if (!pack.move.Empty()) return &pack.move;
+            if (!pack.idle.Empty()) return &pack.idle;
+            return nullptr;
+        case Enemy::AnimState::ATTACK:
+            return pack.attack.Empty() ? nullptr : &pack.attack;
+        case Enemy::AnimState::DIE:
+            return pack.die.Empty() ? nullptr : &pack.die;
+        }
+        return nullptr;
+    };
+
+    auto it = pack.activeInstances.find(enemy.id);
+    auto animInst = (it != pack.activeInstances.end()) ? it->second : nullptr;
+
+    Enemy::AnimState desiredState = isMoving ? Enemy::AnimState::MOVE : Enemy::AnimState::IDLE;
+    if (!enemy.alive) {
+        desiredState = Enemy::AnimState::DIE;
+    } else if (isAttacking && selectClip(Enemy::AnimState::ATTACK) != nullptr) {
+        desiredState = Enemy::AnimState::ATTACK;
+    } else if (enemy.animState == Enemy::AnimState::ATTACK &&
+               animInst &&
+               animInst->GetState() != Util::Animation::State::ENDED) {
+        desiredState = Enemy::AnimState::ATTACK;
+    }
+
+    EnemyAnimClip* clip = selectClip(desiredState);
+    if (clip == nullptr) {
+        if (!enemy.alive) {
+            enemy.deathAnimationFinished = true;
+            pack.activeInstances.erase(enemy.id);
+        }
+        return;
+    }
+
+    const bool useSharedLoop =
+        desiredState == Enemy::AnimState::IDLE ||
+        desiredState == Enemy::AnimState::MOVE;
+    if (useSharedLoop) {
+        auto& sharedInstance = desiredState == Enemy::AnimState::IDLE
+            ? pack.sharedIdleInstance
+            : pack.sharedMoveInstance;
+        auto& sharedUpdateSerial = desiredState == Enemy::AnimState::IDLE
+            ? pack.sharedIdleUpdateSerial
+            : pack.sharedMoveUpdateSerial;
+
+        if (!sharedInstance) {
+            sharedInstance = std::make_shared<Util::Animation>(
+                clip->mediaPath, true, clip->loop, false);
+            if (sharedInstance->GetFrameCount() == 0) {
+                clip->mediaPath.clear();
+                pack.activeInstances.erase(enemy.id);
+                return;
+            }
+        }
+
+        enemy.animState = desiredState;
+        pack.activeInstances[enemy.id] = sharedInstance;
+        if (sharedUpdateSerial != m_EnemyAnimationUpdateSerial) {
+            sharedInstance->Update();
+            sharedUpdateSerial = m_EnemyAnimationUpdateSerial;
+        }
+        return;
+    }
+
+    const bool shouldRestartAnimation =
+        isAttacking && desiredState == Enemy::AnimState::ATTACK;
+    if (enemy.animState != desiredState || !animInst || shouldRestartAnimation) {
+        enemy.animState = desiredState;
+        auto& stateInstances = desiredState == Enemy::AnimState::ATTACK
+            ? pack.attackInstances
+            : pack.dieInstances;
+        auto& cachedAnim = stateInstances[enemy.id];
+        if (!cachedAnim) {
+            cachedAnim = std::make_shared<Util::Animation>(
+                clip->mediaPath, true, clip->loop, false);
+        } else {
+            cachedAnim->Restart();
+        }
+        animInst = cachedAnim;
+        if (animInst->GetFrameCount() == 0) {
+            clip->mediaPath.clear();
+            pack.activeInstances.erase(enemy.id);
+            stateInstances.erase(enemy.id);
+            if (desiredState == Enemy::AnimState::DIE) {
+                enemy.deathAnimationFinished = true;
+            }
+            return;
+        }
+        pack.activeInstances[enemy.id] = animInst;
+    }
+
+    if (animInst) {
+        animInst->Update();
+        if (desiredState == Enemy::AnimState::DIE &&
+            animInst->GetState() == Util::Animation::State::ENDED) {
+            enemy.deathAnimationFinished = true;
+        }
+    }
+}
 
 // ─── Spawn ──────────────────────────────────────────────────────────────────
 void App::SpawnEnemy(const WavePlan& plan) {
@@ -32,6 +188,7 @@ void App::SpawnEnemy(const WavePlan& plan) {
 
     Enemy e;
     e.id               = m_NextEnemyId++;
+    e.typeIndex        = plan.enemyTypeIndex;
     e.routeIndex       = plan.routeIndex;
     e.nodeIndex        = 0;
     e.boardPos         = route.nodes.front().boardPos;
@@ -53,6 +210,7 @@ void App::SpawnEnemy(const WavePlan& plan) {
 
 // ─── Enemy update ───────────────────────────────────────────────────────────
 void App::UpdateEnemies(float dtSec) {
+    ++m_EnemyAnimationUpdateSerial;
     const float scaledDtSec = dtSec * ENEMY_SPEED_SCALE;
 
     // Reset block counts
@@ -75,7 +233,19 @@ void App::UpdateEnemies(float dtSec) {
     }
 
     for (auto& enemy : m_Enemies) {
-        if (!enemy.alive) continue;
+        if (!enemy.alive) {
+            if (!enemy.deathAnimationFinished) {
+                enemy.deathElapsedMs += dtSec * 1000.0F;
+                UpdateEnemyAnimation(enemy, false, false);
+                if (enemy.deathElapsedMs >= MAX_DEATH_ANIMATION_MS) {
+                    enemy.deathAnimationFinished = true;
+                }
+            }
+            continue;
+        }
+
+        const glm::vec2 frameStartPos = enemy.boardPos;
+        bool didAttack = false;
 
         // Find blocking operator
         Operator* blockOp = nullptr;
@@ -119,8 +289,10 @@ void App::UpdateEnemies(float dtSec) {
                     blockOp->hp -= ComputeEnemyToOperatorDamage(enemy.damage, blockOp->def);
                     blockOp->hp = std::max(0.0F, blockOp->hp);
                     enemy.attackCooldownMs = enemy.attackIntervalMs;
+                    didAttack = true;
                 }
             }
+            UpdateEnemyAnimation(enemy, false, didAttack);
             continue; // blocked – don't move
         }
 
@@ -147,6 +319,7 @@ void App::UpdateEnemies(float dtSec) {
                     rangedTarget->hp = std::max(0.0F, rangedTarget->hp);
                     // Visual beam: enemy -> operator
                     m_Beams.push_back(AttackBeam{enemy.boardPos, ToBoardCenter(rangedTarget->cell), BEAM_DURATION_MS});
+                    didAttack = true;
                 }
                 enemy.attackCooldownMs = enemy.attackIntervalMs;
             }
@@ -155,7 +328,9 @@ void App::UpdateEnemies(float dtSec) {
 
         // Move along route
         if (enemy.routeIndex < 0 || enemy.routeIndex >= static_cast<int>(m_Routes.size())) {
-            enemy.alive = false; continue;
+            enemy.alive = false;
+            enemy.deathAnimationFinished = true;
+            continue;
         }
         const auto& route = m_Routes[static_cast<std::size_t>(enemy.routeIndex)];
         float timeLeft = scaledDtSec;
@@ -168,6 +343,7 @@ void App::UpdateEnemies(float dtSec) {
             }
             if (enemy.nodeIndex + 1 >= route.nodes.size()) {
                 enemy.alive = false;
+                enemy.deathAnimationFinished = true;
                 m_LifePoint = std::max(0, m_LifePoint - 1);
                 if (m_LifePoint <= 0) { m_GameOver = true; m_WaveRunning = false; }
                 break;
@@ -193,10 +369,26 @@ void App::UpdateEnemies(float dtSec) {
                 timeLeft = 0.0F;
             }
         }
+
+        if (enemy.alive) {
+            const bool isMoving = glm::length(enemy.boardPos - frameStartPos) > 0.0001F;
+            UpdateEnemyAnimation(enemy, isMoving, didAttack);
+        }
     }
 }
 
 void App::CleanupDefeatedEnemies() {
     m_Enemies.erase(std::remove_if(m_Enemies.begin(), m_Enemies.end(),
-        [](const Enemy& e){ return !e.alive; }), m_Enemies.end());
+        [&](const Enemy& e) {
+            const bool shouldRemove = !e.alive && e.deathAnimationFinished;
+            if (shouldRemove &&
+                e.typeIndex >= 0 &&
+                e.typeIndex < static_cast<int>(m_EnemyAnims.size())) {
+                auto& pack = m_EnemyAnims[static_cast<std::size_t>(e.typeIndex)];
+                pack.activeInstances.erase(e.id);
+                pack.attackInstances.erase(e.id);
+                pack.dieInstances.erase(e.id);
+            }
+            return shouldRemove;
+        }), m_Enemies.end());
 }

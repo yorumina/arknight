@@ -16,8 +16,8 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
     auto drawGameplayFrame = [&]() {
         DrawStageBackground();
         DrawGrid();
-        DrawOperators(layout, false);
         DrawEnemies(layout);
+        DrawOperators(layout, false);
         DrawHighgroundTopLayer();
         DrawMarkerTopLayer();
         DrawOperators(layout, true);

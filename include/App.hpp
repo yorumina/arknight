@@ -52,6 +52,8 @@ private:
     bool LoadStageFromJsonModule();
     void BuildFallbackStage();
     void LoadOperatorAnimations();
+    void LoadEnemyAnimations();
+    void PreloadEnemyAnimationClips();
     void ResetCameraToStageDefaults();
 
     void UpdateGame(float dt);
@@ -61,6 +63,8 @@ private:
     void ResetDemo();
     void SpawnEnemy(const Ark::WavePlan& plan);
     void UpdateEnemies(float deltaTimeSec);
+    void UpdateEnemyAnimation(Ark::Enemy& enemy, bool isMoving, bool isAttacking);
+    void MarkEnemyDefeated(Ark::Enemy& enemy);
     void UpdateOperators(float deltaTimeMs);
     void CleanupDefeatedEnemies();
     void UpdateRedeployCooldowns(float dtMs);
@@ -211,6 +215,29 @@ private:
         std::map<int, std::shared_ptr<Util::Animation>> activeInstances; 
     };
     std::vector<OperatorAnimPack> m_OperatorAnims;
+
+    struct EnemyAnimClip {
+        std::string mediaPath;
+        bool loop = true;
+
+        bool Empty() const { return mediaPath.empty(); }
+    };
+
+    struct EnemyAnimPack {
+        EnemyAnimClip idle;
+        EnemyAnimClip move;
+        EnemyAnimClip attack;
+        EnemyAnimClip die;
+        std::shared_ptr<Util::Animation> sharedIdleInstance;
+        std::shared_ptr<Util::Animation> sharedMoveInstance;
+        unsigned long sharedIdleUpdateSerial = 0;
+        unsigned long sharedMoveUpdateSerial = 0;
+        std::map<int, std::shared_ptr<Util::Animation>> attackInstances;
+        std::map<int, std::shared_ptr<Util::Animation>> dieInstances;
+        std::map<int, std::shared_ptr<Util::Animation>> activeInstances;
+    };
+    std::vector<EnemyAnimPack> m_EnemyAnims;
+    unsigned long m_EnemyAnimationUpdateSerial = 0;
 
     std::shared_ptr<Util::Animation> m_ModelVanguard;
     std::shared_ptr<Util::Image>     m_ModelGuard;

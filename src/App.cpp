@@ -96,6 +96,7 @@ void App::Loading() {
             m_Renderer->DrawImageCover(m_StageLoadingPath, m_StageLoadingAlpha, true);
         }
         LoadOperatorAnimations();
+        LoadEnemyAnimations();
         if (m_Renderer) {
             m_Renderer->LoadOperatorThumbnails();
         }

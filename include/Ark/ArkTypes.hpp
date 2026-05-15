@@ -28,6 +28,7 @@ struct EnemyTemplate {
 
 struct Enemy {
     int id = 0;
+    int typeIndex = -1;
     glm::vec2 boardPos{0,0};
     int routeIndex = 0;
     std::size_t nodeIndex = 0;
@@ -43,6 +44,11 @@ struct Enemy {
     bool canAttackOperator = true;
     ImU32 color = IM_COL32(220, 87, 92, 255);
     bool alive = true;
+    bool deathAnimationFinished = false;
+    float deathElapsedMs = 0.0F;
+
+    enum class AnimState { IDLE, MOVE, ATTACK, DIE };
+    AnimState animState = AnimState::MOVE;
 };
 
 // ── Operator ──────────────────────────────────────────────────

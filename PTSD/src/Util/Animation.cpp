@@ -15,12 +15,15 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace {
 constexpr int VIDEO_MAX_DIMENSION = 256;
 constexpr std::size_t DEFAULT_VIDEO_CACHE_LIMIT_MIB = 768U;
 constexpr std::size_t BYTES_PER_MIB = 1024U * 1024U;
+constexpr double DEFAULT_VIDEO_FPS = 24.0;
+constexpr double MAX_REASONABLE_VIDEO_FPS = 60.0;
 constexpr const char *VIDEO_CACHE_LIMIT_ENV = "ARKNIGHT_ANIMATION_CACHE_MB";
 constexpr const char *VIDEO_TEXTURE_CACHE_ENV = "ARKNIGHT_ANIMATION_TEXTURE_CACHE";
 constexpr const char *VIDEO_DROP_CPU_FRAMES_ENV = "ARKNIGHT_ANIMATION_DROP_CPU_FRAMES";
@@ -47,6 +50,19 @@ std::unordered_map<std::string, VideoCache> &GetVideoCache() {
     return cache;
 }
 
+std::unordered_set<std::string> &GetFailedVideoCache() {
+    static std::unordered_set<std::string> cache;
+    return cache;
+}
+
+bool IsKnownFailedVideoPath(const std::string &mediaPath) {
+    return GetFailedVideoCache().find(mediaPath) != GetFailedVideoCache().end();
+}
+
+bool MarkFailedVideoPath(const std::string &mediaPath) {
+    return GetFailedVideoCache().insert(mediaPath).second;
+}
+
 std::size_t &GetVideoCacheBytes() {
     static std::size_t bytes = 0;
     return bytes;
@@ -57,8 +73,10 @@ std::uint64_t NextVideoCacheUse() {
     return ++counter;
 }
 
+const char *GetEnvOption(const char *name);
+
 std::size_t GetVideoCacheLimitBytes() {
-    const char *value = std::getenv(VIDEO_CACHE_LIMIT_ENV);
+    const char *value = GetEnvOption(VIDEO_CACHE_LIMIT_ENV);
     if (value == nullptr || *value == '\0') {
         return DEFAULT_VIDEO_CACHE_LIMIT_MIB * BYTES_PER_MIB;
     }
@@ -108,6 +126,22 @@ std::string ToLower(std::string value) {
     return value;
 }
 
+const char *GetEnvOption(const char *name) {
+    if (const char *value = std::getenv(name);
+        value != nullptr && value[0] != '\0') {
+        return value;
+    }
+
+    const std::string lowerName = ToLower(name);
+    if (lowerName != name) {
+        if (const char *value = std::getenv(lowerName.c_str());
+            value != nullptr && value[0] != '\0') {
+            return value;
+        }
+    }
+    return nullptr;
+}
+
 bool IsEnvDisabled(const char *value) {
     if (value == nullptr || *value == '\0') return false;
     const std::string normalized = ToLower(value);
@@ -116,15 +150,15 @@ bool IsEnvDisabled(const char *value) {
 }
 
 bool IsVideoTextureCacheEnabled() {
-    return !IsEnvDisabled(std::getenv(VIDEO_TEXTURE_CACHE_ENV));
+    return !IsEnvDisabled(GetEnvOption(VIDEO_TEXTURE_CACHE_ENV));
 }
 
 bool ShouldDropCpuFramesAfterTextureUpload() {
-    return !IsEnvDisabled(std::getenv(VIDEO_DROP_CPU_FRAMES_ENV));
+    return !IsEnvDisabled(GetEnvOption(VIDEO_DROP_CPU_FRAMES_ENV));
 }
 
 bool IsDiskCacheEnabled() {
-    return !IsEnvDisabled(std::getenv(VIDEO_DISK_CACHE_ENV));
+    return !IsEnvDisabled(GetEnvOption(VIDEO_DISK_CACHE_ENV));
 }
 
 std::vector<ImagePtr> &SelectTextureFrames(VideoCache &cache, bool useAA) {
@@ -194,6 +228,31 @@ std::string ToHex(std::uint64_t value) {
     return output.str();
 }
 
+bool ParseFrameRate(const char *raw, double &fps) {
+    if (raw == nullptr || raw[0] == '\0') return false;
+
+    int num = 0;
+    int den = 1;
+    if (sscanf(raw, "%d/%d", &num, &den) >= 1 && num > 0) {
+        if (den <= 0) den = 1;
+        fps = static_cast<double>(num) / static_cast<double>(den);
+        return fps > 0.0;
+    }
+    return false;
+}
+
+double NormalizeVideoFps(double fps) {
+    if (fps < 1.0 || fps > MAX_REASONABLE_VIDEO_FPS) {
+        return DEFAULT_VIDEO_FPS;
+    }
+    return fps;
+}
+
+double NormalizeVideoIntervalMs(double intervalMs) {
+    if (intervalMs <= 0.0) return 1000.0 / DEFAULT_VIDEO_FPS;
+    return 1000.0 / NormalizeVideoFps(1000.0 / intervalMs);
+}
+
 std::filesystem::path NormalizedMediaPath(const std::string &mediaPath) {
     std::error_code ec;
     auto normalized = std::filesystem::weakly_canonical(mediaPath, ec);
@@ -203,15 +262,15 @@ std::filesystem::path NormalizedMediaPath(const std::string &mediaPath) {
 }
 
 std::filesystem::path GetDiskCacheDir() {
-    if (const char *overrideDir = std::getenv(VIDEO_DISK_CACHE_DIR_ENV);
+    if (const char *overrideDir = GetEnvOption(VIDEO_DISK_CACHE_DIR_ENV);
         overrideDir != nullptr && overrideDir[0] != '\0') {
         return std::filesystem::path(overrideDir);
     }
-    if (const char *xdgCache = std::getenv("XDG_CACHE_HOME");
+    if (const char *xdgCache = GetEnvOption("XDG_CACHE_HOME");
         xdgCache != nullptr && xdgCache[0] != '\0') {
         return std::filesystem::path(xdgCache) / "arknight-linux" / "animation-cache";
     }
-    if (const char *home = std::getenv("HOME");
+    if (const char *home = GetEnvOption("HOME");
         home != nullptr && home[0] != '\0') {
         return std::filesystem::path(home) / ".cache" / "arknight-linux" / "animation-cache";
     }
@@ -321,7 +380,7 @@ bool LoadFramesFromDiskCache(const std::string &mediaPath,
         surfaces.push_back(std::move(surface));
     }
 
-    intervalMs = cachedIntervalMs;
+    intervalMs = NormalizeVideoIntervalMs(cachedIntervalMs);
     return !surfaces.empty();
 }
 
@@ -396,12 +455,12 @@ void SaveFramesToDiskCache(const std::string &mediaPath,
 }
 
 std::string BuildFfmpegHwAccelArgs() {
-    const char *rawArgs = std::getenv("ARKNIGHT_FFMPEG_HWACCEL_ARGS");
+    const char *rawArgs = GetEnvOption("ARKNIGHT_FFMPEG_HWACCEL_ARGS");
     if (rawArgs != nullptr && rawArgs[0] != '\0') {
         return std::string(rawArgs) + " ";
     }
 
-    const char *accelEnv = std::getenv("ARKNIGHT_FFMPEG_HWACCEL");
+    const char *accelEnv = GetEnvOption("ARKNIGHT_FFMPEG_HWACCEL");
     const std::string accel = accelEnv != nullptr ? ToLower(accelEnv) : "auto";
     if (accel.empty() || accel == "0" || accel == "false" ||
         accel == "none" || accel == "off") {
@@ -483,7 +542,7 @@ bool ProbeVideoSize(const std::string &path, int &width, int &height) {
     }
 
     const std::string command =
-        "ffprobe -v error -select_streams v:0 "
+        "ffprobe -v quiet -select_streams v:0 "
         "-show_entries stream=width,height "
         "-of csv=p=0:s=x " + ShellQuote(path);
 
@@ -536,15 +595,25 @@ Animation::Animation(const std::vector<std::shared_ptr<Util::Image>> &frames, bo
       m_Cooldown(cooldown) {
 }
 
-Animation::Animation(const std::string &mediaPath, bool play, bool looping, bool useAA)
+Animation::Animation(const std::string &mediaPath,
+                     bool play,
+                     bool looping,
+                     bool useAA,
+                     bool cacheVideoTextures)
     : m_UseAA(useAA),
+      m_CacheVideoTextures(cacheVideoTextures),
       m_State(play ? State::PLAY : State::PAUSE),
       m_Interval(41),
       m_Looping(looping),
       m_Cooldown(0) {
     if (IsFfmpegDecodedPath(mediaPath)) {
+        if (IsKnownFailedVideoPath(mediaPath)) {
+            return;
+        }
         if (!LoadFfmpegFrames(mediaPath)) {
-            LOG_ERROR("Failed to load media animation: '{}'", mediaPath);
+            if (MarkFailedVideoPath(mediaPath)) {
+                LOG_ERROR("Failed to load media animation: '{}'", mediaPath);
+            }
         }
         return;
     }
@@ -638,13 +707,21 @@ bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
 
     if (const auto it = videoCache.find(mediaPath); it != videoCache.end()) {
         it->second.lastUsed = NextVideoCacheUse();
+        it->second.intervalMs = NormalizeVideoIntervalMs(it->second.intervalMs);
         m_Interval = it->second.intervalMs;
-        EnsureTextureFramesCached(it->second, mediaPath, m_UseAA);
-        const auto &textureFrames = SelectReusableTextureFrames(it->second, m_UseAA);
-        if (!textureFrames.empty()) {
+        if (m_CacheVideoTextures) {
+            EnsureTextureFramesCached(it->second, mediaPath, m_UseAA);
+        }
+        const auto &textureFrames = m_CacheVideoTextures || it->second.surfaces.empty()
+            ? SelectReusableTextureFrames(it->second, m_UseAA)
+            : SelectTextureFrames(it->second, m_UseAA);
+        if (m_CacheVideoTextures && !textureFrames.empty()) {
             m_VideoImageFrames = textureFrames;
         } else {
             m_VideoFrames = it->second.surfaces;
+            if (m_VideoFrames.empty() && !textureFrames.empty()) {
+                m_VideoImageFrames = textureFrames;
+            }
         }
         return !m_VideoImageFrames.empty() || !m_VideoFrames.empty();
     }
@@ -666,10 +743,14 @@ bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
             VideoCache{diskSurfaces, {}, {}, diskIntervalMs, surfaceBytes, surfaceBytes,
                        NextVideoCacheUse()});
         (void) inserted;
-        EnsureTextureFramesCached(cacheIt->second, mediaPath, m_UseAA);
+        if (m_CacheVideoTextures) {
+            EnsureTextureFramesCached(cacheIt->second, mediaPath, m_UseAA);
+        }
         PruneVideoCache(mediaPath);
-        const auto &textureFrames = SelectReusableTextureFrames(cacheIt->second, m_UseAA);
-        if (!textureFrames.empty()) {
+        const auto &textureFrames = m_CacheVideoTextures
+            ? SelectReusableTextureFrames(cacheIt->second, m_UseAA)
+            : SelectTextureFrames(cacheIt->second, m_UseAA);
+        if (m_CacheVideoTextures && !textureFrames.empty()) {
             m_VideoImageFrames = textureFrames;
         } else {
             m_VideoFrames = cacheIt->second.surfaces;
@@ -690,21 +771,28 @@ bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
     const std::size_t frameSizeBytes = static_cast<std::size_t>(frameWidth) *
                                        static_cast<std::size_t>(frameHeight) * 4U;
 
-    // Probe video frame rate (e.g. "60/1" → 60 fps → ~16.67 ms/frame)
-    double intervalMs = 41.0; // default fallback (~24fps)
+    // Probe video frame rate. Some exported sprite WebMs advertise 1000 fps,
+    // which is metadata noise for gameplay animation, so clamp to a sane rate.
+    double intervalMs = 1000.0 / DEFAULT_VIDEO_FPS;
     {
         const std::string fpsCmd =
-            "ffprobe -v error -select_streams v:0 "
-            "-show_entries stream=r_frame_rate "
+            "ffprobe -v quiet -select_streams v:0 "
+            "-show_entries stream=avg_frame_rate,r_frame_rate "
             "-of csv=p=0:s=x " + ShellQuote(mediaPath);
         FILE *fpsPipe = popen(fpsCmd.c_str(), "r");
         if (fpsPipe) {
             char buf[64] = {};
             if (fgets(buf, sizeof(buf), fpsPipe)) {
-                int num = 0, den = 1;
-                if (sscanf(buf, "%d/%d", &num, &den) >= 1 && num > 0) {
-                    if (den <= 0) den = 1;
-                    intervalMs = 1000.0 * static_cast<double>(den) / static_cast<double>(num);
+                std::string rates(buf);
+                std::replace(rates.begin(), rates.end(), 'x', ' ');
+                std::istringstream input(rates);
+                std::string rate;
+                while (input >> rate) {
+                    double fps = 0.0;
+                    if (!ParseFrameRate(rate.c_str(), fps)) continue;
+                    fps = NormalizeVideoFps(fps);
+                    intervalMs = 1000.0 / fps;
+                    break;
                 }
             }
             pclose(fpsPipe);
@@ -742,10 +830,14 @@ bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
         VideoCache{surfaces, {}, {}, intervalMs, surfaceBytes, surfaceBytes,
                    NextVideoCacheUse()});
     (void) inserted;
-    EnsureTextureFramesCached(cacheIt->second, mediaPath, m_UseAA);
+    if (m_CacheVideoTextures) {
+        EnsureTextureFramesCached(cacheIt->second, mediaPath, m_UseAA);
+    }
     PruneVideoCache(mediaPath);
-    const auto &textureFrames = SelectReusableTextureFrames(cacheIt->second, m_UseAA);
-    if (!textureFrames.empty()) {
+    const auto &textureFrames = m_CacheVideoTextures
+        ? SelectReusableTextureFrames(cacheIt->second, m_UseAA)
+        : SelectTextureFrames(cacheIt->second, m_UseAA);
+    if (m_CacheVideoTextures && !textureFrames.empty()) {
         m_VideoImageFrames = textureFrames;
     } else {
         m_VideoFrames = cacheIt->second.surfaces;
@@ -755,6 +847,7 @@ bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
 
 void Animation::ClearDecodedMediaCache() {
     GetVideoCache().clear();
+    GetFailedVideoCache().clear();
     GetVideoCacheBytes() = 0;
 }
 
@@ -818,6 +911,14 @@ void Animation::Play() {
         m_Index = m_IsChangeFrame ? m_Index : 0;
         m_IsChangeFrame = false;
     }
+    m_State = State::PLAY;
+}
+
+void Animation::Restart() {
+    m_Index = 0;
+    m_TimeBetweenFrameUpdate = 0.0;
+    m_CooldownEndTime = 0;
+    m_IsChangeFrame = false;
     m_State = State::PLAY;
 }
 

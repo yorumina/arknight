@@ -116,6 +116,31 @@ void DrawButtonImage(ImDrawList* draw, const std::shared_ptr<Util::Image>& image
         uv1
     );
 }
+
+void DrawButtonImageFit(ImDrawList* draw,
+                        const std::shared_ptr<Util::Image>& image,
+                        const UiRect& rect,
+                        float inset) {
+    if (!image || image->GetTextureId() == 0) return;
+
+    const glm::vec2 size = image->GetSize();
+    if (size.x <= 0.0F || size.y <= 0.0F) return;
+
+    const float availW = std::max(1.0F, rect.maxX - rect.minX - inset * 2.0F);
+    const float availH = std::max(1.0F, rect.maxY - rect.minY - inset * 2.0F);
+    const float scale = std::min(availW / size.x, availH / size.y);
+    const float w = size.x * scale;
+    const float h = size.y * scale;
+    const ImVec2 center = RectCenter(rect);
+
+    draw->AddImage(
+        reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+        {center.x - w * 0.5F, center.y - h * 0.5F},
+        {center.x + w * 0.5F, center.y + h * 0.5F},
+        {0.0F, 0.0F},
+        {1.0F, 1.0F}
+    );
+}
 } // namespace
 
 void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
@@ -302,7 +327,9 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
     const auto ui = ComputeBattleUiLayout(SW, SH);
     const float iconRounding = 4.0F * ui.scale;
     static std::shared_ptr<Util::Image> settingsButtonIcon = LoadHudIcon("Setting.png");
-    static std::shared_ptr<Util::Image> speedButtonIcon = LoadHudIcon("2X.png");
+    static std::shared_ptr<Util::Image> speedButtonIcon1x = LoadHudIcon("1x.png");
+    static std::shared_ptr<Util::Image> speedButtonIcon2x = LoadHudIcon("2X.png");
+    static std::shared_ptr<Util::Image> pauseButtonIcon = LoadHudIcon("pause.png");
 
     // Top-center battle status (enemy count / life point)
     {
@@ -353,8 +380,7 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
 
     // Top-left settings button
     if (settingsButtonIcon) {
-        DrawButtonImage(draw, settingsButtonIcon, ui.settingsButton, 3.0F * ui.scale,
-                        {0.27F, 0.16F}, {0.73F, 0.78F});
+        DrawButtonImageFit(draw, settingsButtonIcon, ui.settingsButton, 0.0F);
     } else {
         DrawTopUiButton(draw, ui.settingsButton, iconRounding, false);
         DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * ui.scale, IM_COL32(242, 246, 252, 255), 2.6F * ui.scale);
@@ -362,13 +388,17 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
 
     // Top-right speed and pause controls
     const bool isDoubleSpeed = m_App.m_GameSpeedMultiplier >= 1.5F;
+    const auto& speedButtonIcon = isDoubleSpeed ? speedButtonIcon2x : speedButtonIcon1x;
     if (speedButtonIcon) {
-        DrawButtonImage(draw, speedButtonIcon, ui.speedButton, 1.0F * ui.scale,
-                        {0.12F, 0.18F}, {0.90F, 0.72F});
+        DrawButtonImageFit(draw, speedButtonIcon, ui.speedButton, 0.0F);
     } else {
         DrawTopUiButton(draw, ui.speedButton, iconRounding, isDoubleSpeed);
     }
-    DrawTopUiButton(draw, ui.pauseButton, iconRounding, m_App.m_GamePaused);
+    if (pauseButtonIcon) {
+        DrawButtonImageFit(draw, pauseButtonIcon, ui.pauseButton, 0.0F);
+    } else {
+        DrawTopUiButton(draw, ui.pauseButton, iconRounding, m_App.m_GamePaused);
+    }
 
     if (!speedButtonIcon) {
         const ImVec2 speedCenter = RectCenter(ui.speedButton);
@@ -379,7 +409,7 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
                      23.0F * ui.scale, 25.0F * ui.scale, IM_COL32(255, 255, 255, 245));
     }
 
-    {
+    if (!pauseButtonIcon) {
         const ImVec2 pauseCenter = RectCenter(ui.pauseButton);
         if (m_App.m_GamePaused) {
             DrawPlayIcon(draw, pauseCenter, 32.0F * ui.scale, 34.0F * ui.scale, IM_COL32(255, 255, 255, 255));
