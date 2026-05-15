@@ -81,7 +81,7 @@ Commands:
   show <file>
 
 Tiles:
-  empty | road | ground | highground | spawn | goal
+  empty | road | ground | highground | unusablehighground | spawn | goal
 
 Path behavior:
   All stage file arguments are automatically mapped to data/levels/.

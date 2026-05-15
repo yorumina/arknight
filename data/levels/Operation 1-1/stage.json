@@ -18,18 +18,18 @@
     "projection_scale_x": 0.92,
     "projection_scale_y": 1.0,
     "projection_skew_x": 0.0,
-    "zoom": 1.0,
+    "zoom": 0.94,
     "min_zoom": 0.75,
     "max_zoom": 1.8,
     "pan_x": 0.0,
     "pan_y": 0.0
   },
   "tiles": [
-    ["highground", "highground", "highground", "highground", "spawn", "highground", "highground", "highground", "highground"],
-    ["highground", "highground", "highground", "highground", "ground", "highground", "highground", "highground", "highground"],
-    ["spawn", "ground", "ground", "ground", "ground", "ground", "ground", "ground", "goal"],
-    ["highground", "highground", "highground", "highground", "highground", "ground", "highground", "highground", "highground"],
-    ["highground", "highground", "highground", "highground", "highground", "goal", "highground", "highground", "highground"]
+    ["unusablehighground", "unusablehighground", "unusablehighground", "highground", "spawn"     , "highground", "highground", "unusablehighground", "unusablehighground"],
+    ["unusablehighground", "unusablehighground", "highground"        , "highground", "ground"    , "highground", "highground", "unusablehighground", "unusablehighground"],
+    ["spawn"             , "ground"            , "ground"            , "ground"    , "ground"    , "ground"    , "ground"    , "ground"            , "goal"              ],
+    ["unusablehighground", "unusablehighground", "unusablehighground", "highground", "highground", "ground"    , "highground", "highground"        , "unusablehighground"],
+    ["unusablehighground", "unusablehighground", "unusablehighground", "highground", "highground", "goal"      , "highground", "unusablehighground", "unusablehighground"]
   ],
   "routes": {
     "main": [

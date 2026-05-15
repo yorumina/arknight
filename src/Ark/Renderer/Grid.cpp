@@ -31,6 +31,10 @@ struct TilePalette {
     ImU32 accent = IM_COL32(210, 218, 230, 140);
 };
 
+bool IsHighgroundVisual(TileType tile) {
+    return tile == TileType::HIGHGROUND || tile == TileType::UNUSABLE_HIGHGROUND;
+}
+
 TilePalette PaletteForTile(TileType tile, bool hasStageArt) {
     const int aBase = hasStageArt ? 150 : 255;
     const int aPanel = hasStageArt ? 116 : 255;
@@ -45,6 +49,7 @@ TilePalette PaletteForTile(TileType tile, bool hasStageArt) {
             IM_COL32(205, 212, 222, hasStageArt ? 110 : 165)
         };
     case TileType::HIGHGROUND:
+    case TileType::UNUSABLE_HIGHGROUND:
         return {
             IM_COL32(118, 125, 142, hasStageArt ? 168 : 255),
             IM_COL32(173, 182, 206, hasStageArt ? 138 : 255),
@@ -175,7 +180,7 @@ void Ark::AppRenderer::DrawGrid() {
                 static_cast<std::size_t>(row) < m_App.m_TileImageMap.size() &&
                 static_cast<std::size_t>(col) < m_App.m_TileImageMap[static_cast<std::size_t>(row)].size() &&
                 !m_App.m_TileImageMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)].empty();
-            const std::shared_ptr<Util::Image> tileImage = (hasTileImagePath && tile != TileType::HIGHGROUND)
+            const std::shared_ptr<Util::Image> tileImage = (hasTileImagePath && !IsHighgroundVisual(tile))
                 ? GetTileImage(m_App.m_TileImageMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)])
                 : nullptr;
             const GLuint tileTexture = tileImage ? tileImage->GetTextureId() : 0;
@@ -209,7 +214,7 @@ void Ark::AppRenderer::DrawGrid() {
                 drawBaseSurface();
             }
 
-            if (tile == TileType::HIGHGROUND) {
+            if (IsHighgroundVisual(tile)) {
                 const ImVec2 u1{q1.x, q1.y - highgroundOffset};
                 const ImVec2 u2{q2.x, q2.y - highgroundOffset};
                 const ImVec2 u3{q3.x, q3.y - highgroundOffset};
@@ -273,7 +278,7 @@ void Ark::AppRenderer::DrawHighgroundTopLayer() {
     for (int row = 0; row < m_App.m_StageHeight; ++row) {
         for (int col = 0; col < m_App.m_StageWidth; ++col) {
             const auto tile = m_App.m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
-            if (tile != TileType::HIGHGROUND) continue;
+            if (!IsHighgroundVisual(tile)) continue;
 
             const float l = layout.topLeftX + col * layout.cellSize + pad;
             const float r = l + layout.cellSize - 2.0F * pad;

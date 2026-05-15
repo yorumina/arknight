@@ -103,6 +103,19 @@ void DrawIconImage(ImDrawList* draw, const std::shared_ptr<Util::Image>& image,
         {center.x + w * 0.5F, center.y + h * 0.5F}
     );
 }
+
+void DrawButtonImage(ImDrawList* draw, const std::shared_ptr<Util::Image>& image,
+                     const UiRect& rect, float inset, const ImVec2& uv0, const ImVec2& uv1) {
+    if (!image || image->GetTextureId() == 0) return;
+
+    draw->AddImage(
+        reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+        {rect.minX + inset, rect.minY + inset},
+        {rect.maxX - inset, rect.maxY - inset},
+        uv0,
+        uv1
+    );
+}
 } // namespace
 
 void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
@@ -288,6 +301,8 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
     const float SH = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
     const auto ui = ComputeBattleUiLayout(SW, SH);
     const float iconRounding = 4.0F * ui.scale;
+    static std::shared_ptr<Util::Image> settingsButtonIcon = LoadHudIcon("Setting.png");
+    static std::shared_ptr<Util::Image> speedButtonIcon = LoadHudIcon("2X.png");
 
     // Top-center battle status (enemy count / life point)
     {
@@ -337,15 +352,25 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
     }
 
     // Top-left settings button
-    DrawTopUiButton(draw, ui.settingsButton, iconRounding, false);
-    DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * ui.scale, IM_COL32(242, 246, 252, 255), 2.6F * ui.scale);
+    if (settingsButtonIcon) {
+        DrawButtonImage(draw, settingsButtonIcon, ui.settingsButton, 3.0F * ui.scale,
+                        {0.27F, 0.16F}, {0.73F, 0.78F});
+    } else {
+        DrawTopUiButton(draw, ui.settingsButton, iconRounding, false);
+        DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * ui.scale, IM_COL32(242, 246, 252, 255), 2.6F * ui.scale);
+    }
 
     // Top-right speed and pause controls
     const bool isDoubleSpeed = m_App.m_GameSpeedMultiplier >= 1.5F;
-    DrawTopUiButton(draw, ui.speedButton, iconRounding, isDoubleSpeed);
+    if (speedButtonIcon) {
+        DrawButtonImage(draw, speedButtonIcon, ui.speedButton, 1.0F * ui.scale,
+                        {0.12F, 0.18F}, {0.90F, 0.72F});
+    } else {
+        DrawTopUiButton(draw, ui.speedButton, iconRounding, isDoubleSpeed);
+    }
     DrawTopUiButton(draw, ui.pauseButton, iconRounding, m_App.m_GamePaused);
 
-    {
+    if (!speedButtonIcon) {
         const ImVec2 speedCenter = RectCenter(ui.speedButton);
         const std::string speedText = isDoubleSpeed ? "2X" : "1X";
         AddCenteredText(draw, {speedCenter.x, ui.speedButton.minY + 30.0F * ui.scale},

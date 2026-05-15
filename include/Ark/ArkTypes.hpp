@@ -6,7 +6,7 @@
 namespace Ark {
 
 // ── Tile / Deploy ───────────────────────────────────────────
-enum class TileType { EMPTY = 0, ROAD, GROUND, HIGHGROUND, SPAWN, GOAL };
+enum class TileType { EMPTY = 0, ROAD, GROUND, HIGHGROUND, UNUSABLE_HIGHGROUND, SPAWN, GOAL };
 enum class DeployType { GROUND_ONLY = 0, HIGHGROUND_ONLY };
 
 // ── Stage data ───────────────────────────────────────────────

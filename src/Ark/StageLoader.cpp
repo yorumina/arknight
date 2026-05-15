@@ -44,6 +44,7 @@ Ark::TileType ParseTile(const std::string& s) {
     if (s == "road")       return Ark::TileType::ROAD;
     if (s == "ground")     return Ark::TileType::GROUND;
     if (s == "highground") return Ark::TileType::HIGHGROUND;
+    if (s == "unusablehighground") return Ark::TileType::UNUSABLE_HIGHGROUND;
     if (s == "spawn")      return Ark::TileType::SPAWN;
     if (s == "goal")       return Ark::TileType::GOAL;
     return Ark::TileType::EMPTY;

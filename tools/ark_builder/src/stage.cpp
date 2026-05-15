@@ -9,7 +9,7 @@ namespace ark_builder {
 
 auto IsKnownTile(const std::string& tile) -> bool {
     static const std::vector<std::string> kAllowedTiles{
-        "empty", "road", "ground", "highground", "spawn", "goal",
+        "empty", "road", "ground", "highground", "unusablehighground", "spawn", "goal",
     };
     return std::find(kAllowedTiles.begin(), kAllowedTiles.end(), tile) !=
            kAllowedTiles.end();

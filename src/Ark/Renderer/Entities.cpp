@@ -87,14 +87,15 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         bool isHigh = (opType.deployType == DeployType::HIGHGROUND_ONLY);
         if (isHigh != drawHighgroundOnly) continue;
         float yOff  = isHigh ? layout.cellSize * 0.22F : 0.0F;
+        const float operatorVisualLift = layout.cellSize * 0.18F;
 
         auto center0 = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(op.cell)));
-        ImVec2 center = {center0.x, center0.y - yOff};
+        ImVec2 center = {center0.x, center0.y - yOff - operatorVisualLift};
 
         // Body quad
         auto q = [&](glm::vec2 off) {
             ImVec2 v = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(op.cell) + off));
-            v.y -= yOff;
+            v.y -= yOff + operatorVisualLift;
             return v;
         };
         float hs = 0.30F;
@@ -145,7 +146,7 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         if (op.id == m_App.m_SelectedOperatorId) {
             glm::vec2 dirOff = glm::vec2(op.direction.x, op.direction.y) * 0.5F;
             ImVec2 dirPt = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(op.cell) + dirOff));
-            dirPt.y -= yOff;
+            dirPt.y -= yOff + operatorVisualLift;
             draw->AddLine(center, dirPt, IM_COL32(255, 50, 50, 255), 3.5F);
         }
 

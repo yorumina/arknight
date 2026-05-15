@@ -64,8 +64,8 @@ inline BattleUiLayout ComputeBattleUiLayout(float screenW, float screenH) {
     const float margin = 22.0F * layout.scale;
     const float top = 20.0F * layout.scale;
     const float buttonHeight = 110.0F * layout.scale;
-    const float settingsSize = 122.0F * layout.scale;
-    const float speedWidth = 118.0F * layout.scale;
+    const float settingsSize = 150.0F * layout.scale;
+    const float speedWidth = 150.0F * layout.scale;
     const float pauseWidth = 118.0F * layout.scale;
     const float gap = 8.0F * layout.scale;
 
