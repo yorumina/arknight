@@ -1,0 +1,21 @@
+{
+  "id": "Myrtle",
+  "name": "桃金娘",
+  "class": "vanguard",
+  "cost": 8,
+  "hp": 1654.0,
+  "damage": 508.0,
+  "def": 400.0,
+  "attackIntervalMs": 1000.0,
+  "blockCount": 1,
+  "magicResistance": 0,
+  "deployType": "ground",
+  "isVanguard": true,
+  "maxSp": 22.0,
+  "initialSp": 13.0,
+  "skillDuration": 8000.0,
+  "skill": {
+    "name": "後勤支援",
+    "description": "部屬後:技能條設定為13，每秒回復1點技能點，到達22滿技能可手動開啟。技能持續8秒，開啟瞬間回復6點部屬費用，技能期間阻擋數為0。當她在場時，所有先鋒幹員每秒回復33點生命。"
+  }
+}

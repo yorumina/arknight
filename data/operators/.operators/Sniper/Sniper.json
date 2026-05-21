@@ -1,0 +1,17 @@
+{
+  "id": "Sniper",
+  "name": "Sniper",
+  "class": "sniper",
+  "cost": 11,
+  "hp": 1200.0,
+  "damage": 500.0,
+  "def": 150.0,
+  "attackIntervalMs": 1000.0,
+  "blockCount": 0,
+  "magicResistance": 0,
+  "deployType": "highground",
+  "isVanguard": false,
+  "maxSp": 0.0,
+  "initialSp": 0.0,
+  "skillDuration": 0.0
+}
