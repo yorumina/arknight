@@ -1,72 +1,138 @@
-# Arknight Demo
+# Arknight Linux
 
-This repository contains an Arknight-style gameplay prototype built on top of the `PTSD` framework.
+English | [Traditional Chinese](README_zh-tw.md)
+
+`Arknight Linux` is an Arknights-style 2D tower-defense prototype built with C++17 and the `PTSD` framework. It includes tile-based stages, enemy waves, operator deployment, DP/LP systems, animated operators/enemies, pause/speed controls, and JSON-driven game data.
 
 ## Requirements
 
 - CMake 3.16+
-- A C++17 compiler (MSVC / Clang / GCC)
+- A C++17 compiler: GCC, Clang, or MSVC
+- Git
+- OpenGL-capable runtime
+- FFmpeg tools are recommended for animation asset conversion and cache generation workflows
 
-## Build and Run
+## Build
 
-1. Clone with submodules:
+Clone with submodules:
+
 ```bash
 git clone --recurse-submodules <your-repo-url>
 cd Arknight_Linux
 ```
 
-2. Configure and build:
+Configure and build the game:
+
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --target Arknight
 ```
 
-3. Run:
-- Linux/macOS
+Build the stage builder CLI:
+
+```bash
+cmake --build build --target ArknightBuilder
+```
+
+## Run
+
+Linux/macOS:
+
 ```bash
 ./build/Arknight
 ```
-- Windows
+
+Windows:
+
 ```powershell
 .\build\Arknight.exe
 ```
 
 ## Controls
 
-- `Left Mouse Button`: deploy operator
-- `1`: select Vanguard (ground only)
-- `2`: select Sniper (highground only)
-- `SPACE`: start wave
-- `R`: restart demo
-- `ESC`: exit
+- `Left Mouse Button`: select UI buttons, drag operators from the bar, and confirm deployment direction
+- `Right Mouse Button`: cancel deployment or retreat a deployed operator
+- `SPACE`: start the next wave while waiting before combat
+- `R`: restart the current demo
+- `ESC`: open quit confirmation or exit
+- Top-right `1X` / `2X` button: toggle game speed
+- Top-right pause button: pause or resume
 
 ## Data Layout
 
-Gameplay data is now stored under:
+Game data lives under `data/`:
 
-- `data/levels`
-- `data/enemy`
-- `data/operators`
+- `data/levels`: stage JSON files and stage-specific images
+- `data/enemy`: enemy JSON files and enemy animation clips
+- `data/operators`: operator JSON files and operator animation/image assets
+- `data/levels_pic`: HUD and level UI images
 
-The demo tries stage files such as:
+Common stage paths:
 
-1. `data/levels/test.json`
-2. `data/levels/tutorial_1.json`
+- `data/levels/test.json`
+- `data/levels/tutorial_1.json`
+- `data/levels/Operation 1-1/stage.json`
+- `data/levels/Operation 1-2/stage.json`
+
+## Animation Cache
+
+Animations are decoded on demand and can use a disk cache to avoid doing expensive conversion work every time the game starts.
+
+Useful environment variables:
+
+- `ARKNIGHT_ANIMATION_CACHE_MB=768`: set the in-memory animation cache limit in MB
+- `ARKNIGHT_ANIMATION_CACHE_MB=0`: disable the memory cache limit
+- `ARKNIGHT_ANIMATION_DISK_CACHE=0`: disable the disk cache
+- `ARKNIGHT_ANIMATION_DISK_CACHE_DIR=/path/to/cache`: choose a custom cache directory
+- `ARKNIGHT_ANIMATION_PRELOAD=1`: preload and build all known animation cache entries for one run
+- `ARKNIGHT_ENEMY_ANIMATION_PRELOAD=1`: preload enemy animation clips only
+- `ARKNIGHT_GPU_ADAPTER=auto|nvidia|amd|intel`: hint the preferred GPU adapter before the window is created
+
+Recommended workflow:
+
+```bash
+ARKNIGHT_ANIMATION_PRELOAD=1 ./build/Arknight
+```
+
+After the cache is built once, start the game normally for faster startup and lower memory use.
 
 ## ArknightBuilder
 
-Build the builder:
-```bash
-cmake --build build --target ArknightBuilder
-```
+`ArknightBuilder` is a CLI helper for creating, editing, validating, and simulating stage JSON files.
 
-Example:
+Examples:
+
 ```bash
 ./build/ArknightBuilder validate tutorial_1.json
+./build/ArknightBuilder show tutorial_1.json
+./build/ArknightBuilder simulate tutorial_1.json --duration 60
 ```
 
-`ArknightBuilder` now auto-maps stage file arguments to `data/levels/`.
+Stage file arguments are automatically mapped to `data/levels/`, so `tutorial_1.json` resolves to `data/levels/tutorial_1.json`.
+
 Detailed builder documentation:
 
-- English: `docs/arknightbuilder/README.md`
-- Traditional Chinese: `docs/arknightbuilder/README_zh-tw.md`
+- [English](docs/arknightbuilder/README.md)
+- [Traditional Chinese](docs/arknightbuilder/README_zh-tw.md)
+
+## Asset Helpers
+
+Generate flipped WebM front-facing operator assets:
+
+```bash
+./tools/generate_flipped_front.sh
+```
+
+APNG assets can be flipped manually with FFmpeg:
+
+```bash
+ffmpeg -hide_banner -loglevel error -y -i input.apng -vf hflip -plays 0 output.apng
+```
+
+## Project Layout
+
+- `src/`: game runtime implementation
+- `include/`: public headers
+- `tools/ark_builder/`: `ArknightBuilder` source
+- `PTSD/`: framework and bundled dependencies
+- `docs/`: project documentation

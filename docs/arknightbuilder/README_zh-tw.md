@@ -1,6 +1,8 @@
 # ArknightBuilder
 
-`ArknightBuilder` 是用來建立與驗證關卡的命令列工具。
+[English](README.md) | 繁體中文
+
+`ArknightBuilder` 是 `Arknight Linux` 的命令列關卡製作工具。它可以建立與修改關卡 JSON、驗證路線/出生波次/敵人資料，也能在不啟動完整遊戲的情況下做簡單關卡模擬。
 
 ## 建置
 
@@ -11,21 +13,29 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --target ArknightBuilder
 ```
 
-執行：
+查看說明：
 
 ```bash
 ./build/ArknightBuilder --help
 ```
 
-## 資料夾結構
+## 資料目錄
 
-專案資料已統一放在：
+工具預期專案資料放在 `data/`：
 
-- `data/levels`
-- `data/enemy`
-- `data/operators`
+- `data/levels`：關卡 JSON 與關卡圖片
+- `data/enemy`：敵人定義與動畫資料夾
+- `data/operators`：幹員定義與動畫/圖片資料夾
 
-## 指令格式
+關卡檔參數會自動映射到 `data/levels/`。
+
+範例：
+
+- `tutorial_1.json` 會解析成 `data/levels/tutorial_1.json`
+- `Operation 1-2/stage.json` 會解析成 `data/levels/Operation 1-2/stage.json`
+- 舊路徑如 `tools/ark_builder/levels/...` 仍可輸入，工具會自動轉換
+
+## 指令
 
 ```bash
 ArknightBuilder new <file> --name <name> --width <w> --height <h>
@@ -38,14 +48,9 @@ ArknightBuilder simulate <file> [--duration <sec>]
 ArknightBuilder show <file>
 ```
 
-關卡檔路徑規則：
-
-- 所有關卡檔參數都會自動映射到 `data/levels/`。
-- 舊路徑（例如 `tools/ark_builder/levels/...`）仍可輸入，工具會自動轉換。
-
 ## 快速開始
 
-使用現成範例關卡：
+驗證並查看現有關卡：
 
 ```bash
 ./build/ArknightBuilder validate tutorial_1.json
@@ -53,7 +58,7 @@ ArknightBuilder show <file>
 ./build/ArknightBuilder simulate tutorial_1.json --duration 60
 ```
 
-建立新關卡：
+建立一個小型直線關卡：
 
 ```bash
 ./build/ArknightBuilder new stage_01.json --name stage_01 --width 16 --height 10
@@ -66,11 +71,32 @@ ArknightBuilder show <file>
 ./build/ArknightBuilder validate stage_01.json
 ```
 
+產生的檔案會寫入 `data/levels/stage_01.json`。
+
 ## 地形類型
 
-- `empty`：空地
-- `road`：道路
-- `ground`：地面
-- `highground`：高台
-- `spawn`：出生點
-- `goal`：終點
+- `empty`：未使用格
+- `road`：敵人路線格
+- `ground`：地面幹員部署格
+- `highground`：高台幹員部署格
+- `unusablehighground`：不可部署的高台格
+- `spawn`：敵人入口
+- `goal`：敵人出口
+
+## 路線格式
+
+路線點使用 `x,y` 座標。若要讓敵人在某一點等待，可以在該點後面加上 `:wait`。
+
+範例：
+
+```bash
+./build/ArknightBuilder route-set stage_01.json main 0,4 1,4 2,4:1.0 3,4
+```
+
+## 驗證
+
+`validate` 會檢查關卡結構，讓你在遊戲載入前先發現資料問題。手動編輯關卡或使用 builder 指令後，建議都跑一次：
+
+```bash
+./build/ArknightBuilder validate Operation\ 1-2/stage.json
+```

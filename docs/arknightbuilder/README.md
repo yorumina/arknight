@@ -1,17 +1,19 @@
 # ArknightBuilder
 
-`ArknightBuilder` is a CLI tool for stage authoring and validation.
+English | [Traditional Chinese](README_zh-tw.md)
+
+`ArknightBuilder` is the command-line stage authoring tool for `Arknight Linux`. It creates and edits stage JSON, validates routes/spawns/enemies, and runs simple stage simulations without launching the full game.
 
 ## Build
 
-From repository root:
+From the repository root:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --target ArknightBuilder
 ```
 
-Run from repository root:
+Show help:
 
 ```bash
 ./build/ArknightBuilder --help
@@ -19,13 +21,21 @@ Run from repository root:
 
 ## Data Layout
 
-Project data now lives under:
+The tool expects project data under `data/`:
 
-- `data/levels`
-- `data/enemy`
-- `data/operators`
+- `data/levels`: stage JSON and stage-specific images
+- `data/enemy`: enemy definitions and animation folders
+- `data/operators`: operator definitions and animation/image folders
 
-## Command Syntax
+Stage file arguments are mapped to `data/levels/` automatically.
+
+Examples:
+
+- `tutorial_1.json` resolves to `data/levels/tutorial_1.json`
+- `Operation 1-2/stage.json` resolves to `data/levels/Operation 1-2/stage.json`
+- Legacy paths such as `tools/ark_builder/levels/...` are accepted and remapped
+
+## Commands
 
 ```bash
 ArknightBuilder new <file> --name <name> --width <w> --height <h>
@@ -38,14 +48,9 @@ ArknightBuilder simulate <file> [--duration <sec>]
 ArknightBuilder show <file>
 ```
 
-Stage-file path behavior:
-
-- All stage file arguments are automatically mapped to `data/levels/`.
-- Legacy prefixes such as `tools/ark_builder/levels/...` are accepted and remapped.
-
 ## Quickstart
 
-Use built-in sample stage:
+Validate and inspect an existing stage:
 
 ```bash
 ./build/ArknightBuilder validate tutorial_1.json
@@ -53,7 +58,7 @@ Use built-in sample stage:
 ./build/ArknightBuilder simulate tutorial_1.json --duration 60
 ```
 
-Create and edit a new stage:
+Create a small linear stage:
 
 ```bash
 ./build/ArknightBuilder new stage_01.json --name stage_01 --width 16 --height 10
@@ -66,11 +71,32 @@ Create and edit a new stage:
 ./build/ArknightBuilder validate stage_01.json
 ```
 
+The generated file is written under `data/levels/stage_01.json`.
+
 ## Tile Types
 
-- `empty`
-- `road`
-- `ground`
-- `highground`
-- `spawn`
-- `goal`
+- `empty`: unused tile
+- `road`: enemy path tile
+- `ground`: ground operator deployment tile
+- `highground`: highground operator deployment tile
+- `unusablehighground`: blocked highground tile
+- `spawn`: enemy entry tile
+- `goal`: enemy exit tile
+
+## Route Format
+
+Route points use `x,y` coordinates. Add `:wait` after a point to make enemies pause at that point.
+
+Example:
+
+```bash
+./build/ArknightBuilder route-set stage_01.json main 0,4 1,4 2,4:1.0 3,4
+```
+
+## Validation
+
+`validate` checks the stage structure and reports authoring problems before the game loads the file. Run it after editing a stage by hand or after using the builder commands:
+
+```bash
+./build/ArknightBuilder validate Operation\ 1-2/stage.json
+```
