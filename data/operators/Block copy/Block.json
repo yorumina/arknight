@@ -1,0 +1,17 @@
+{
+  "id": "Block",
+  "name": "Block",
+  "class": "vanguard",
+  "cost": 0,
+  "hp": 99999999.0,
+  "damage": 0.0,
+  "def": 999999999.0,
+  "attackIntervalMs": 1000.0,
+  "blockCount": 99999999,
+  "magicResistance": 0,
+  "deployType": "ground",
+  "isVanguard": false,
+  "maxSp": 0.0,
+  "initialSp": 0.0,
+  "skillDuration": 0.0
+}

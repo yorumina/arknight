@@ -83,8 +83,9 @@ void App::ResetDemo() {
     m_FinishExitRequested = false;
     m_FinishExitTimerMs = 0.0F;
 
-    m_DP          = 12.0F;
-    m_LifePoint   = 3;
+    m_DP          = 10.0F;
+    m_DPRegenTimerMs = 0.0F;
+    m_LifePoint   = 10;
     m_KillCount   = 0;
 
     m_SelectedOperatorType = 0;
@@ -574,6 +575,7 @@ void App::StartWave() {
     m_WaveElapsedSec = 0.0F;
     m_NextSpawnIndex = 0;
     m_SpawnedWaveUnits = 0;
+    m_DPRegenTimerMs = 0.0F;
     m_CurrentWave    = 0;
     m_Enemies.clear();
     m_Beams.clear();
@@ -654,9 +656,16 @@ void App::UpdateGame(float dtMs) {
         return;
     }
 
-    // DP regen only while wave is running
+    // DP regenerates in visible 1-second ticks. UpdateGame already receives
+    // speed-scaled dt, so 2x speed completes a tick in 0.5 real seconds.
     if (m_WaveRunning) {
-        m_DP = std::min(m_MaxDP, m_DP + m_DPRegenPerSec * dtMs / 1000.0F);
+        m_DPRegenTimerMs += dtMs * std::max(0.0F, m_DPRegenPerSec);
+        while (m_DPRegenTimerMs >= 1000.0F) {
+            m_DP = std::min(m_MaxDP, m_DP + 1.0F);
+            m_DPRegenTimerMs -= 1000.0F;
+        }
+    } else {
+        m_DPRegenTimerMs = 0.0F;
     }
 
     const float dtSec = dtMs / 1000.0F;

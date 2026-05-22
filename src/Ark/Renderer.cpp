@@ -25,7 +25,7 @@ constexpr ImU32 COLOR_GOAL_SIDE        = IM_COL32( 35,  84, 165, 140);
 constexpr ImU32 COLOR_TEXT_MAIN = IM_COL32(236, 240, 245, 255);
 constexpr ImU32 COLOR_TEXT_SUB  = IM_COL32(173, 183, 198, 255);
 
-constexpr int   MAX_OPS         = 12;
+constexpr int   MAX_OPS         = 8;
 constexpr float BEAM_DURATION_MS = 120.0F;
 constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
 constexpr int   BAGPIPE_MAX_CHARGES = 3;
@@ -973,7 +973,7 @@ void Ark::AppRenderer::DrawDeploymentInfo(float screenW, float screenH) {
     // Remaining deployable operator count
     int deployed = static_cast<int>(m_App.m_Operators.size());
     int remaining = MAX_OPS - deployed;
-    const std::string deployStr = u8"剩餘可放置角色: " + std::to_string(remaining);
+    const std::string deployStr = u8"剩餘可部屬角色: " + std::to_string(remaining);
     draw->AddText({px + 10.0F, py + 30.0F},
                   IM_COL32(180, 190, 210, 220), deployStr.c_str());
 }

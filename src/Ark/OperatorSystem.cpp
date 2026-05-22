@@ -11,7 +11,7 @@
 using namespace Ark;
 
 namespace {
-constexpr int   MAX_OPS          = 12;
+constexpr int   MAX_OPS          = 8;
 constexpr float BEAM_DURATION_MS = 120.0F;
 constexpr float KILL_REWARD_DP   = 1.5F;
 constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;

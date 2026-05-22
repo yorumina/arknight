@@ -16,7 +16,7 @@ inline constexpr ImU32 COLOR_GOAL_SIDE        = IM_COL32(35, 84, 165, 140);
 inline constexpr ImU32 COLOR_TEXT_MAIN        = IM_COL32(236, 240, 245, 255);
 inline constexpr ImU32 COLOR_TEXT_SUB         = IM_COL32(173, 183, 198, 255);
 
-inline constexpr int MAX_OPS = 12;
+inline constexpr int MAX_OPS = 8;
 inline constexpr float BEAM_DURATION_MS = 120.0F;
 inline constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
 inline constexpr int BAGPIPE_MAX_CHARGES = 3;

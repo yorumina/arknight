@@ -25,7 +25,7 @@
 using namespace Ark;
 
 namespace {
-constexpr int   MAX_OPS          = 12;
+constexpr int   MAX_OPS          = 8;
 constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
 
 // Bottom operator bar layout constants (screen-space)
@@ -272,6 +272,12 @@ void App::Update() {
                 for (int i = 0; i < opCount; ++i) {
                     if (!IsOperatorTypeOnField(i)) displayOps.push_back(i);
                 }
+                std::stable_sort(displayOps.begin(), displayOps.end(),
+                                 [this](int lhs, int rhs) {
+                                     const auto& a = m_OperatorTemplates.at(static_cast<std::size_t>(lhs));
+                                     const auto& b = m_OperatorTemplates.at(static_cast<std::size_t>(rhs));
+                                     return a.cost < b.cost;
+                                 });
                 
                 const int dispCount = static_cast<int>(displayOps.size());
                 const float totalW = dispCount * OP_CARD_WIDTH + (dispCount - 1) * OP_CARD_SPACING;

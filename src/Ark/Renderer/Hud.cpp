@@ -17,16 +17,41 @@ ImVec2 RectCenter(const UiRect& rect) {
     return {(rect.minX + rect.maxX) * 0.5F, (rect.minY + rect.maxY) * 0.5F};
 }
 
+ImFont* FontForSize(float fontSize) {
+    ImGuiIO& io = ImGui::GetIO();
+    ImFont* best = io.FontDefault != nullptr ? io.FontDefault : ImGui::GetFont();
+    float bestDiff = std::abs((best != nullptr ? best->FontSize : fontSize) - fontSize);
+    for (ImFont* font : io.Fonts->Fonts) {
+        if (font == nullptr) continue;
+        const float diff = std::abs(font->FontSize - fontSize);
+        if (diff < bestDiff) {
+            best = font;
+            bestDiff = diff;
+        }
+    }
+    return best != nullptr ? best : ImGui::GetFont();
+}
+
 ImVec2 MeasureText(const char* text, float fontSize) {
-    ImFont* font = ImGui::GetFont();
+    fontSize = std::round(fontSize);
+    ImFont* font = FontForSize(fontSize);
     return font->CalcTextSizeA(fontSize, std::numeric_limits<float>::max(), 0.0F, text);
+}
+
+void AddTextAt(ImDrawList* draw, const ImVec2& pos, float fontSize, ImU32 color, const char* text) {
+    fontSize = std::round(fontSize);
+    const ImVec2 snapped{std::round(pos.x), std::round(pos.y)};
+    draw->AddText(FontForSize(fontSize), fontSize, snapped, color, text);
 }
 
 void AddCenteredText(ImDrawList* draw, const ImVec2& center, float fontSize, ImU32 color, const char* text) {
     const ImVec2 size = MeasureText(text, fontSize);
-    draw->AddText(ImGui::GetFont(), fontSize,
-                  {center.x - size.x * 0.5F, center.y - size.y * 0.5F},
-                  color, text);
+    AddTextAt(draw, {center.x - size.x * 0.5F, center.y - size.y * 0.5F}, fontSize, color, text);
+}
+
+void AddStrongText(ImDrawList* draw, const ImVec2& pos, float fontSize, ImU32 color, const char* text) {
+    AddTextAt(draw, {pos.x + 1.0F, pos.y}, fontSize, color, text);
+    AddTextAt(draw, pos, fontSize, color, text);
 }
 
 void DrawTopUiButton(ImDrawList* draw, const UiRect& rect, float rounding, bool highlighted) {
@@ -154,6 +179,12 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
     for (int i = 0; i < opCount; ++i) {
         if (!m_App.IsOperatorTypeOnField(i)) displayOps.push_back(i);
     }
+    std::stable_sort(displayOps.begin(), displayOps.end(),
+                     [this](int lhs, int rhs) {
+                         const auto& a = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(lhs));
+                         const auto& b = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(rhs));
+                         return a.cost < b.cost;
+                     });
     const int dispCount = static_cast<int>(displayOps.size());
     if (dispCount <= 0) return;
 
@@ -290,34 +321,79 @@ void Ark::AppRenderer::DrawOperatorDetails(const Ark::OperatorTemplate& t, const
 // ── Compact right-side deployment info (DP + deployable count) ───────────────
 void Ark::AppRenderer::DrawDeploymentInfo(float screenW, float screenH) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    static std::shared_ptr<Util::Image> dpIcon = LoadHudIcon("DP.png");
 
-    // Position: bottom-right, just above the operator bar
-    const float panelW = 180.0F;
-    const float panelH = 50.0F;
-    const float px = screenW - panelW - 12.0F;
-    const float py = screenH - OP_BAR_HEIGHT - panelH - 12.0F;
+    const float scale = ComputeBattleUiLayout(screenW, screenH).scale;
+    const float right = screenW - 36.0F * scale;
+    const float labelH = 34.0F * scale;
+    const float labelY = screenH - OP_BAR_HEIGHT - labelH - 14.0F * scale;
+    const float dpBgX = right - 180.0F * scale;
+    const float dpBgY = labelY - 73.0F * scale;
+    const float dpBgH = 58.0F * scale;
+    const float dpBgRight = right;
+    const int deployed = static_cast<int>(m_App.m_Operators.size());
+    const int remaining = std::max(0, MAX_OPS - deployed);
+    const char* label = u8"剩餘可部屬角色：";
+    const std::string remainingStr = std::to_string(remaining);
+    const float textSize = 24.0F * scale;
+    const ImVec2 labelSize = MeasureText(label, textSize);
+    const ImVec2 remainingSize = MeasureText(remainingStr.c_str(), textSize);
+    const float contentW = labelSize.x + remainingSize.x;
+    const float contentX = right - contentW - 18.0F * scale;
+    const float labelPanelX = contentX - 4.0F * scale;
 
-    // Panel background
-    draw->AddRectFilled({px, py}, {px + panelW, py + panelH},
-                        IM_COL32(15, 18, 28, 220), 6.0F);
-    draw->AddRect({px, py}, {px + panelW, py + panelH},
-                  IM_COL32(70, 80, 100, 180), 6.0F);
+    draw->AddRectFilled({dpBgX, dpBgY}, {dpBgRight, dpBgY + dpBgH}, IM_COL32(26, 28, 32, 146));
+    draw->AddRectFilledMultiColor({dpBgX, dpBgY}, {dpBgRight, dpBgY + dpBgH},
+                                  IM_COL32(44, 48, 54, 138), IM_COL32(16, 18, 23, 112),
+                                  IM_COL32(16, 18, 23, 112), IM_COL32(44, 48, 54, 138));
 
-    // DP display (like the screenshot: coin icon + number)
+    draw->AddRectFilled({labelPanelX, labelY}, {right, labelY + labelH}, IM_COL32(19, 21, 27, 184));
+    draw->AddRectFilledMultiColor(
+        {labelPanelX, labelY},
+        {right, labelY + labelH},
+        IM_COL32(26, 28, 35, 178),
+        IM_COL32(14, 16, 23, 150),
+        IM_COL32(14, 16, 23, 150),
+        IM_COL32(26, 28, 35, 178)
+    );
+
+    const float iconSize = 56.0F * scale;
+    const float iconX = dpBgX + 17.0F * scale;
+    const float iconY = dpBgY - 4.0F * scale;
+    if (dpIcon && dpIcon->GetTextureId() != 0) {
+        draw->AddImage(
+            reinterpret_cast<void*>(static_cast<intptr_t>(dpIcon->GetTextureId())),
+            {iconX, iconY},
+            {iconX + iconSize, iconY + iconSize}
+        );
+    } else {
+        const ImVec2 center{iconX + iconSize * 0.5F, iconY + iconSize * 0.5F};
+        draw->AddQuadFilled({center.x, center.y - 31.0F * scale},
+                            {center.x + 31.0F * scale, center.y},
+                            {center.x, center.y + 31.0F * scale},
+                            {center.x - 31.0F * scale, center.y},
+                            IM_COL32(248, 248, 248, 255));
+        AddCenteredText(draw, center, 40.0F * scale, IM_COL32(0, 0, 0, 255), "C");
+    }
+
     const std::string dpStr = std::to_string(static_cast<int>(m_App.m_DP));
-    draw->AddText(nullptr, 18.0F,
-        {px + 10.0F, py + 6.0F},
-        IM_COL32(255, 220, 100, 255), "DP");
-    draw->AddText(nullptr, 22.0F,
-        {px + 38.0F, py + 4.0F},
-        IM_COL32(255, 255, 255, 255), dpStr.c_str());
+    AddStrongText(draw, {dpBgX + 72.0F * scale, dpBgY - 1.0F * scale},
+                  56.0F * scale, IM_COL32(250, 250, 250, 255), dpStr.c_str());
 
-    // Remaining deployable operator count
-    int deployed = static_cast<int>(m_App.m_Operators.size());
-    int remaining = MAX_OPS - deployed;
-    const std::string deployStr = u8"剩餘可放置角色: " + std::to_string(remaining);
-    draw->AddText({px + 10.0F, py + 30.0F},
-                  IM_COL32(180, 190, 210, 220), deployStr.c_str());
+    const float lineY = dpBgY + dpBgH + 5.0F * scale;
+    const float lineH = 5.0F * scale;
+    const float regenProgress = std::clamp(m_App.m_DPRegenTimerMs / 1000.0F, 0.0F, 1.0F);
+    draw->AddRectFilled({dpBgX, lineY}, {dpBgRight, lineY + lineH}, IM_COL32(35, 38, 43, 214));
+    draw->AddRectFilled({dpBgX, lineY},
+                        {dpBgX + (dpBgRight - dpBgX) * regenProgress, lineY + lineH},
+                        IM_COL32(255, 255, 255, 255));
+
+    const float textY = labelY + (labelH - textSize) * 0.5F - 2.0F * scale;
+
+    AddStrongText(draw, {contentX, textY},
+                  textSize, IM_COL32(250, 250, 250, 245), label);
+    AddStrongText(draw, {contentX + labelSize.x, textY},
+                  textSize, IM_COL32(250, 250, 250, 245), remainingStr.c_str());
 }
 
 void Ark::AppRenderer::DrawHUD(float screenW) {
@@ -336,36 +412,43 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
         static std::shared_ptr<Util::Image> enemyNumberIcon = LoadHudIcon("enemy_number.png");
         static std::shared_ptr<Util::Image> lifePointIcon = LoadHudIcon("life_point.png");
 
-        const float panelW = 460.0F * ui.scale;
-        const float panelH = 52.0F * ui.scale;
+        const float panelW = 520.0F * ui.scale;
+        const float panelH = 58.0F * ui.scale;
         const float px = SW * 0.5F - panelW * 0.5F;
-        const float py = 10.0F * ui.scale;
+        const float py = 15.0F * ui.scale;
 
-        draw->AddRectFilled({px, py}, {px + panelW, py + panelH}, IM_COL32(46, 47, 44, 179), 3.0F * ui.scale);
-        draw->AddRect({px, py}, {px + panelW, py + panelH}, IM_COL32(96, 104, 122, 170), 3.0F * ui.scale, 0, 1.0F);
+        draw->AddRectFilled({px, py}, {px + panelW, py + panelH}, IM_COL32(38, 40, 42, 176));
+        draw->AddRectFilledMultiColor({px, py}, {px + panelW, py + panelH},
+                                      IM_COL32(55, 58, 62, 145), IM_COL32(36, 38, 43, 160),
+                                      IM_COL32(36, 38, 43, 160), IM_COL32(55, 58, 62, 145));
 
-        draw->AddLine({px + 180.0F * ui.scale, py + 7.0F * ui.scale},
-                      {px + 180.0F * ui.scale, py + panelH - 7.0F * ui.scale},
-                      IM_COL32(105, 114, 132, 160), 1.5F);
-        draw->AddLine({px + 310.0F * ui.scale, py + 7.0F * ui.scale},
-                      {px + 310.0F * ui.scale, py + panelH - 7.0F * ui.scale},
-                      IM_COL32(105, 114, 132, 160), 1.5F);
+        draw->AddLine({px + 15.0F * ui.scale, py + 7.0F * ui.scale},
+                      {px + 15.0F * ui.scale, py + panelH - 7.0F * ui.scale},
+                      IM_COL32(210, 216, 226, 160), 2.0F * ui.scale);
+        draw->AddLine({px + 220.0F * ui.scale, py + 6.0F * ui.scale},
+                      {px + 220.0F * ui.scale, py + panelH - 6.0F * ui.scale},
+                      IM_COL32(170, 176, 190, 130), 1.5F * ui.scale);
+        draw->AddLine({px + 372.0F * ui.scale, py + 6.0F * ui.scale},
+                      {px + 372.0F * ui.scale, py + panelH - 6.0F * ui.scale},
+                      IM_COL32(170, 176, 190, 130), 1.5F * ui.scale);
+        draw->AddLine({px + panelW - 15.0F * ui.scale, py + 7.0F * ui.scale},
+                      {px + panelW - 15.0F * ui.scale, py + panelH - 7.0F * ui.scale},
+                      IM_COL32(210, 216, 226, 160), 2.0F * ui.scale);
 
-        const ImVec2 enemyCenter{px + 72.0F * ui.scale, py + panelH * 0.5F};
+        const ImVec2 enemyCenter{px + 92.0F * ui.scale, py + panelH * 0.5F + 1.0F * ui.scale};
         if (enemyNumberIcon) {
-            DrawIconImage(draw, enemyNumberIcon, enemyCenter, 54.0F * ui.scale, 42.0F * ui.scale);
+            DrawIconImage(draw, enemyNumberIcon, enemyCenter, 78.0F * ui.scale, 56.0F * ui.scale);
         } else {
             draw->AddCircle(enemyCenter, 13.0F * ui.scale, IM_COL32(247, 151, 39, 255), 28, 2.0F);
         }
 
         const std::string killInfo = std::to_string(m_App.m_KillCount) + "/" + std::to_string(m_App.m_TotalWaveUnits);
-        draw->AddText(ImGui::GetFont(), 20.0F * ui.scale,
-                      {px + 110.0F * ui.scale, py + 12.0F * ui.scale},
-                      IM_COL32(241, 244, 248, 255), killInfo.c_str());
+        AddTextAt(draw, {px + 156.0F * ui.scale, py + 11.0F * ui.scale},
+                  39.0F * ui.scale, IM_COL32(246, 247, 250, 255), killInfo.c_str());
 
-        const ImVec2 towerCenter{px + 350.0F * ui.scale, py + panelH * 0.5F};
+        const ImVec2 towerCenter{px + 306.0F * ui.scale, py + panelH * 0.5F + 1.0F * ui.scale};
         if (lifePointIcon) {
-            DrawIconImage(draw, lifePointIcon, towerCenter, 42.0F * ui.scale, 40.0F * ui.scale);
+            DrawIconImage(draw, lifePointIcon, towerCenter, 62.0F * ui.scale, 54.0F * ui.scale);
         } else {
             draw->AddRectFilled({towerCenter.x - 8.0F * ui.scale, towerCenter.y - 9.0F * ui.scale},
                                 {towerCenter.x + 8.0F * ui.scale, towerCenter.y + 9.0F * ui.scale},
@@ -373,14 +456,13 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
         }
 
         const std::string lp = std::to_string(m_App.m_LifePoint);
-        draw->AddText(ImGui::GetFont(), 20.0F * ui.scale,
-                      {px + 385.0F * ui.scale, py + 12.0F * ui.scale},
-                      IM_COL32(255, 127, 142, 255), lp.c_str());
+        AddTextAt(draw, {px + 390.0F * ui.scale, py + 10.0F * ui.scale},
+                  40.0F * ui.scale, IM_COL32(255, 122, 141, 255), lp.c_str());
     }
 
     // Top-left settings button
     if (settingsButtonIcon) {
-        DrawButtonImageFit(draw, settingsButtonIcon, ui.settingsButton, 0.0F);
+        DrawButtonImage(draw, settingsButtonIcon, ui.settingsButton, 0.0F, {0.0F, 0.0F}, {1.0F, 1.0F});
     } else {
         DrawTopUiButton(draw, ui.settingsButton, iconRounding, false);
         DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * ui.scale, IM_COL32(242, 246, 252, 255), 2.6F * ui.scale);
@@ -390,12 +472,12 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
     const bool isDoubleSpeed = m_App.m_GameSpeedMultiplier >= 1.5F;
     const auto& speedButtonIcon = isDoubleSpeed ? speedButtonIcon2x : speedButtonIcon1x;
     if (speedButtonIcon) {
-        DrawButtonImageFit(draw, speedButtonIcon, ui.speedButton, 0.0F);
+        DrawButtonImage(draw, speedButtonIcon, ui.speedButton, 0.0F, {0.0F, 0.0F}, {1.0F, 1.0F});
     } else {
         DrawTopUiButton(draw, ui.speedButton, iconRounding, isDoubleSpeed);
     }
     if (pauseButtonIcon) {
-        DrawButtonImageFit(draw, pauseButtonIcon, ui.pauseButton, 0.0F);
+        DrawButtonImage(draw, pauseButtonIcon, ui.pauseButton, 0.0F, {0.0F, 0.0F}, {1.0F, 1.0F});
     } else {
         DrawTopUiButton(draw, ui.pauseButton, iconRounding, m_App.m_GamePaused);
     }

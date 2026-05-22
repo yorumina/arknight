@@ -9,7 +9,7 @@ int PTSD_Config::WINDOW_POS_X = SDL_WINDOWPOS_UNDEFINED;
 int PTSD_Config::WINDOW_POS_Y = SDL_WINDOWPOS_UNDEFINED;
 
 unsigned int PTSD_Config::WINDOW_WIDTH = 1488;
-unsigned int PTSD_Config::WINDOW_HEIGHT = 645;
+unsigned int PTSD_Config::WINDOW_HEIGHT = 687;
 
 Util::Logger::Level PTSD_Config::DEFAULT_LOG_LEVEL = Util::Logger::Level::INFO;
 

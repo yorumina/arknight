@@ -1,10 +1,12 @@
 #include "Core/Context.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -20,11 +22,73 @@ using Util::ms_t;
 
 namespace Core {
 namespace {
+std::string ToLowerAscii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+bool IsLikelyCjkFont(const std::string& path) {
+    const std::string lower = ToLowerAscii(path);
+    return lower.find("noto") != std::string::npos ||
+           lower.find("sourcehan") != std::string::npos ||
+           lower.find("source-han") != std::string::npos ||
+           lower.find("cjk") != std::string::npos ||
+           lower.find("tc") != std::string::npos ||
+           lower.find("wqy") != std::string::npos ||
+           lower.find("arphic") != std::string::npos ||
+           lower.find("uming") != std::string::npos ||
+           lower.find("ukai") != std::string::npos;
+}
+
+const ImWchar* GetTraditionalChineseGlyphRanges() {
+    static const ImWchar ranges[] = {
+        0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0x2000, 0x206F, // General Punctuation
+        0x3000, 0x30FF, // CJK Symbols and Japanese kana
+        0x3100, 0x312F, // Bopomofo
+        0x31A0, 0x31BF, // Bopomofo Extended
+        0x31F0, 0x31FF, // Katakana Phonetic Extensions
+        0x3200, 0x32FF, // Enclosed CJK Letters and Months
+        0x3400, 0x4DBF, // CJK Unified Ideographs Extension A
+        0x4E00, 0x9FFF, // CJK Unified Ideographs
+        0xF900, 0xFAFF, // CJK Compatibility Ideographs
+        0xFE10, 0xFE1F, // Vertical Forms
+        0xFE30, 0xFE6F, // CJK Compatibility Forms + Small Form Variants
+        0xFF00, 0xFFEF, // Halfwidth and Fullwidth Forms
+        0xFFFD, 0xFFFD, // Replacement character
+        0,
+    };
+    return ranges;
+}
+
+void AddSizedCjkFont(ImGuiIO& io, const std::string& path, float size,
+                     std::vector<std::string>* loadedPaths, const char* label) {
+    ImFontConfig fontCfg;
+    fontCfg.OversampleH = 3;
+    fontCfg.OversampleV = 2;
+    fontCfg.PixelSnapH = true;
+    fontCfg.MergeMode = false;
+    ImFont* font = io.Fonts->AddFontFromFileTTF(
+        path.c_str(), size, &fontCfg, GetTraditionalChineseGlyphRanges());
+    if (font != nullptr && loadedPaths != nullptr) {
+        loadedPaths->push_back(path + " (" + std::string(label) + ")");
+    }
+}
+
 std::vector<std::string> BuildBaseFontCandidates() {
     std::vector<std::string> candidates;
     if (const char* envFont = std::getenv("ARKNIGHT_UI_FONT"); envFont != nullptr && envFont[0] != '\0') {
         candidates.emplace_back(envFont);
     }
+    if (const char* envFont = std::getenv("ARKNIGHT_UI_CJK_FONT"); envFont != nullptr && envFont[0] != '\0') {
+        candidates.emplace_back(envFont);
+    }
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansCJKtc-Regular.otf");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.otf");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansCJK-Regular.ttc");
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.ttf");
     candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/Inter.ttf");
     candidates.emplace_back("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
     candidates.emplace_back("/usr/share/fonts/TTF/DejaVuSans.ttf");
@@ -39,6 +103,7 @@ std::vector<std::string> BuildCjkFontCandidates() {
     if (const char* envFont = std::getenv("ARKNIGHT_UI_FONT"); envFont != nullptr && envFont[0] != '\0') {
         candidates.emplace_back(envFont);
     }
+    candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansCJKtc-Regular.otf");
     candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.otf");
     candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansCJK-Regular.ttc");
     candidates.emplace_back(std::string(PTSD_ASSETS_DIR) + "/fonts/NotoSansTC-Regular.ttf");
@@ -76,11 +141,18 @@ ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::vector<std::string>* loaded
         fontCfg.PixelSnapH = false;
         fontCfg.MergeMode = false;
 
+        const bool cjkBase = IsLikelyCjkFont(path);
         ImFont* font = io.Fonts->AddFontFromFileTTF(
-            path.c_str(), 20.0F, &fontCfg, io.Fonts->GetGlyphRangesDefault());
+            path.c_str(), 20.0F, &fontCfg,
+            cjkBase ? GetTraditionalChineseGlyphRanges() : io.Fonts->GetGlyphRangesDefault());
         if (font != nullptr) {
             if (loadedPaths != nullptr) loadedPaths->push_back(path + " (base)");
-            baseFont = font;
+                if (cjkBase && cjkLoaded != nullptr) *cjkLoaded = true;
+                baseFont = font;
+                if (cjkBase) {
+                    AddSizedCjkFont(io, path, 24.0F, loadedPaths, "ui-24");
+                    AddSizedCjkFont(io, path, 36.0F, loadedPaths, "large");
+                }
             break;
         }
     }
@@ -89,68 +161,36 @@ ImFont* LoadTraditionalChineseFont(ImGuiIO& io, std::vector<std::string>* loaded
         baseFont = io.Fonts->AddFontDefault();
     }
 
-    for (const auto &path : BuildCjkFontCandidates()) {
-        if (!visited.insert(path).second) continue;
-        if (!std::filesystem::exists(path)) continue;
+    if (cjkLoaded == nullptr || !*cjkLoaded) {
+        for (const auto &path : BuildCjkFontCandidates()) {
+            if (!visited.insert(path).second) continue;
+            if (!std::filesystem::exists(path)) continue;
 
-        ImFontConfig fontCfg;
-        fontCfg.OversampleH = 2;
-        fontCfg.OversampleV = 2;
-        fontCfg.PixelSnapH = false;
-        fontCfg.MergeMode = true;
+            ImFontConfig fontCfg;
+            fontCfg.OversampleH = 2;
+            fontCfg.OversampleV = 2;
+            fontCfg.PixelSnapH = false;
+            fontCfg.MergeMode = true;
 
-        ImFont* font = io.Fonts->AddFontFromFileTTF(
-            path.c_str(), 20.0F, &fontCfg, io.Fonts->GetGlyphRangesChineseFull());
-        if (font != nullptr) {
-            if (loadedPaths != nullptr) loadedPaths->push_back(path + " (cjk)");
-            if (cjkLoaded != nullptr) *cjkLoaded = true;
-            break;
+            ImFont* font = io.Fonts->AddFontFromFileTTF(
+                path.c_str(), 20.0F, &fontCfg, GetTraditionalChineseGlyphRanges());
+            if (font != nullptr) {
+                if (loadedPaths != nullptr) loadedPaths->push_back(path + " (cjk)");
+                if (cjkLoaded != nullptr) *cjkLoaded = true;
+                AddSizedCjkFont(io, path, 24.0F, loadedPaths, "ui-24");
+                AddSizedCjkFont(io, path, 36.0F, loadedPaths, "large");
+                break;
+            }
         }
     }
     return baseFont;
 }
 
-float ComputeDeviceScaleFromDisplayWidth(int displayWidth) {
-    // Tier-based scaling requested by project:
-    // 4K tier -> 1x, 2K tier -> 1/2x, 1K tier -> 1/4x, and so on.
-    if (displayWidth <= 0) return 1.0F;
-
-    float scale = 1.0F;
-    int tierWidth = 3840;
-    while (displayWidth < tierWidth) {
-        scale *= 0.5F;
-        tierWidth /= 2;
-        if (tierWidth <= 0 || scale <= 0.015625F) break; // stop at 1/64
-    }
-    return std::clamp(scale, 0.015625F, 1.0F);
-}
-
-void ApplyWindowScaleFromDisplay() {
-    SDL_DisplayMode dm{};
-    if (SDL_GetCurrentDisplayMode(0, &dm) != 0) {
-        LOG_WARN("Failed to query display mode, keep configured window size: {}", SDL_GetError());
-        return;
-    }
-
-    const unsigned int baseW = PTSD_Config::WINDOW_WIDTH;
-    const unsigned int baseH = PTSD_Config::WINDOW_HEIGHT;
-    const float scale = ComputeDeviceScaleFromDisplayWidth(dm.w);
-
-    const unsigned int scaledW = std::max(640U, static_cast<unsigned int>(std::lround(static_cast<float>(baseW) * scale)));
-    const unsigned int scaledH = std::max(360U, static_cast<unsigned int>(std::lround(static_cast<float>(baseH) * scale)));
-
-    PTSD_Config::WINDOW_WIDTH = scaledW;
-    PTSD_Config::WINDOW_HEIGHT = scaledH;
-
-    LOG_INFO("Display mode: {}x{}, window scale: {:.3f}, final window: {}x{} (base {}x{})",
-             dm.w, dm.h, scale, scaledW, scaledH, baseW, baseH);
-}
 } // namespace
 
 Context::Context() {
     Util::Logger::Init();
     PTSD_Config::Init();
-    ApplyWindowScaleFromDisplay();
     Util::Logger::SetLevel(PTSD_Config::DEFAULT_LOG_LEVEL);
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -229,7 +269,7 @@ Context::Context() {
     io.ConfigWindowsMoveFromTitleBarOnly = true;
 
     io.Fonts->Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
-    io.Fonts->TexDesiredWidth = 4096;
+    io.Fonts->TexDesiredWidth = 8192;
 
     std::vector<std::string> loadedFontPaths;
     bool hasCjkGlyphs = false;

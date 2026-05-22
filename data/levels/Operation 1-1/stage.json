@@ -3,7 +3,7 @@
   "width": 9,
   "height": 5,
   "background": {
-    "image": "Operation 1-1.png",
+    "image": "",
     "alpha": 1.0
   },
   "loading": {
@@ -15,57 +15,247 @@
     "alpha": 1.0
   },
   "camera": {
-    "projection_scale_x": 0.92,
-    "projection_scale_y": 1.0,
+    "projection_scale_x": 1.339,
+    "projection_scale_y": 0.9765625,
     "projection_skew_x": 0.0,
-    "zoom": 0.94,
+    "zoom": 1.0,
     "min_zoom": 0.75,
     "max_zoom": 1.8,
     "pan_x": 0.0,
     "pan_y": 0.0
   },
   "tiles": [
-    ["unusablehighground", "unusablehighground", "unusablehighground", "highground", "spawn"     , "highground", "highground", "unusablehighground", "unusablehighground"],
-    ["unusablehighground", "unusablehighground", "highground"        , "highground", "ground"    , "highground", "highground", "unusablehighground", "unusablehighground"],
-    ["spawn"             , "ground"            , "ground"            , "ground"    , "ground"    , "ground"    , "ground"    , "ground"            , "goal"              ],
-    ["unusablehighground", "unusablehighground", "unusablehighground", "highground", "highground", "ground"    , "highground", "highground"        , "unusablehighground"],
-    ["unusablehighground", "unusablehighground", "unusablehighground", "highground", "highground", "goal"      , "highground", "unusablehighground", "unusablehighground"]
+    [
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "highground",
+      "spawn",
+      "highground",
+      "highground",
+      "unusablehighground",
+      "unusablehighground"
+    ],
+    [
+      "unusablehighground",
+      "unusablehighground",
+      "highground",
+      "highground",
+      "ground",
+      "highground",
+      "highground",
+      "unusablehighground",
+      "unusablehighground"
+    ],
+    [
+      "spawn",
+      "ground",
+      "ground",
+      "ground",
+      "ground",
+      "ground",
+      "ground",
+      "ground",
+      "goal"
+    ],
+    [
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "highground",
+      "highground",
+      "ground",
+      "highground",
+      "highground",
+      "unusablehighground"
+    ],
+    [
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "highground",
+      "highground",
+      "goal",
+      "highground",
+      "unusablehighground",
+      "unusablehighground"
+    ]
   ],
   "routes": {
     "main": [
-      {"x": 0, "y": 2, "wait": 0.0},
-      {"x": 1, "y": 2, "wait": 0.0},
-      {"x": 2, "y": 2, "wait": 0.0},
-      {"x": 3, "y": 2, "wait": 0.0},
-      {"x": 4, "y": 2, "wait": 0.0},
-      {"x": 5, "y": 2, "wait": 0.0},
-      {"x": 6, "y": 2, "wait": 0.0},
-      {"x": 7, "y": 2, "wait": 0.0},
-      {"x": 8, "y": 2, "wait": 0.0}
+      {
+        "x": 0,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 1,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 2,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 3,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 4,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 5,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 6,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 7,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 8,
+        "y": 2,
+        "wait": 0.0
+      }
     ],
     "sec": [
-      {"x": 4, "y": 0, "wait": 0.0},
-      {"x": 4, "y": 1, "wait": 0.0},
-      {"x": 4, "y": 2, "wait": 0.0},
-      {"x": 5, "y": 2, "wait": 0.0},
-      {"x": 5, "y": 3, "wait": 0.0},
-      {"x": 5, "y": 4, "wait": 0.0}
+      {
+        "x": 4,
+        "y": 0,
+        "wait": 0.0
+      },
+      {
+        "x": 4,
+        "y": 1,
+        "wait": 0.0
+      },
+      {
+        "x": 4,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 5,
+        "y": 2,
+        "wait": 0.0
+      },
+      {
+        "x": 5,
+        "y": 3,
+        "wait": 0.0
+      },
+      {
+        "x": 5,
+        "y": 4,
+        "wait": 0.0
+      }
     ]
   },
   "enemies": {
-    "01": {"hp": 820.0, "speed": 1.9, "damage": 220.0, "attackIntervalMs": 1500.0, "canAttackOperator": true},
-    "02": {"hp": 1700.0, "speed": 1.9, "damage": 400.0, "attackIntervalMs": 1500.0, "canAttackOperator": true},
-    "17": {"hp": 1700.0, "speed": 1.1, "damage": 350.0, "attackIntervalMs": 2200.0, "canAttackOperator": true},
-    "A9": {"hp": 1550.0, "speed": 1.0, "def": 50.0, "damage": 180.0, "attackIntervalMs": 2700.0, "attackRange": 1.75, "isRanged": true, "canAttackOperator": true},
-    "B2": {"hp": 1050.0, "speed": 1.0, "damage": 250.0, "attackIntervalMs": 2000.0, "canAttackOperator": true},
-    "21": {"hp": 5000.0, "speed": 0.8, "damage": 500.0, "attackIntervalMs": 2800.0, "canAttackOperator": false}
+    "01": {
+      "hp": 820.0,
+      "speed": 1.9,
+      "damage": 220.0,
+      "attackIntervalMs": 1500.0,
+      "canAttackOperator": true
+    },
+    "02": {
+      "hp": 1700.0,
+      "speed": 1.9,
+      "damage": 400.0,
+      "attackIntervalMs": 1500.0,
+      "canAttackOperator": true
+    },
+    "17": {
+      "hp": 1700.0,
+      "speed": 1.1,
+      "damage": 350.0,
+      "attackIntervalMs": 2200.0,
+      "canAttackOperator": true
+    },
+    "A9": {
+      "hp": 1550.0,
+      "speed": 1.0,
+      "def": 50.0,
+      "damage": 180.0,
+      "attackIntervalMs": 2700.0,
+      "attackRange": 1.75,
+      "isRanged": true,
+      "canAttackOperator": true
+    },
+    "B2": {
+      "hp": 1050.0,
+      "speed": 1.0,
+      "damage": 250.0,
+      "attackIntervalMs": 2000.0,
+      "canAttackOperator": true
+    },
+    "21": {
+      "hp": 5000.0,
+      "speed": 0.8,
+      "damage": 500.0,
+      "attackIntervalMs": 2800.0,
+      "canAttackOperator": false
+    }
   },
   "waves": [
-    {"enemy": "B2", "route": "main", "count": 6, "start": 10.0, "interval": 3},
-    {"enemy": "01", "route": "sec", "count": 4, "start": 5.0, "interval": 3},
-    {"enemy": "17", "route": "main", "count": 3, "start": 17.0, "interval": 5},
-    {"enemy": "A9", "route": "sec", "count": 3, "start": 25.0, "interval": 6},
-    {"enemy": "02", "route": "main", "count": 4, "start": 33.0, "interval": 2},
-    {"enemy": "21", "route": "sec", "count": 1, "start": 40.0, "interval": 2}
-  ]
+    {
+      "enemy": "B2",
+      "route": "main",
+      "count": 9,
+      "start": 10.0,
+      "interval": 3
+    },
+    {
+      "enemy": "01",
+      "route": "sec",
+      "count": 7,
+      "start": 5.0,
+      "interval": 3
+    },
+    {
+      "enemy": "17",
+      "route": "main",
+      "count": 5,
+      "start": 17.0,
+      "interval": 5
+    },
+    {
+      "enemy": "A9",
+      "route": "sec",
+      "count": 4,
+      "start": 25.0,
+      "interval": 6
+    },
+    {
+      "enemy": "02",
+      "route": "main",
+      "count": 6,
+      "start": 33.0,
+      "interval": 2
+    },
+    {
+      "enemy": "21",
+      "route": "sec",
+      "count": 2,
+      "start": 40.0,
+      "interval": 2
+    }
+  ],
+  "board_layout": {
+    "cell_size": 102.4,
+    "top_left_x": -518.297,
+    "top_left_y": 269.824
+  }
 }

@@ -7,7 +7,7 @@
     "alpha": 0.82
   },
   "camera": {
-    "projection_scale_x": 1.0,
+    "projection_scale_x": 1.25,
     "projection_scale_y": 1.0,
     "projection_skew_x": 0.0,
     "zoom": 0.92,

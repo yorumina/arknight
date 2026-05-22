@@ -140,6 +140,7 @@ private:
     float m_DP            = 10.0F;
     float m_MaxDP         = 99.0F;
     float m_DPRegenPerSec = 1.0F;
+    float m_DPRegenTimerMs = 0.0F;
     int   m_LifePoint     = 10;
     int   m_KillCount     = 0;
 

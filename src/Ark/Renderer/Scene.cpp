@@ -88,16 +88,24 @@ void Ark::AppRenderer::DrawStageBackground() {
     draw->AddRectFilledMultiColor(
         {0.0F, 0.0F},
         {screenW, screenH},
+        IM_COL32(22, 26, 31, 255),
         IM_COL32(18, 22, 28, 255),
-        IM_COL32(22, 27, 34, 255),
         IM_COL32(8, 10, 14, 255),
         IM_COL32(12, 15, 20, 255)
     );
 
-    if (!m_App.m_StageBackgroundPath.empty()) {
-        DrawImageCover(m_App.m_StageBackgroundPath, m_App.m_StageBackgroundAlpha, false);
-        draw->AddRectFilled({0.0F, 0.0F}, {screenW, screenH}, IM_COL32(4, 6, 10, 70));
-        return;
+    const float edgeW = std::max(42.0F, screenW * 0.032F);
+    draw->AddRectFilledMultiColor({0.0F, 0.0F}, {edgeW, screenH},
+                                  IM_COL32(10, 11, 12, 255), IM_COL32(38, 39, 39, 255),
+                                  IM_COL32(18, 18, 18, 255), IM_COL32(4, 4, 4, 255));
+    draw->AddRectFilledMultiColor({screenW - edgeW, 0.0F}, {screenW, screenH},
+                                  IM_COL32(38, 39, 39, 255), IM_COL32(10, 11, 12, 255),
+                                  IM_COL32(4, 4, 4, 255), IM_COL32(18, 18, 18, 255));
+    for (float y : {screenH * 0.14F, screenH * 0.86F}) {
+        draw->AddRectFilled({edgeW * 0.36F, y - 2.0F}, {edgeW * 0.62F, y + 2.0F},
+                            IM_COL32(130, 132, 132, 190), 1.0F);
+        draw->AddRectFilled({screenW - edgeW * 0.62F, y - 2.0F}, {screenW - edgeW * 0.36F, y + 2.0F},
+                            IM_COL32(130, 132, 132, 190), 1.0F);
     }
 
     const auto layout = m_App.GetBoardLayout();
@@ -158,8 +166,9 @@ void Ark::AppRenderer::DrawImageCover(const std::string& imagePath, float alpha,
     if (m_App.m_StageBackground != nullptr && m_App.m_StageBackground->GetTextureId() != 0) {
         const glm::vec2 imageSize = m_App.m_StageBackground->GetSize();
         if (imageSize.x > 0.0F && imageSize.y > 0.0F) {
-            // Cover scaling: always fill full screen (crop overflow if needed).
-            const float scale = std::max(screenW / imageSize.x, screenH / imageSize.y);
+            const float scale = drawBlackFill
+                ? std::min(screenW / imageSize.x, screenH / imageSize.y)
+                : std::max(screenW / imageSize.x, screenH / imageSize.y);
             const float drawW = imageSize.x * scale;
             const float drawH = imageSize.y * scale;
             const float x = (screenW - drawW) * 0.5F;
