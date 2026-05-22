@@ -15,10 +15,10 @@
     "alpha": 1.0
   },
   "camera": {
-    "projection_scale_x": 1.339,
-    "projection_scale_y": 0.9765625,
+    "projection_scale_x": 0.92,
+    "projection_scale_y": 1.0,
     "projection_skew_x": 0.0,
-    "zoom": 1.0,
+    "zoom": 0.94,
     "min_zoom": 0.75,
     "max_zoom": 1.8,
     "pan_x": 0.0,
@@ -252,10 +252,5 @@
       "start": 40.0,
       "interval": 2
     }
-  ],
-  "board_layout": {
-    "cell_size": 102.4,
-    "top_left_x": -518.297,
-    "top_left_y": 269.824
-  }
+  ]
 }

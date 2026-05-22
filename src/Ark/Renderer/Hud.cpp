@@ -325,22 +325,24 @@ void Ark::AppRenderer::DrawDeploymentInfo(float screenW, float screenH) {
 
     const float scale = ComputeBattleUiLayout(screenW, screenH).scale;
     const float right = screenW - 36.0F * scale;
-    const float labelH = 34.0F * scale;
+    const float dpBgW = 180.0F * scale;
+    const float labelW = dpBgW * 1.5F;
+    const float labelH = 48.0F * scale;
     const float labelY = screenH - OP_BAR_HEIGHT - labelH - 14.0F * scale;
-    const float dpBgX = right - 180.0F * scale;
+    const float dpBgX = right - dpBgW;
     const float dpBgY = labelY - 73.0F * scale;
     const float dpBgH = 58.0F * scale;
     const float dpBgRight = right;
+    const float labelPanelX = right - labelW;
     const int deployed = static_cast<int>(m_App.m_Operators.size());
     const int remaining = std::max(0, MAX_OPS - deployed);
     const char* label = u8"剩餘可部屬角色：";
     const std::string remainingStr = std::to_string(remaining);
-    const float textSize = 24.0F * scale;
+    const float textSize = 32.0F * scale;
     const ImVec2 labelSize = MeasureText(label, textSize);
     const ImVec2 remainingSize = MeasureText(remainingStr.c_str(), textSize);
     const float contentW = labelSize.x + remainingSize.x;
     const float contentX = right - contentW - 18.0F * scale;
-    const float labelPanelX = contentX - 4.0F * scale;
 
     draw->AddRectFilled({dpBgX, dpBgY}, {dpBgRight, dpBgY + dpBgH}, IM_COL32(26, 28, 32, 146));
     draw->AddRectFilledMultiColor({dpBgX, dpBgY}, {dpBgRight, dpBgY + dpBgH},
@@ -357,9 +359,10 @@ void Ark::AppRenderer::DrawDeploymentInfo(float screenW, float screenH) {
         IM_COL32(26, 28, 35, 178)
     );
 
-    const float iconSize = 56.0F * scale;
-    const float iconX = dpBgX + 17.0F * scale;
-    const float iconY = dpBgY - 4.0F * scale;
+    const float iconBoxSize = 56.0F * scale;
+    const float iconSize = iconBoxSize * 0.8F;
+    const float iconX = dpBgX + 17.0F * scale + (iconBoxSize - iconSize) * 0.5F;
+    const float iconY = dpBgY - 4.0F * scale + (iconBoxSize - iconSize) * 0.5F;
     if (dpIcon && dpIcon->GetTextureId() != 0) {
         draw->AddImage(
             reinterpret_cast<void*>(static_cast<intptr_t>(dpIcon->GetTextureId())),
