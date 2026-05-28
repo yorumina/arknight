@@ -6,10 +6,12 @@
 #include <algorithm>
 #include <cmath>
 
+#include "Ark/GameConstants.hpp"
+
 using namespace Ark;
 
 namespace {
-constexpr float BEAM_DURATION_MS = 120.0F;
+constexpr float BEAM_DURATION_MS = GameConst::BEAM_DURATION_MS;
 constexpr float ENEMY_SPEED_SCALE = 0.5F;
 constexpr float MAX_DEATH_ANIMATION_MS = 4500.0F;
 
@@ -69,7 +71,7 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking) {
 
     auto& pack = m_EnemyAnims[static_cast<std::size_t>(enemy.typeIndex)];
 
-    auto selectClip = [&](Enemy::AnimState state) -> EnemyAnimClip* {
+    auto selectClip = [&](Enemy::AnimState state) -> AnimationClip* {
         switch (state) {
         case Enemy::AnimState::IDLE:
             if (!pack.idle.Empty()) return &pack.idle;
@@ -101,7 +103,7 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking) {
         desiredState = Enemy::AnimState::ATTACK;
     }
 
-    EnemyAnimClip* clip = selectClip(desiredState);
+    AnimationClip* clip = selectClip(desiredState);
     if (clip == nullptr) {
         if (!enemy.alive) {
             enemy.deathAnimationFinished = true;

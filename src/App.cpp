@@ -6,7 +6,7 @@
 //   EnemySystem.cpp   –Enemy spawning, movement & AI
 //   OperatorSystem.cpp–Operator combat, skills & deployment helpers
 //   Renderer.cpp      –All drawing / rendering code
-//   GameLogic.cpp     –Wave management, game state, stage init
+//   GameLogic.cpp     - Wave management, game state, stage init
 // ─────────────────────────────────────────────────────────────────────────────
 #include "App.hpp"
 
@@ -14,6 +14,7 @@
 #include <cmath>
 #include <string>
 
+#include "Ark/GameConstants.hpp"
 #include "Ark/Renderer.hpp"
 #include "Ark/Renderer/RendererShared.hpp"
 #include "Ark/StageLoader.hpp"
@@ -25,8 +26,8 @@
 using namespace Ark;
 
 namespace {
-constexpr int   MAX_OPS          = 8;
-constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
+constexpr int MAX_OPS = Ark::GameConst::MAX_OPS;
+constexpr float REDEPLOY_COOLDOWN_MS = Ark::GameConst::REDEPLOY_COOLDOWN_MS;
 
 // Bottom operator bar layout constants (screen-space)
 constexpr float OP_BAR_HEIGHT     = Ark::RendererConst::OP_BAR_HEIGHT;
@@ -232,10 +233,13 @@ void App::Update() {
                         newOp.hp        = opType.hp;
                         newOp.maxHp     = opType.hp;
                         newOp.def       = opType.def;
+                        newOp.deathAnimationFinished = false;
+                        newOp.deathElapsedMs = 0.0F;
+                        newOp.redeployCooldownStarted = false;
                         const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == u8"風笛");
                         newOp.sp        = isBagpipe ? 2.0F : opType.initialSp;
                         if (isBagpipe) {
-                            newOp.sp = std::clamp(newOp.sp, 0.0F, 12.0F);
+                            newOp.sp = std::clamp(newOp.sp, 0.0F, Ark::GameConst::BAGPIPE_MAX_SP);
                         } else {
                             newOp.sp = std::min(newOp.sp, opType.maxSp);
                         }

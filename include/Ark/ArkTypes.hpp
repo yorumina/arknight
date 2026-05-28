@@ -77,6 +77,9 @@ struct Operator {
     float targetInRangeMs = 0;
     bool skillActive = false;
     float skillTimerMs = 0;
+    bool deathAnimationFinished = false;
+    float deathElapsedMs = 0.0F;
+    bool redeployCooldownStarted = false;
 
     enum class AnimState { START, DEFAULT, ATTACK, SKILL, DIE };
     AnimState animState = AnimState::START;

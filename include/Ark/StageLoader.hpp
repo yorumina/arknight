@@ -55,6 +55,15 @@ struct StageData {
     std::string finishImage;
     float finishAlpha = 1.0F;
 };
+
+struct StageLoadResult {
+    std::optional<StageData> data;
+    std::vector<std::string> errors;
+
+    bool Succeeded() const { return data.has_value(); }
+};
+
+StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile);
 std::optional<StageData> LoadStageFromJson(const std::string& stageFile);
 
 } // namespace Ark

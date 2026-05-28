@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Ark/GameConstants.hpp"
+
 #include <algorithm>
 
 namespace Ark::RendererConst {
@@ -16,11 +18,12 @@ inline constexpr ImU32 COLOR_GOAL_SIDE        = IM_COL32(35, 84, 165, 140);
 inline constexpr ImU32 COLOR_TEXT_MAIN        = IM_COL32(236, 240, 245, 255);
 inline constexpr ImU32 COLOR_TEXT_SUB         = IM_COL32(173, 183, 198, 255);
 
-inline constexpr int MAX_OPS = 8;
-inline constexpr float BEAM_DURATION_MS = 120.0F;
-inline constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
-inline constexpr int BAGPIPE_MAX_CHARGES = 3;
-inline constexpr float BAGPIPE_SKILL_DURATION_MS = 1000.0F;
+inline constexpr int MAX_OPS = Ark::GameConst::MAX_OPS;
+inline constexpr float BEAM_DURATION_MS = Ark::GameConst::BEAM_DURATION_MS;
+inline constexpr float BAGPIPE_SP_PER_SKILL = Ark::GameConst::BAGPIPE_SP_PER_SKILL;
+inline constexpr int BAGPIPE_MAX_CHARGES = Ark::GameConst::BAGPIPE_MAX_CHARGES;
+inline constexpr float BAGPIPE_SKILL_DURATION_MS = Ark::GameConst::BAGPIPE_SKILL_DURATION_MS;
+inline constexpr float ENEMY_VISUAL_SCALE = 1.2F;
 inline constexpr float PRE_STAGE_TOTAL_MS = 2000.0F;
 inline constexpr float PRE_STAGE_FADE_MS = 500.0F;
 inline constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;

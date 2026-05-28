@@ -208,8 +208,8 @@ void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
         if (!e.alive && e.deathAnimationFinished) continue;
         auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
         c.y -= layout.cellSize * 0.18F;
-        const float r = layout.cellSize * 0.20F;
-        const float imgR = layout.cellSize * 0.8F;
+        const float r = layout.cellSize * 0.20F * ENEMY_VISUAL_SCALE;
+        const float imgR = layout.cellSize * 0.8F * ENEMY_VISUAL_SCALE;
 
         GLuint tex = 0;
         if (e.typeIndex >= 0 && e.typeIndex < static_cast<int>(m_App.m_EnemyAnims.size())) {
@@ -238,7 +238,7 @@ void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
         if (!e.alive) continue;
         auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
         c.y -= layout.cellSize * 0.18F;
-        const float r = layout.cellSize * 0.20F;
+        const float r = layout.cellSize * 0.20F * ENEMY_VISUAL_SCALE;
         const float hpR    = e.maxHp > 0 ? std::clamp(e.hp/e.maxHp, 0.0F, 1.0F) : 0.0F;
         const float barHW  = layout.cellSize * 0.24F;
         const float barTop = c.y - r - 9.0F;

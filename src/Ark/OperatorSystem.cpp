@@ -8,16 +8,17 @@
 #include <cstdlib>
 #include <limits>
 
+#include "Ark/GameConstants.hpp"
+
 using namespace Ark;
 
 namespace {
-constexpr int   MAX_OPS          = 8;
-constexpr float BEAM_DURATION_MS = 120.0F;
 constexpr float KILL_REWARD_DP   = 1.5F;
-constexpr float BAGPIPE_SP_PER_SKILL = 4.0F;
-constexpr int   BAGPIPE_MAX_CHARGES = 3;
-constexpr float BAGPIPE_MAX_SP = BAGPIPE_SP_PER_SKILL * static_cast<float>(BAGPIPE_MAX_CHARGES);
-constexpr float BAGPIPE_SKILL_DURATION_MS = 1000.0F;
+constexpr int MAX_OPS = GameConst::MAX_OPS;
+constexpr float BEAM_DURATION_MS = GameConst::BEAM_DURATION_MS;
+constexpr float BAGPIPE_SP_PER_SKILL = GameConst::BAGPIPE_SP_PER_SKILL;
+constexpr float BAGPIPE_MAX_SP = GameConst::BAGPIPE_MAX_SP;
+constexpr float BAGPIPE_SKILL_DURATION_MS = GameConst::BAGPIPE_SKILL_DURATION_MS;
 constexpr float OPERATOR_ATTACK_SPEED_SCALE = 0.5F;
 constexpr float BAGPIPE_MYRTLE_ENGAGE_DELAY_MS = 800.0F;
 
@@ -44,7 +45,7 @@ void App::UpdateOperators(float dtMs) {
         });
 
     const float dtSec = dtMs / 1000.0F;
-    auto selectOperatorAnim = [](auto& pack, const Operator& op, Operator::AnimState state) -> const OperatorAnimClip* {
+    auto selectOperatorAnim = [](auto& pack, const Operator& op, Operator::AnimState state) -> const AnimationClip* {
         // Direction mapping:
         //   UP    (0,-1) → back   animations
         //   RIGHT (1, 0) → front  animations
@@ -53,9 +54,9 @@ void App::UpdateOperators(float dtMs) {
         const bool useBack = (op.direction.y < 0);                       // facing UP
         const bool useFlip = (op.direction.x < 0 || op.direction.y > 0); // facing LEFT or DOWN
 
-        auto choose = [useBack, useFlip](const OperatorAnimClip& front,
-                                         const OperatorAnimClip& back,
-                                         const OperatorAnimClip& flip) -> const OperatorAnimClip* {
+        auto choose = [useBack, useFlip](const AnimationClip& front,
+                                         const AnimationClip& back,
+                                         const AnimationClip& flip) -> const AnimationClip* {
             if (useBack && !back.Empty())  return &back;
             if (useFlip && !flip.Empty())  return &flip;
             // Fallback: always try front, then back
@@ -88,14 +89,41 @@ void App::UpdateOperators(float dtMs) {
         if (op.hp <= 0) {
             if (op.animState != Ark::Operator::AnimState::DIE) {
                 op.animState = Ark::Operator::AnimState::DIE;
-                auto& pack = m_OperatorAnims[op.typeIndex];
-                if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::DIE)) {
-                    pack.activeInstances[op.id] = anim;
+                op.deathAnimationFinished = false;
+                op.deathElapsedMs = 0.0F;
+                if (op.typeIndex >= 0 &&
+                    op.typeIndex < static_cast<int>(m_OperatorAnims.size())) {
+                    auto& pack = m_OperatorAnims[static_cast<std::size_t>(op.typeIndex)];
+                    if (auto anim = makeOperatorAnimInstance(pack, op, Ark::Operator::AnimState::DIE)) {
+                        if (anim->GetFrameCount() == 0) {
+                            pack.activeInstances.erase(op.id);
+                            op.deathAnimationFinished = true;
+                        } else {
+                            pack.activeInstances[op.id] = anim;
+                        }
+                    } else {
+                        op.deathAnimationFinished = true;
+                    }
+                } else {
+                    op.deathAnimationFinished = true;
                 }
             }
-            // Keep updating death animation until gone
-            auto& inst = m_OperatorAnims[op.typeIndex].activeInstances[op.id];
-            if (inst) inst->Update();
+
+            op.deathElapsedMs += dtMs;
+            if (op.typeIndex >= 0 &&
+                op.typeIndex < static_cast<int>(m_OperatorAnims.size())) {
+                auto& pack = m_OperatorAnims[static_cast<std::size_t>(op.typeIndex)];
+                auto it = pack.activeInstances.find(op.id);
+                if (it != pack.activeInstances.end() && it->second) {
+                    it->second->Update();
+                    if (it->second->GetState() == Util::Animation::State::ENDED) {
+                        op.deathAnimationFinished = true;
+                    }
+                }
+            }
+            if (op.deathElapsedMs >= GameConst::OPERATOR_DEATH_ANIMATION_MAX_MS) {
+                op.deathAnimationFinished = true;
+            }
             continue;
         }
 
@@ -319,6 +347,9 @@ void App::HandleDeploymentClick(const glm::vec2& cursor) {
     newOp.hp=opType.hp;
     newOp.maxHp=opType.hp;
     newOp.def=opType.def;
+    newOp.deathAnimationFinished = false;
+    newOp.deathElapsedMs = 0.0F;
+    newOp.redeployCooldownStarted = false;
     newOp.sp=isBagpipe ? 2.0F : opType.initialSp;
     newOp.sp=std::clamp(newOp.sp, 0.0F, isBagpipe ? BAGPIPE_MAX_SP : opType.maxSp);
     m_Operators.push_back(newOp);

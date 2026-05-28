@@ -25,6 +25,7 @@ set(ARKNIGHT_SRC
     src/GiraffeText.cpp
     src/main.cpp
     src/Ark/StageLoader.cpp
+    src/Ark/AnimationLoader.cpp
     src/Ark/Camera.cpp
     src/Ark/EnemySystem.cpp
     src/Ark/OperatorSystem.cpp

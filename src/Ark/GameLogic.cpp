@@ -1,6 +1,4 @@
-// ?????????????????????????????????????????????????????????????????????????????
-// GameLogic.cpp  ?? Wave management, game state, stage init & animation loading
-// ?????????????????????????????????????????????????????????????????????????????
+// GameLogic.cpp - Wave management, game state, and stage init.
 #include "App.hpp"
 #include "Ark/Renderer.hpp"
 
@@ -13,6 +11,7 @@
 #include <set>
 #include <tuple>
 
+#include "Ark/GameConstants.hpp"
 #include "config.hpp"
 #include "Ark/StageLoader.hpp"
 #include "Util/Input.hpp"
@@ -22,7 +21,7 @@ using namespace Ark;
 
 namespace {
 constexpr float WAVE_CLEAR_DP        = 5.0F;
-constexpr float REDEPLOY_COOLDOWN_MS = 90000.0F; // 90 seconds
+constexpr float REDEPLOY_COOLDOWN_MS = GameConst::REDEPLOY_COOLDOWN_MS;
 constexpr float PRE_STAGE_WAIT_MS    = 1500.0F;  // 2 seconds
 constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
 constexpr float FINISH_BLACKOUT_MS   = 1000.0F;  // 1 second
@@ -67,9 +66,7 @@ bool EnvEnabled(const char* name) {
 
 } // namespace
 
-// ?????????????????????????????????????????????????????????????????????????????
-// RESET / INIT
-// ?????????????????????????????????????????????????????????????????????????????
+// Reset / init
 void App::ResetDemo() {
     m_GameOver    = false;
     m_MissionClear= false;
@@ -139,127 +136,10 @@ void App::InitializeStage() {
 void App::LoadOperatorAnimations() {
     Util::Animation::ClearDecodedMediaCache();
     m_OperatorAnims.clear();
-    m_OperatorAnims.resize(m_OperatorTemplates.size());
-
-    // Helper: case-insensitive string
-    auto toLower = [](std::string s) {
-        std::transform(s.begin(), s.end(), s.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    };
-
-    auto extensionOf = [&](const std::filesystem::path& path) {
-        return toLower(path.extension().string());
-    };
-
-    auto isApngPath = [&](const std::filesystem::path& path) {
-        return extensionOf(path) == ".apng";
-    };
-
-    auto isSupportedAnimationPath = [&](const std::filesystem::path& path) {
-        const auto ext = extensionOf(path);
-        return ext == ".webm" || ext == ".apng";
-    };
-
-    auto sameStem = [&](const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
-        return toLower(lhs.stem().string()) == toLower(rhs.stem().string());
-    };
-
-    auto loadAnimClipFromMedia = [](const std::filesystem::path& mediaPath, bool loop) {
-        OperatorAnimClip clip;
-        clip.mediaPath = mediaPath.string();
-        clip.loop = loop;
-        return clip;
-    };
-
-    auto shouldPreferClip = [&](const OperatorAnimClip& target, const OperatorAnimClip& clip) {
-        if (target.Empty() || clip.Empty()) return false;
-        const std::filesystem::path targetPath(target.mediaPath);
-        const std::filesystem::path clipPath(clip.mediaPath);
-        return sameStem(targetPath, clipPath) &&
-               !isApngPath(targetPath) &&
-               isApngPath(clipPath);
-    };
-
-    auto assignClipIfLoaded = [&](OperatorAnimClip& target, OperatorAnimClip clip, bool force = false) {
-        if (clip.Empty()) return;
-        if (target.Empty() ||
-            shouldPreferClip(target, clip) ||
-            (force && !shouldPreferClip(clip, target))) {
-            target = std::move(clip);
-        }
-    };
-
-    // Helper: classify a single animation file and assign it to the correct clip
-    // in the given set of 5 slots (start, def, attack, skill, die).
-    auto classifyAndAssign = [&](const std::filesystem::path& mediaPath,
-                                 OperatorAnimClip& start, OperatorAnimClip& def,
-                                 OperatorAnimClip& attack, OperatorAnimClip& skill,
-                                 OperatorAnimClip& die) {
-        std::string animName = toLower(mediaPath.stem().string());
-
-        const bool isDefaultAnim = animName.find("default") != std::string::npos;
-        const bool isIdleAnim    = animName.find("idle") != std::string::npos;
-
-        if (isDefaultAnim || isIdleAnim) {
-            assignClipIfLoaded(def, loadAnimClipFromMedia(mediaPath, true), isDefaultAnim);
-        } else if (animName.find("start") != std::string::npos
-                   && animName.find("skill") == std::string::npos) {
-            assignClipIfLoaded(start, loadAnimClipFromMedia(mediaPath, false));
-        } else if (animName.find("attack") != std::string::npos) {
-            // Prefer "attackloop" or "attack" over "attackbegin"/"attackend"
-            if (animName.find("begin") != std::string::npos || animName.find("end") != std::string::npos) {
-                assignClipIfLoaded(attack, loadAnimClipFromMedia(mediaPath, false));
-            } else {
-                assignClipIfLoaded(attack, loadAnimClipFromMedia(mediaPath, false), true);
-            }
-        } else if (animName.find("skill") != std::string::npos) {
-            // "skillloop" or "skill" (prefer loop for the main skill anim)
-            assignClipIfLoaded(skill, loadAnimClipFromMedia(mediaPath, true),
-                               animName.find("loop") != std::string::npos);
-        } else if (animName.find("die") != std::string::npos) {
-            assignClipIfLoaded(die, loadAnimClipFromMedia(mediaPath, false));
-        }
-    };
-
-    // Helper: scan all supported animation files in a single directory (non-recursive)
-    auto scanDir = [&](const std::filesystem::path& dir,
-                       OperatorAnimClip& start, OperatorAnimClip& def,
-                       OperatorAnimClip& attack, OperatorAnimClip& skill,
-                       OperatorAnimClip& die) {
-        if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) return;
-        for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-            if (!entry.is_regular_file()) continue;
-            if (!isSupportedAnimationPath(entry.path())) continue;
-            classifyAndAssign(entry.path(), start, def, attack, skill, die);
-        }
-    };
-
-    const auto operatorDir = Ark::ResolveOperatorDir();
-    if (operatorDir.empty()) return;
-
-    // For each operator, scan the three subdirectories explicitly:
-    //   front/       → front-facing clips (operator faces RIGHT)
-    //   back/        → back-facing clips  (operator faces UP)
-    //   front_flip/  → flipped front clips (operator faces LEFT or DOWN)
-    for (std::size_t i = 0; i < m_OperatorTemplates.size(); ++i) {
-        const auto& op = m_OperatorTemplates[i];
-        const auto photoDir = operatorDir / op.id / "photo";
-        if (!std::filesystem::exists(photoDir) || !std::filesystem::is_directory(photoDir)) continue;
-
-        auto& pack = m_OperatorAnims[i];
-
-        // front/ → RIGHT-facing
-        scanDir(photoDir / "front",
-                pack.start, pack.def, pack.attack, pack.skill, pack.die);
-
-        // back/ → UP-facing
-        scanDir(photoDir / "back",
-                pack.startBack, pack.defBack, pack.attackBack, pack.skillBack, pack.dieBack);
-
-        // front_flip/ → LEFT/DOWN-facing (pre-generated horizontally-flipped front)
-        scanDir(photoDir / "front_flip",
-                pack.startFlip, pack.defFlip, pack.attackFlip, pack.skillFlip, pack.dieFlip);
+    const auto clipPacks = Ark::LoadOperatorAnimationClips(m_OperatorTemplates);
+    m_OperatorAnims.resize(clipPacks.size());
+    for (std::size_t i = 0; i < clipPacks.size(); ++i) {
+        static_cast<Ark::OperatorAnimationClips&>(m_OperatorAnims[i]) = clipPacks[i];
     }
 
     // Startup should stay light: by default we only index clip paths here.
@@ -271,7 +151,7 @@ void App::LoadOperatorAnimations() {
 
     // Optional compatibility path for machines that prefer a longer loading screen
     // over any first-use animation decode.
-    auto warmClip = [](const OperatorAnimClip& clip) {
+    auto warmClip = [](const AnimationClip& clip) {
         if (!clip.Empty()) {
             Util::Animation warmup(clip.mediaPath, false, clip.loop, false);
         }
@@ -302,112 +182,10 @@ void App::LoadOperatorAnimations() {
 
 void App::LoadEnemyAnimations() {
     m_EnemyAnims.clear();
-    m_EnemyAnims.resize(m_EnemyTemplates.size());
-
-    auto toLower = [](std::string s) {
-        std::transform(s.begin(), s.end(), s.begin(),
-                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return s;
-    };
-
-    auto extensionOf = [&](const std::filesystem::path& path) {
-        return toLower(path.extension().string());
-    };
-
-    auto isApngPath = [&](const std::filesystem::path& path) {
-        return extensionOf(path) == ".apng";
-    };
-
-    auto isSupportedAnimationPath = [&](const std::filesystem::path& path) {
-        const auto ext = extensionOf(path);
-        return ext == ".webm" || ext == ".apng";
-    };
-
-    auto sameStem = [&](const std::filesystem::path& lhs, const std::filesystem::path& rhs) {
-        return toLower(lhs.stem().string()) == toLower(rhs.stem().string());
-    };
-
-    auto loadAnimClipFromMedia = [](const std::filesystem::path& mediaPath, bool loop) {
-        EnemyAnimClip clip;
-        clip.mediaPath = mediaPath.string();
-        clip.loop = loop;
-        return clip;
-    };
-
-    auto shouldPreferClip = [&](const EnemyAnimClip& target, const EnemyAnimClip& clip) {
-        if (target.Empty() || clip.Empty()) return false;
-        const std::filesystem::path targetPath(target.mediaPath);
-        const std::filesystem::path clipPath(clip.mediaPath);
-        return sameStem(targetPath, clipPath) &&
-               !isApngPath(targetPath) &&
-               isApngPath(clipPath);
-    };
-
-    auto assignClipIfLoaded = [&](EnemyAnimClip& target, EnemyAnimClip clip, bool force = false) {
-        if (clip.Empty()) return;
-        if (target.Empty() ||
-            shouldPreferClip(target, clip) ||
-            (force && !shouldPreferClip(clip, target))) {
-            target = std::move(clip);
-        }
-    };
-
-    const auto enemyDir = Ark::ResolveEnemyDir();
-    if (enemyDir.empty()) return;
-
-    for (std::size_t i = 0; i < m_EnemyTemplates.size(); ++i) {
-        const auto& enemyType = m_EnemyTemplates[i];
-        const std::string enemyCode = !enemyType.enemyId.empty() ? enemyType.enemyId : enemyType.id;
-        const std::string enemyCodeLower = toLower(enemyCode);
-        auto& pack = m_EnemyAnims[i];
-
-        auto classifyAndAssign = [&](const std::filesystem::path& mediaPath) {
-            const std::string animName = toLower(mediaPath.stem().string());
-            const bool isExactIdle = animName == enemyCodeLower + "_idle" || animName == "idle";
-            const bool isExactMove = animName == enemyCodeLower + "_move" || animName == "move";
-            const bool isExactAttack = animName == enemyCodeLower + "_attack" || animName == "attack";
-            const bool isExactDie = animName == enemyCodeLower + "_die" || animName == "die";
-
-            if (animName.find("die") != std::string::npos) {
-                assignClipIfLoaded(pack.die, loadAnimClipFromMedia(mediaPath, false), isExactDie);
-            } else if (animName.find("attack") != std::string::npos) {
-                const bool isMainAttack = isExactAttack ||
-                    (animName.find("begin") == std::string::npos &&
-                     animName.find("end") == std::string::npos);
-                assignClipIfLoaded(pack.attack, loadAnimClipFromMedia(mediaPath, false), isMainAttack);
-            } else if (animName.find("idle") != std::string::npos ||
-                       animName.find("default") != std::string::npos) {
-                assignClipIfLoaded(pack.idle, loadAnimClipFromMedia(mediaPath, true), isExactIdle);
-            } else if (animName.find("move") != std::string::npos) {
-                const bool isMainMove = isExactMove ||
-                    animName.find("loop") != std::string::npos;
-                assignClipIfLoaded(pack.move, loadAnimClipFromMedia(mediaPath, true), isMainMove);
-            }
-        };
-
-        auto scanDir = [&](const std::filesystem::path& dir, bool filterToEnemyPrefix) {
-            if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) return;
-            std::vector<std::filesystem::path> mediaFiles;
-            for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-                if (!entry.is_regular_file()) continue;
-                if (!isSupportedAnimationPath(entry.path())) continue;
-                // Keep startup cheap: validation, ffmpeg decode, and disk-cache
-                // population happen lazily inside Util::Animation on first use.
-                if (filterToEnemyPrefix) {
-                    const auto stem = toLower(entry.path().stem().string());
-                    const auto prefix = enemyCodeLower + "_";
-                    if (stem != enemyCodeLower && stem.rfind(prefix, 0) != 0) continue;
-                }
-                mediaFiles.push_back(entry.path());
-            }
-            std::sort(mediaFiles.begin(), mediaFiles.end());
-            for (const auto& mediaPath : mediaFiles) {
-                classifyAndAssign(mediaPath);
-            }
-        };
-
-        scanDir(enemyDir / enemyCode, false);
-        scanDir(enemyDir, true);
+    const auto clipPacks = Ark::LoadEnemyAnimationClips(m_EnemyTemplates);
+    m_EnemyAnims.resize(clipPacks.size());
+    for (std::size_t i = 0; i < clipPacks.size(); ++i) {
+        static_cast<Ark::EnemyAnimationClips&>(m_EnemyAnims[i]) = clipPacks[i];
     }
 
     if (!EnvEnabled("ARKNIGHT_ANIMATION_PRELOAD") &&
@@ -434,7 +212,7 @@ void App::PreloadEnemyAnimationClips() {
     }
 
     std::set<std::string> warmedPaths;
-    auto warmClip = [&](EnemyAnimClip& clip) {
+    auto warmClip = [&](AnimationClip& clip) {
         if (clip.Empty()) return;
         if (!warmedPaths.insert(clip.mediaPath).second) return;
 
@@ -455,10 +233,10 @@ void App::PreloadEnemyAnimationClips() {
 }
 
 bool App::LoadStageFromJsonModule() {
-    auto result = Ark::LoadStageFromJson(m_CurrentStageFile);
-    if (!result.has_value()) return false;
+    auto result = Ark::LoadStageFromJsonDetailed(m_CurrentStageFile);
+    if (!result.Succeeded()) return false;
 
-    auto& d = *result;
+    auto& d = *result.data;
     m_StageWidth    = d.width;
     m_StageHeight   = d.height;
     m_StageName     = d.name;
@@ -566,9 +344,7 @@ void App::BuildFallbackStage() {
     m_TotalWaveUnits = static_cast<int>(m_WavePlans.size());
 }
 
-// ?????????????????????????????????????????????????????????????????????????????
-// WAVE
-// ?????????????????????????????????????????????????????????????????????????????
+// Wave
 void App::StartWave() {
     if (m_GameOver || m_WaveRunning || m_MissionClear || m_PreStageWaiting || m_WavePlans.empty()) return;
     m_WaveRunning    = true;
@@ -598,9 +374,7 @@ void App::UpdateWave(float dtSec) {
     }
 }
 
-// ?????????????????????????????????????????????????????????????????????????????
-// UPDATE (main game tick)
-// ?????????????????????????????????????????????????????????????????????????????
+// Main game tick
 void App::UpdateGame(float dtMs) {
     if (m_ShowQuitConfirm || m_GamePaused) {
         return;
@@ -674,20 +448,25 @@ void App::UpdateGame(float dtMs) {
     UpdateOperators(dtMs);
     CleanupDefeatedEnemies();
 
-    // Remove dead operators (trigger redeploy cooldown)
-    for (const auto& op : m_Operators) {
-        if (op.hp <= 0.0F) {
+    // Dead operators stay visible until their death animation finishes.
+    for (auto& op : m_Operators) {
+        if (op.hp <= 0.0F && !op.redeployCooldownStarted) {
             if (m_SelectedOperatorId == op.id) m_SelectedOperatorId = -1;
             m_OperatorRedeployCooldownMs[op.typeIndex] = REDEPLOY_COOLDOWN_MS;
-            // Cleanup animation instance
-            if (static_cast<std::size_t>(op.typeIndex) < m_OperatorAnims.size()) {
-                m_OperatorAnims[op.typeIndex].activeInstances.erase(op.id);
-            }
+            op.redeployCooldownStarted = true;
         }
     }
     m_Operators.erase(
         std::remove_if(m_Operators.begin(), m_Operators.end(),
-                       [](const Operator& op){ return op.hp <= 0.0F; }),
+                       [&](const Operator& op) {
+            const bool shouldRemove = op.hp <= 0.0F && op.deathAnimationFinished;
+            if (shouldRemove &&
+                op.typeIndex >= 0 &&
+                op.typeIndex < static_cast<int>(m_OperatorAnims.size())) {
+                m_OperatorAnims[static_cast<std::size_t>(op.typeIndex)].activeInstances.erase(op.id);
+            }
+            return shouldRemove;
+        }),
         m_Operators.end());
 
     // Tick redeploy cooldowns

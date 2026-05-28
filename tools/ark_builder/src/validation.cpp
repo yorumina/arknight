@@ -1,13 +1,91 @@
 #include "validation.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <optional>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "stage.hpp"
 
 namespace ark_builder {
+namespace {
+
+auto ResolveEnemyDir() -> std::filesystem::path {
+    const std::array<std::filesystem::path, 4> candidates{
+        std::filesystem::path("data/enemy"),
+        std::filesystem::path("../data/enemy"),
+        std::filesystem::path("../../data/enemy"),
+        std::filesystem::path("../../../data/enemy"),
+    };
+
+    for (const auto& candidate : candidates) {
+        if (std::filesystem::exists(candidate) &&
+            std::filesystem::is_directory(candidate)) {
+            return candidate.lexically_normal();
+        }
+    }
+    return {};
+}
+
+auto LoadEnemyAliases() -> std::unordered_map<std::string, std::unordered_set<std::string>> {
+    std::unordered_map<std::string, std::unordered_set<std::string>> aliases;
+    const auto enemyDir = ResolveEnemyDir();
+    if (enemyDir.empty()) return aliases;
+
+    for (const auto& entry : std::filesystem::directory_iterator(enemyDir)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".json") continue;
+
+        try {
+            std::ifstream file(entry.path());
+            json enemy;
+            file >> enemy;
+            const std::string displayId = enemy.value("id", entry.path().stem().string());
+            const std::string enemyId = enemy.value("enemy_id", entry.path().stem().string());
+            aliases[displayId].insert(displayId);
+            aliases[displayId].insert(enemyId);
+            aliases[enemyId].insert(displayId);
+            aliases[enemyId].insert(enemyId);
+        } catch (const std::exception&) {
+        }
+    }
+
+    return aliases;
+}
+
+auto BuildRuntimeEnemyIds(const json& stage) -> std::unordered_set<std::string> {
+    std::unordered_set<std::string> ids;
+    if (!stage.contains("enemies") || !stage["enemies"].is_object()) {
+        return ids;
+    }
+
+    const auto aliases = LoadEnemyAliases();
+    for (auto it = stage["enemies"].begin(); it != stage["enemies"].end(); ++it) {
+        const std::string key = it.key();
+        ids.insert(key);
+
+        if (const auto aliasIt = aliases.find(key); aliasIt != aliases.end()) {
+            ids.insert(aliasIt->second.begin(), aliasIt->second.end());
+        }
+
+        const auto& enemy = it.value();
+        if (enemy.is_object() && enemy.contains("enemy_id") && enemy["enemy_id"].is_string()) {
+            const std::string enemyId = enemy["enemy_id"].get<std::string>();
+            ids.insert(enemyId);
+            if (const auto aliasIt = aliases.find(enemyId); aliasIt != aliases.end()) {
+                ids.insert(aliasIt->second.begin(), aliasIt->second.end());
+            }
+        }
+    }
+
+    return ids;
+}
+
+} // namespace
 
 void ValidateRootSchema(const json& stage, std::vector<std::string>& errors) {
     if (!stage.is_object()) {
@@ -282,6 +360,7 @@ void ValidateWaves(const json& stage, std::vector<std::string>& errors) {
         stage.contains("enemies") && stage["enemies"].is_object();
     const bool hasRouteMap =
         stage.contains("routes") && stage["routes"].is_object();
+    const auto runtimeEnemyIds = BuildRuntimeEnemyIds(stage);
 
     const auto& waves = stage["waves"];
     for (size_t i = 0; i < waves.size(); ++i) {
@@ -316,7 +395,7 @@ void ValidateWaves(const json& stage, std::vector<std::string>& errors) {
 
         if (wave.contains("enemy") && wave["enemy"].is_string() && hasEnemyMap) {
             const auto enemyId = wave["enemy"].get<std::string>();
-            if (!stage["enemies"].contains(enemyId)) {
+            if (runtimeEnemyIds.find(enemyId) == runtimeEnemyIds.end()) {
                 errors.push_back(waveLabel + " references unknown enemy '" +
                                  enemyId + "'");
             }

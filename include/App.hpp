@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "Ark/AnimationLoader.hpp"
 #include "Ark/ArkTypes.hpp"
 #include "Util/Animation.hpp"
 #include "Util/Image.hpp"
@@ -18,12 +19,10 @@ constexpr float PERSPECTIVE_X_SHEAR = 0.0F;
 
 namespace Ark {
 class AppRenderer;
-class GameLogic;
 }
 
 class App {
     friend class Ark::AppRenderer;
-    friend class Ark::GameLogic;
 public:
     enum class State { START, LOADING, UPDATE, END };
     State GetCurrentState() const { return m_CurrentState; }
@@ -82,7 +81,7 @@ private:
     int  FindRouteIndex(const std::string& routeId) const;
     int  FindEnemyTemplateIndex(const std::string& enemyId) const;
 
-    // ?? Operator availability ?????????????????????????????????????
+    // Operator availability
     bool IsOperatorTypeOnField(int typeIndex) const;
     bool IsOperatorTypeAvailable(int typeIndex) const;
 
@@ -93,7 +92,7 @@ private:
     Ark::BoardLayout GetBoardLayout() const;
 
 private:
-    // ?? Stage ??????????????????????????????????????????????????????
+    // Stage
     int         m_StageWidth = 14;
     int         m_StageHeight = 8;
     std::string m_StageName = "fallback_stage";
@@ -118,10 +117,10 @@ private:
     std::string m_StageFinishPath;
     float m_StageFinishAlpha = 1.0F;
 
-    // ?? Operator definitions (loaded from JSON) ????????????????????
+    // Operator definitions loaded from JSON
     std::vector<Ark::OperatorTemplate> m_OperatorTemplates;
 
-    // ?? State machine ??????????????????????????????????????????????
+    // State machine
     State m_CurrentState = State::START;
     bool  m_GameOver     = false;
     bool  m_MissionClear = false;
@@ -136,7 +135,7 @@ private:
     float m_FinishExitTimerMs = 0.0F;
     int   m_LoadingPhase = 0;  // 0=show loading screen, 1=do heavy work, 2=done
 
-    // ?€?€ Economy ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    // Economy
     float m_DP            = 10.0F;
     float m_MaxDP         = 99.0F;
     float m_DPRegenPerSec = 1.0F;
@@ -144,14 +143,14 @@ private:
     int   m_LifePoint     = 10;
     int   m_KillCount     = 0;
 
-    // ?? Deployment ?????????????????????????????????????????????????
+    // Deployment
     int  m_SelectedOperatorType = 0;
     bool m_IsDeploying          = false;
     glm::ivec2 m_DeployingCell{0, 0};
     glm::ivec2 m_DeployingDirection{1, 0};
     int m_SelectedOperatorId = -1;
 
-    // ?? Drag-and-drop deployment ??????????????????????????????????????????????
+    // Drag-and-drop deployment
     bool m_DraggingFromBar       = false;   // currently dragging from operator bar
     int  m_DragOperatorType      = -1;      // which operator type is being dragged
     glm::vec2 m_DragScreenPos{0, 0};        // current screen-space drag position
@@ -162,7 +161,7 @@ private:
     bool m_IsDirectionDragging = false;
     glm::vec2 m_DirectionDragStart{0, 0};
 
-    // ?? Wave ??????????????????????????????????????????????????????????????
+    // Wave
     int         m_CurrentWave     = 0;
     int         m_TotalWaves      = 0;
     bool        m_WaveRunning     = false;
@@ -171,64 +170,26 @@ private:
     float       m_WaveElapsedSec  = 0.0F;
     std::size_t m_NextSpawnIndex  = 0;
 
-    // ?? ID counters ????????????????????????????????????????????????
+    // ID counters
     int m_NextOperatorId = 1;
     int m_NextEnemyId    = 1;
 
-    // ?? Live entities ??????????????????????????????????????????????
+    // Live entities
     std::vector<Ark::Enemy>      m_Enemies;
     std::vector<Ark::Operator>   m_Operators;
     std::vector<Ark::AttackBeam> m_Beams;
 
-    // ?? Redeploy cooldown (per operator type index, in ms) ????????
+    // Redeploy cooldown per operator type index, in ms.
     // After retreat or death, 90 seconds before redeployment
     std::map<int, float> m_OperatorRedeployCooldownMs;
 
-    // ?? Models ?????????????????????????????????????????????????????
-    struct OperatorAnimClip {
-        std::string mediaPath;
-        bool loop = true;
-
-        bool Empty() const { return mediaPath.empty(); }
-    };
-
-    struct OperatorAnimPack {
-        // front-facing (operator faces RIGHT)
-        OperatorAnimClip start;
-        OperatorAnimClip def;
-        OperatorAnimClip attack;
-        OperatorAnimClip skill;
-        OperatorAnimClip die;
-        // back-facing (operator faces UP)
-        OperatorAnimClip startBack;
-        OperatorAnimClip defBack;
-        OperatorAnimClip attackBack;
-        OperatorAnimClip skillBack;
-        OperatorAnimClip dieBack;
-        // flipped front-facing (operator faces LEFT or DOWN)
-        // Pre-generated via tools/generate_flipped_front.sh
-        OperatorAnimClip startFlip;
-        OperatorAnimClip defFlip;
-        OperatorAnimClip attackFlip;
-        OperatorAnimClip skillFlip;
-        OperatorAnimClip dieFlip;
-        // Tracking active animations for currently deployed operators
+    // Models and animation runtime state
+    struct OperatorAnimPack : Ark::OperatorAnimationClips {
         std::map<int, std::shared_ptr<Util::Animation>> activeInstances; 
     };
     std::vector<OperatorAnimPack> m_OperatorAnims;
 
-    struct EnemyAnimClip {
-        std::string mediaPath;
-        bool loop = true;
-
-        bool Empty() const { return mediaPath.empty(); }
-    };
-
-    struct EnemyAnimPack {
-        EnemyAnimClip idle;
-        EnemyAnimClip move;
-        EnemyAnimClip attack;
-        EnemyAnimClip die;
+    struct EnemyAnimPack : Ark::EnemyAnimationClips {
         std::shared_ptr<Util::Animation> sharedIdleInstance;
         std::shared_ptr<Util::Animation> sharedMoveInstance;
         unsigned long sharedIdleUpdateSerial = 0;

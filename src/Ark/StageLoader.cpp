@@ -1,6 +1,4 @@
-// ????????????????????????????????????????????????????????????????
-// StageLoader.cpp  ?? Ark engine stage/entity loader
-// ????????????????????????????????????????????????????????????????
+// StageLoader.cpp - Ark engine stage/entity loader
 #include "Ark/StageLoader.hpp"
 
 #include <algorithm>
@@ -10,8 +8,8 @@
 #include <unordered_map>
 
 #include "pch.hpp"
+#include "Util/Logger.hpp"
 
-// ?? helpers ????????????????????????????????????????????????????
 namespace {
 
 const std::array<std::string, 8> BASE_CANDIDATES{
@@ -67,8 +65,17 @@ std::filesystem::path ResolveAssetPath(const std::filesystem::path& stagePath, c
     return {};
 }
 
+void LogStageLoadErrors(const std::string& stageFile, const std::vector<std::string>& errors) {
+    if (errors.empty()) return;
+
+    LOG_ERROR("Failed to load stage '{}'", stageFile);
+    for (const auto& error : errors) {
+        LOG_WARN("  {}", error);
+    }
+}
+
 // Build a map: display-name -> EnemyTemplate (reads all *.json in data/enemy/)
-// File names are the enemy_id (B2, 01, 02, ??.  The "id" field inside JSON
+// File names are the enemy_id (B2, 01, 02, etc.). The "id" field inside JSON
 // is the display name used in level "enemies" sections.
 std::unordered_map<std::string, Ark::EnemyTemplate> BuildEnemyRegistry(const std::filesystem::path& dir) {
     std::unordered_map<std::string, Ark::EnemyTemplate> reg;
@@ -96,14 +103,15 @@ std::unordered_map<std::string, Ark::EnemyTemplate> BuildEnemyRegistry(const std
             // Register by display name AND enemy_id so both look-ups work
             reg[tmpl.id]     = tmpl;
             reg[tmpl.enemyId]= tmpl;
-        } catch (...) {}
+        } catch (const std::exception& e) {
+            LOG_WARN("Skipping enemy definition '{}': {}", entry.path().string(), e.what());
+        }
     }
     return reg;
 }
 
 } // namespace
 
-// ?? public API ?????????????????????????????????????????????????
 namespace Ark {
 
 std::optional<std::filesystem::path> ResolveStagePath(const std::string& level) {
@@ -193,28 +201,48 @@ std::vector<OperatorTemplate> LoadOperators() {
             auto it = OP_COLORS.find(t.id);
             t.color = (it != OP_COLORS.end()) ? it->second : IM_COL32(200,200,200,255);
             if (!t.id.empty()) result.push_back(t);
-        } catch (...) {}
+        } catch (const std::exception& e) {
+            LOG_WARN("Skipping operator definition '{}': {}", p.string(), e.what());
+        }
     }
     return result;
 }
 
 // Load a full stage from JSON, wiring in enemies from the data/enemy directory
-std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
+StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
+    StageLoadResult result;
+    auto fail = [&](std::string error) {
+        result.errors.push_back(std::move(error));
+        LogStageLoadErrors(stageFile, result.errors);
+        return result;
+    };
+
     const auto stagePath = ResolveStagePath(stageFile);
-    if (!stagePath.has_value()) return std::nullopt;
+    if (!stagePath.has_value()) {
+        return fail("stage file not found in data/levels search paths");
+    }
 
     try {
         std::ifstream file(*stagePath);
-        if (!file.is_open()) return std::nullopt;
+        if (!file.is_open()) {
+            return fail("unable to open " + stagePath->string());
+        }
+
         nlohmann::json stage;
         file >> stage;
-        if (!stage.is_object()) return std::nullopt;
+        if (!stage.is_object()) {
+            return fail("stage root must be a JSON object: " + stagePath->string());
+        }
 
         const int W = stage.value("width",  0);
         const int H = stage.value("height", 0);
-        if (W <= 0 || H <= 0) return std::nullopt;
+        if (W <= 0 || H <= 0) {
+            return fail("stage width and height must be positive");
+        }
         if (!stage.contains("tiles") || !stage["tiles"].is_array() ||
-            static_cast<int>(stage["tiles"].size()) != H) return std::nullopt;
+            static_cast<int>(stage["tiles"].size()) != H) {
+            return fail("tiles must be an array with exactly height rows");
+        }
 
         StageData data;
         data.name       = stage.value("name", "unnamed_stage");
@@ -264,7 +292,9 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
 
         for (int y = 0; y < H; ++y) {
             const auto& row = stage["tiles"][static_cast<std::size_t>(y)];
-            if (!row.is_array() || static_cast<int>(row.size()) != W) return std::nullopt;
+            if (!row.is_array() || static_cast<int>(row.size()) != W) {
+                return fail("tiles[" + std::to_string(y) + "] must be an array with exactly width cells");
+            }
             for (int x = 0; x < W; ++x) {
                 const auto& cell = row[static_cast<std::size_t>(x)];
                 if (cell.is_string()) {
@@ -277,6 +307,9 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
                     if (!imagePath.empty()) {
                         data.tileImages[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] = imagePath.string();
                     }
+                } else {
+                    return fail("tile at (" + std::to_string(x) + "," + std::to_string(y) +
+                                ") must be a string or object");
                 }
             }
         }
@@ -297,29 +330,51 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
         }
 
         // Routes
-        if (!stage.contains("routes") || !stage["routes"].is_object()) return std::nullopt;
+        if (!stage.contains("routes") || !stage["routes"].is_object()) {
+            return fail("missing or invalid routes object");
+        }
         auto boardCenter = [](int x, int y) -> glm::vec2 {
             return {static_cast<float>(x)+0.5F, static_cast<float>(y)+0.5F};
         };
         for (const auto& [routeId, nodes] : stage["routes"].items()) {
-            if (!nodes.is_array() || nodes.empty()) continue;
+            if (!nodes.is_array() || nodes.empty()) {
+                result.errors.push_back("route '" + routeId + "' must be a non-empty array");
+                continue;
+            }
             Route r; r.id = routeId;
-            for (const auto& nd : nodes) {
-                if (!nd.is_object()) continue;
+            for (std::size_t index = 0; index < nodes.size(); ++index) {
+                const auto& nd = nodes[index];
+                if (!nd.is_object()) {
+                    result.errors.push_back("route '" + routeId + "' node " +
+                                            std::to_string(index) + " must be an object");
+                    continue;
+                }
                 int nx = nd.value("x", -1), ny = nd.value("y", -1);
-                if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+                if (nx < 0 || nx >= W || ny < 0 || ny >= H) {
+                    result.errors.push_back("route '" + routeId + "' node " +
+                                            std::to_string(index) + " is out of bounds");
+                    continue;
+                }
                 r.nodes.push_back(RouteNode{boardCenter(nx, ny), nd.value("wait", 0.0F)});
             }
-            if (r.nodes.size() >= 2) data.routes.push_back(std::move(r));
+            if (r.nodes.size() >= 2) {
+                data.routes.push_back(std::move(r));
+            } else {
+                result.errors.push_back("route '" + routeId + "' has fewer than two valid nodes");
+            }
         }
-        if (data.routes.empty()) return std::nullopt;
+        if (data.routes.empty()) {
+            return fail("stage has no valid routes");
+        }
 
         // Collect enemy display names from level "enemies" section
         std::vector<std::string> enemyNames;
         if (stage.contains("enemies") && stage["enemies"].is_object())
             for (const auto& [eid, _] : stage["enemies"].items())
                 enemyNames.push_back(eid);
-        if (enemyNames.empty()) return std::nullopt;
+        if (enemyNames.empty()) {
+            return fail("stage enemies object is missing or empty");
+        }
 
         data.enemyTemplates = LoadEnemies(enemyNames);
         // Apply or override stats from level "enemies" section.
@@ -341,7 +396,9 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
                 tmpl.canAttackOperator = ed->value("canAttackOperator", tmpl.canAttackOperator);
             }
         }
-        if (data.enemyTemplates.empty()) return std::nullopt;
+        if (data.enemyTemplates.empty()) {
+            return fail("stage has no enemy templates after loading enemies");
+        }
 
         // Index helpers
         auto findEnemy = [&](const std::string& name) -> int {
@@ -357,21 +414,32 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
         };
 
         // Waves
-        if (!stage.contains("waves") || !stage["waves"].is_array()) return std::nullopt;
+        if (!stage.contains("waves") || !stage["waves"].is_array()) {
+            return fail("missing or invalid waves array");
+        }
         data.totalWaves = static_cast<int>(stage["waves"].size());
         for (std::size_t wi = 0; wi < stage["waves"].size(); ++wi) {
             const auto& wave = stage["waves"][wi];
-            if (!wave.is_object()) continue;
+            const std::string waveLabel = "waves[" + std::to_string(wi) + "]";
+            if (!wave.is_object()) {
+                result.errors.push_back(waveLabel + " must be an object");
+                continue;
+            }
             int   ei    = findEnemy(wave.value("enemy",""));
             int   ri    = findRoute(wave.value("route",""));
             int   cnt   = wave.value("count",    0);
             float start = wave.value("start",    0.0F);
             float inter = wave.value("interval", 0.0F);
-            if (ei < 0 || ri < 0 || cnt <= 0) continue;
+            if (ei < 0 || ri < 0 || cnt <= 0) {
+                result.errors.push_back(waveLabel + " references invalid enemy/route or has non-positive count");
+                continue;
+            }
             for (int u = 0; u < cnt; ++u)
                 data.wavePlans.push_back(WavePlan{static_cast<int>(wi)+1, ei, ri, start+inter*u});
         }
-        if (data.wavePlans.empty()) return std::nullopt;
+        if (data.wavePlans.empty()) {
+            return fail("stage has no valid wave plans");
+        }
 
         std::sort(data.wavePlans.begin(), data.wavePlans.end(),
             [](const WavePlan& a, const WavePlan& b){
@@ -380,10 +448,20 @@ std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
                            std::tie(b.waveIndex,b.routeIndex,b.enemyTypeIndex);
                 return a.spawnTimeSec < b.spawnTimeSec;
             });
-        return data;
-    } catch (...) {
-        return std::nullopt;
+        if (!result.errors.empty()) {
+            for (const auto& error : result.errors) {
+                LOG_WARN("Stage '{}' loaded with warning: {}", stageFile, error);
+            }
+        }
+        result.data = std::move(data);
+        return result;
+    } catch (const std::exception& e) {
+        return fail(std::string("exception while loading stage: ") + e.what());
     }
+}
+
+std::optional<StageData> LoadStageFromJson(const std::string& stageFile) {
+    return LoadStageFromJsonDetailed(stageFile).data;
 }
 
 } // namespace Ark
