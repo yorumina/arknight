@@ -115,7 +115,7 @@ void App::UpdateOperators(float dtMs) {
                 auto& pack = m_OperatorAnims[static_cast<std::size_t>(op.typeIndex)];
                 auto it = pack.activeInstances.find(op.id);
                 if (it != pack.activeInstances.end() && it->second) {
-                    it->second->Update();
+                    it->second->Update(dtMs);
                     if (it->second->GetState() == Util::Animation::State::ENDED) {
                         op.deathAnimationFinished = true;
                     }
@@ -173,7 +173,7 @@ void App::UpdateOperators(float dtMs) {
                 }
             }
 
-            animInst->Update();
+            animInst->Update(dtMs);
         }
 
         const bool isBagpipe = IsBagpipe(opType);
@@ -375,12 +375,15 @@ bool App::IsCellOccupied(const glm::ivec2& cell) const {
         [&](const Operator& op){ return op.cell == cell; });
 }
 
-bool App::IsDeployableCellForSelectedOperator(const glm::ivec2& cell) const {
+bool App::IsDeployableCellForOperatorType(int typeIndex, const glm::ivec2& cell) const {
     if (cell.x < 0 || cell.x >= m_StageWidth || cell.y < 0 || cell.y >= m_StageHeight) return false;
-    const auto selectedIdx = static_cast<std::size_t>(m_SelectedOperatorType);
-    if (selectedIdx >= m_OperatorTemplates.size()) return false;
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(m_OperatorTemplates.size())) return false;
     const auto tile = m_TileMap[static_cast<std::size_t>(cell.y)][static_cast<std::size_t>(cell.x)];
-    return IsDeployableTile(tile, m_OperatorTemplates[selectedIdx].deployType);
+    return IsDeployableTile(tile, m_OperatorTemplates[static_cast<std::size_t>(typeIndex)].deployType);
+}
+
+bool App::IsDeployableCellForSelectedOperator(const glm::ivec2& cell) const {
+    return IsDeployableCellForOperatorType(m_SelectedOperatorType, cell);
 }
 
 bool App::IsDeployableTile(TileType tile, DeployType dt) const {

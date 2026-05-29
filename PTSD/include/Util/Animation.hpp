@@ -173,6 +173,7 @@ public:
      * @brief Update the animation frames.
      */
     void Update();
+    void Update(float deltaTimeMs);
 
     static void ClearDecodedMediaCache();
 

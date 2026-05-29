@@ -929,6 +929,10 @@ void Animation::Pause() {
 }
 
 void Animation::Update() {
+    Update(Util::Time::GetDeltaTimeMs());
+}
+
+void Animation::Update(float deltaTimeMs) {
     unsigned long nowTime = Util::Time::GetElapsedTimeMs();
     if (m_State == State::PAUSE || m_State == State::ENDED) {
         LOG_TRACE("[ANI] is pause");
@@ -942,7 +946,7 @@ void Animation::Update() {
         return;
     }
 
-    m_TimeBetweenFrameUpdate += Util::Time::GetDeltaTimeMs();
+    m_TimeBetweenFrameUpdate += std::max(0.0F, deltaTimeMs);
     const double interval = std::max(1.0, GetCurrentFrameInterval());
     auto updateFrameCount =
         static_cast<unsigned int>(m_TimeBetweenFrameUpdate / interval);

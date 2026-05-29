@@ -2,177 +2,212 @@
 #include "Ark/Renderer.hpp"
 #include "RendererShared.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <map>
+#include <vector>
 
 using namespace Ark;
 using namespace Ark::RendererConst;
 
-void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout) {
+void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout, bool drawUnderlay) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
 
-    // Show grid highlight when dragging over valid cells
-    if (m_App.m_DraggingFromBar && !m_App.m_WaitingForDirection && hoverCell && m_App.m_DragOperatorType >= 0) {
-        int prevSelected = m_App.m_SelectedOperatorType;
-        m_App.m_SelectedOperatorType = m_App.m_DragOperatorType;
-        bool deployable = m_App.IsOperatorTypeAvailable(m_App.m_DragOperatorType) &&
-                          m_App.IsDeployableCellForSelectedOperator(*hoverCell) && !m_App.IsCellOccupied(*hoverCell)
-                          && static_cast<int>(m_App.m_Operators.size()) < MAX_OPS;
-        const auto& opType = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(m_App.m_DragOperatorType));
-        bool affordable = m_App.m_DP >= static_cast<float>(opType.cost);
-        m_App.m_SelectedOperatorType = prevSelected;
+    auto cellQuad = [&](const glm::ivec2& cell) {
+        const float l = layout.topLeftX + static_cast<float>(cell.x) * layout.cellSize;
+        const float t = layout.topLeftY - static_cast<float>(cell.y) * layout.cellSize;
+        const float r = l + layout.cellSize;
+        const float b = t - layout.cellSize;
+        return std::array<ImVec2, 4>{
+            m_App.ToScreenPosition({l, t}),
+            m_App.ToScreenPosition({r, t}),
+            m_App.ToScreenPosition({r, b}),
+            m_App.ToScreenPosition({l, b}),
+        };
+    };
 
-        ImU32 pv = (deployable && affordable) ? IM_COL32(89,225,167,90) : IM_COL32(225,89,89,90);
+    auto drawCellTint = [&](const glm::ivec2& cell, ImU32 fill, ImU32 line, float thickness = 1.0F) {
+        const auto q = cellQuad(cell);
+        draw->AddQuadFilled(q[0], q[1], q[2], q[3], fill);
+        draw->AddQuad(q[0], q[1], q[2], q[3], line, thickness);
+    };
 
-        float l = layout.topLeftX + hoverCell->x * layout.cellSize;
-        float t = layout.topLeftY - hoverCell->y * layout.cellSize;
-        float r = l + layout.cellSize, b = t - layout.cellSize;
-        
-        ImVec2 q1 = m_App.ToScreenPosition({l,t});
-        ImVec2 q2 = m_App.ToScreenPosition({r,t});
-        ImVec2 q3 = m_App.ToScreenPosition({r,b});
-        ImVec2 q4 = m_App.ToScreenPosition({l,b});
-        draw->AddQuadFilled(q1, q2, q3, q4, pv);
-    }
-
-    // Draw deploying operator model following cursor (during drag)
-    if (m_App.m_DraggingFromBar && m_App.m_DragOperatorType >= 0 && !m_App.m_WaitingForDirection) {
-        float l = layout.topLeftX + (hoverCell ? hoverCell->x : 0) * layout.cellSize;
-        float t = layout.topLeftY - (hoverCell ? hoverCell->y : 0) * layout.cellSize;
-        ImVec2 centerpos = hoverCell ? m_App.ToScreenPosition({l + layout.cellSize * 0.5F, t - layout.cellSize * 0.5F}) : ImVec2(m_App.m_DragScreenPos.x, m_App.m_DragScreenPos.y);
-
-        GLuint thumbTex = 0;
-        if (static_cast<std::size_t>(m_App.m_DragOperatorType) < m_App.m_OperatorThumbnails.size() &&
-            m_App.m_OperatorThumbnails[static_cast<std::size_t>(m_App.m_DragOperatorType)]) {
-            thumbTex = m_App.m_OperatorThumbnails[static_cast<std::size_t>(m_App.m_DragOperatorType)]->GetTextureId();
+    auto drawStripedCell = [&](const glm::ivec2& cell) {
+        const auto q = cellQuad(cell);
+        draw->AddQuadFilled(q[0], q[1], q[2], q[3], IM_COL32(238, 139, 28, 104));
+        const float minX = std::min({q[0].x, q[1].x, q[2].x, q[3].x});
+        const float maxX = std::max({q[0].x, q[1].x, q[2].x, q[3].x});
+        const float minY = std::min({q[0].y, q[1].y, q[2].y, q[3].y});
+        const float maxY = std::max({q[0].y, q[1].y, q[2].y, q[3].y});
+        const float h = std::max(1.0F, maxY - minY);
+        draw->PushClipRect({minX, minY}, {maxX, maxY}, true);
+        for (float x = minX - h; x < maxX + h; x += 42.0F) {
+            draw->AddLine({x, maxY}, {x + h, minY}, IM_COL32(255, 184, 38, 154), 14.0F);
         }
-        if (thumbTex != 0) {
-            const float imgS = layout.cellSize * 0.8F;
-            draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(thumbTex)),
-                           {centerpos.x - imgS, centerpos.y - imgS},
-                           {centerpos.x + imgS, centerpos.y + imgS});
-        }
-    }
+        draw->PopClipRect();
+        draw->AddQuad(q[0], q[1], q[2], q[3], IM_COL32(255, 178, 45, 190), 1.6F);
+    };
 
-    // Show direction selection highlighting (Image 1 and Image 2 styles)
-    if (m_App.m_WaitingForDirection) {
-        // Draw the placed operator model
-        float l = layout.topLeftX + m_App.m_DirectionCell.x * layout.cellSize;
-        float t = layout.topLeftY - m_App.m_DirectionCell.y * layout.cellSize;
-        float r = l + layout.cellSize, b = t - layout.cellSize;
-        
-        ImVec2 q1 = m_App.ToScreenPosition({l,t});
-        ImVec2 q2 = m_App.ToScreenPosition({r,t});
-        ImVec2 q3 = m_App.ToScreenPosition({r,b});
-        ImVec2 q4 = m_App.ToScreenPosition({l,b});
-        
-        // Image 1: White Diamond outline around the placed cell
-        draw->AddQuad(q1, q2, q3, q4, IM_COL32(255,255,255,255), 4.0F);
+    auto isReadyToDeploy = [&](int typeIndex) {
+        if (typeIndex < 0 || typeIndex >= static_cast<int>(m_App.m_OperatorTemplates.size())) return false;
+        if (!m_App.IsOperatorTypeAvailable(typeIndex)) return false;
+        if (static_cast<int>(m_App.m_Operators.size()) >= MAX_OPS) return false;
+        const auto& opType = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(typeIndex));
+        return m_App.m_DP >= static_cast<float>(opType.cost);
+    };
 
-        // Operator Sprite
-        ImVec2 centerpos = m_App.ToScreenPosition({l + layout.cellSize * 0.5F, t - layout.cellSize * 0.5F});
-        GLuint thumbTex = 0;
-        if (static_cast<std::size_t>(m_App.m_DragOperatorType) < m_App.m_OperatorThumbnails.size() &&
-            m_App.m_OperatorThumbnails[static_cast<std::size_t>(m_App.m_DragOperatorType)]) {
-            thumbTex = m_App.m_OperatorThumbnails[static_cast<std::size_t>(m_App.m_DragOperatorType)]->GetTextureId();
-        }
-        if (thumbTex != 0) {
-            const float imgS = layout.cellSize * 0.8F;
-            draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(thumbTex)),
-                           {centerpos.x - imgS, centerpos.y - imgS},
-                           {centerpos.x + imgS, centerpos.y + imgS});
-        }
+    auto canDeployTo = [&](int typeIndex, const glm::ivec2& cell) {
+        return isReadyToDeploy(typeIndex) &&
+               m_App.IsDeployableCellForOperatorType(typeIndex, cell) &&
+               !m_App.IsCellOccupied(cell);
+    };
 
-        // Draw selection UI
-        if (m_App.m_IsDirectionDragging) {
-            const ImVec2 screenCursor = m_App.ToScreenPosition(ptsdCursor);
-            // Check if within cancel distance
-            glm::vec2 diff{
-                screenCursor.x - m_App.m_DirectionDragStart.x,
-                screenCursor.y - m_App.m_DirectionDragStart.y
-            };
-            bool hoveringCancel = (std::abs(diff.x) <= 25.0F && std::abs(diff.y) <= 25.0F);
-
-            // Highlight the active drag direction (Image 2 yellow strip)
-            if (!hoveringCancel && (diff.x != 0 || diff.y != 0)) {
-                glm::ivec2 currDir{0, 0};
-                if (std::abs(diff.x) > std::abs(diff.y)) currDir = diff.x > 0 ? glm::ivec2(1, 0) : glm::ivec2(-1, 0);
-                else currDir = diff.y > 0 ? glm::ivec2(0, 1) : glm::ivec2(0, -1);
-                
-                glm::ivec2 hlCell = m_App.m_DirectionCell + currDir;
-                float hll = layout.topLeftX + hlCell.x * layout.cellSize;
-                float hlt = layout.topLeftY - hlCell.y * layout.cellSize;
-                float hlr = hll + layout.cellSize, hlb = hlt - layout.cellSize;
-                draw->AddQuadFilled(m_App.ToScreenPosition({hll,hlt}), m_App.ToScreenPosition({hlr,hlt}),
-                                    m_App.ToScreenPosition({hlr,hlb}), m_App.ToScreenPosition({hll,hlb}),
-                                    IM_COL32(255,160,0,180));
-            }
-
-            // Draw floating banner
-            const char* bannerText = u8"拖回中心區域取消";
-            const auto bannerSize = ImGui::CalcTextSize(bannerText);
-            const float bPad = 8.0F;
-            ImVec2 bPos{centerpos.x - bannerSize.x * 0.5F - 30.0F, centerpos.y - layout.cellSize - 20.0F};
-            
-            // Black polygon background for banner
-            draw->AddRectFilled({bPos.x - bPad, bPos.y - bPad}, {bPos.x + bannerSize.x + bPad, bPos.y + bannerSize.y + bPad}, IM_COL32(0, 0, 0, 220), 2.0F);
-            // little tail pointing down
-            draw->AddTriangleFilled({bPos.x + bannerSize.x*0.5F - 5.0F, bPos.y + bannerSize.y + bPad},
-                                    {bPos.x + bannerSize.x*0.5F + 5.0F, bPos.y + bannerSize.y + bPad},
-                                    {bPos.x + bannerSize.x*0.5F, bPos.y + bannerSize.y + bPad + 10.0F}, IM_COL32(0, 0, 0, 220));
-                                    
-            draw->AddText(bPos, hoveringCancel ? IM_COL32(255, 50, 50, 255) : IM_COL32(255, 255, 255, 255), bannerText);
-        } else {
-            // Draw 4 small chevrons (Image 1 style) around center
-            const float dist = layout.cellSize * 0.6F;
-            const float s = 8.0F;
-            // Up
-            draw->AddLine({centerpos.x - s, centerpos.y - dist + s}, {centerpos.x, centerpos.y - dist}, IM_COL32(255,255,255,200), 3.0F);
-            draw->AddLine({centerpos.x + s, centerpos.y - dist + s}, {centerpos.x, centerpos.y - dist}, IM_COL32(255,255,255,200), 3.0F);
-            // Down
-            draw->AddLine({centerpos.x - s, centerpos.y + dist - s}, {centerpos.x, centerpos.y + dist}, IM_COL32(255,255,255,200), 3.0F);
-            draw->AddLine({centerpos.x + s, centerpos.y + dist - s}, {centerpos.x, centerpos.y + dist}, IM_COL32(255,255,255,200), 3.0F);
-            // Left
-            draw->AddLine({centerpos.x - dist + s, centerpos.y - s}, {centerpos.x - dist, centerpos.y}, IM_COL32(255,255,255,200), 3.0F);
-            draw->AddLine({centerpos.x - dist + s, centerpos.y + s}, {centerpos.x - dist, centerpos.y}, IM_COL32(255,255,255,200), 3.0F);
-            // Right
-            draw->AddLine({centerpos.x + dist - s, centerpos.y - s}, {centerpos.x + dist, centerpos.y}, IM_COL32(255,255,255,200), 3.0F);
-            draw->AddLine({centerpos.x + dist - s, centerpos.y + s}, {centerpos.x + dist, centerpos.y}, IM_COL32(255,255,255,200), 3.0F);
-        }
-
-        // Show attack range preview for the selected direction
-        if (m_App.m_DragOperatorType >= 0) {
-            const auto& st = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(m_App.m_DragOperatorType));
-            for (int dx = -5; dx <= 5; ++dx) for (int dy = -5; dy <= 5; ++dy) {
-                glm::ivec2 rel{dx, dy};
-                bool inR = false;
+    auto rangeCells = [&](int typeIndex, const glm::ivec2& origin, glm::ivec2 dir) {
+        std::vector<glm::ivec2> cells;
+        if (typeIndex < 0 || typeIndex >= static_cast<int>(m_App.m_OperatorTemplates.size())) return cells;
+        if (dir.x == 0 && dir.y == 0) dir = {1, 0};
+        const auto& st = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(typeIndex));
+        for (int dx = -5; dx <= 5; ++dx) {
+            for (int dy = -5; dy <= 5; ++dy) {
+                const glm::ivec2 rel{dx, dy};
+                bool inRange = false;
                 if (rel.x == 0 && rel.y == 0) {
-                    inR = true;
+                    inRange = true;
                 } else if (st.deployType == DeployType::GROUND_ONLY) {
-                    inR = rel == m_App.m_DeployingDirection;
+                    inRange = rel == dir;
                 } else {
-                    int fw = rel.x*m_App.m_DeployingDirection.x + rel.y*m_App.m_DeployingDirection.y;
-                    int pp = rel.x*m_App.m_DeployingDirection.y - rel.y*m_App.m_DeployingDirection.x;
-                    inR = (fw>=1&&fw<=4&&std::abs(pp)<=1);
+                    const int fw = rel.x * dir.x + rel.y * dir.y;
+                    const int pp = rel.x * dir.y - rel.y * dir.x;
+                    inRange = fw >= 1 && fw <= 4 && std::abs(pp) <= 1;
                 }
-                if (!inR) continue;
-                glm::ivec2 tc = m_App.m_DirectionCell + rel;
-                if (tc.x<0||tc.x>=m_App.m_StageWidth||tc.y<0||tc.y>=m_App.m_StageHeight) continue;
-                float rl = layout.topLeftX + tc.x * layout.cellSize;
-                float rt = layout.topLeftY - tc.y * layout.cellSize;
-                float rr = rl + layout.cellSize, rb = rt - layout.cellSize;
-
-                ImVec2 rq1 = m_App.ToScreenPosition({rl,rt});
-                ImVec2 rq2 = m_App.ToScreenPosition({rr,rt});
-                ImVec2 rq3 = m_App.ToScreenPosition({rr,rb});
-                ImVec2 rq4 = m_App.ToScreenPosition({rl,rb});
-                draw->AddQuadFilled(rq1, rq2, rq3, rq4, IM_COL32(255,120,120,60));
-                draw->AddQuad(rq1, rq2, rq3, rq4, IM_COL32(255,150,150,140), 1.0F);
+                if (!inRange) continue;
+                const glm::ivec2 cell = origin + rel;
+                if (cell.x < 0 || cell.x >= m_App.m_StageWidth ||
+                    cell.y < 0 || cell.y >= m_App.m_StageHeight) {
+                    continue;
+                }
+                cells.push_back(cell);
             }
+        }
+        return cells;
+    };
+
+    auto pausedAnimFor = [](const AnimationClip& clip) -> std::shared_ptr<Util::Animation> {
+        static std::map<std::string, std::shared_ptr<Util::Animation>> cache;
+        if (clip.Empty()) return nullptr;
+        auto it = cache.find(clip.mediaPath);
+        if (it != cache.end()) return it->second;
+        auto anim = std::make_shared<Util::Animation>(clip.mediaPath, false, clip.loop, false);
+        anim->SetCurrentFrame(0);
+        anim->Pause();
+        cache[clip.mediaPath] = anim;
+        return anim;
+    };
+
+    auto previewTexture = [&](int typeIndex, glm::ivec2 dir, bool forceFlip) -> GLuint {
+        if (typeIndex < 0 || typeIndex >= static_cast<int>(m_App.m_OperatorAnims.size())) return 0;
+        const auto& pack = m_App.m_OperatorAnims[static_cast<std::size_t>(typeIndex)];
+        const AnimationClip* clip = nullptr;
+        if (forceFlip && !pack.defFlip.Empty()) {
+            clip = &pack.defFlip;
+        } else if (dir.y < 0 && !pack.defBack.Empty()) {
+            clip = &pack.defBack;
+        } else if ((dir.x < 0 || dir.y > 0) && !pack.defFlip.Empty()) {
+            clip = &pack.defFlip;
+        } else if (!pack.def.Empty()) {
+            clip = &pack.def;
+        } else if (!pack.defFlip.Empty()) {
+            clip = &pack.defFlip;
+        } else if (!pack.defBack.Empty()) {
+            clip = &pack.defBack;
+        }
+        if (clip != nullptr) {
+            if (auto anim = pausedAnimFor(*clip)) {
+                return anim->GetTextureId();
+            }
+        }
+        if (static_cast<std::size_t>(typeIndex) < m_App.m_OperatorCards.size() &&
+            m_App.m_OperatorCards[static_cast<std::size_t>(typeIndex)]) {
+            return m_App.m_OperatorCards[static_cast<std::size_t>(typeIndex)]->GetTextureId();
+        }
+        return 0;
+    };
+
+    auto drawPreviewSprite = [&](int typeIndex, const ImVec2& center, glm::ivec2 dir, bool forceFlip, int alpha) {
+        const GLuint tex = previewTexture(typeIndex, dir, forceFlip);
+        if (tex == 0) return;
+        const float imgS = layout.cellSize * 0.8F * OPERATOR_VISUAL_SCALE;
+        draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)),
+                       {center.x - imgS, center.y - imgS},
+                       {center.x + imgS, center.y + imgS},
+                       {0.0F, 0.0F},
+                       {1.0F, 1.0F},
+                       IM_COL32(255, 255, 255, alpha));
+    };
+
+    const int activeCardType = (m_App.m_DragOperatorType >= 0 &&
+                               (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection))
+        ? m_App.m_DragOperatorType
+        : m_App.m_SelectedOperatorCardType;
+
+    const bool hoverDeployable = m_App.m_DraggingFromBar && !m_App.m_WaitingForDirection &&
+                                 hoverCell && canDeployTo(m_App.m_DragOperatorType, *hoverCell);
+
+    if (drawUnderlay && activeCardType >= 0 && !m_App.m_WaitingForDirection && isReadyToDeploy(activeCardType)) {
+        for (int y = 0; y < m_App.m_StageHeight; ++y) {
+            for (int x = 0; x < m_App.m_StageWidth; ++x) {
+                const glm::ivec2 cell{x, y};
+                if (!canDeployTo(activeCardType, cell)) continue;
+                drawCellTint(cell, IM_COL32(62, 210, 126, 70), IM_COL32(86, 245, 160, 118));
+            }
+        }
+    }
+
+    if (drawUnderlay && hoverDeployable) {
+        for (const auto& cell : rangeCells(m_App.m_DragOperatorType, *hoverCell, {1, 0})) {
+            drawStripedCell(cell);
+        }
+    }
+
+    if (!drawUnderlay && m_App.m_DraggingFromBar && m_App.m_DragOperatorType >= 0 && !m_App.m_WaitingForDirection) {
+        ImVec2 centerpos{m_App.m_DragScreenPos.x, m_App.m_DragScreenPos.y};
+        if (hoverDeployable) {
+            centerpos = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(*hoverCell)));
+        }
+        drawPreviewSprite(m_App.m_DragOperatorType, centerpos, {1, 0}, true, hoverDeployable ? 245 : 214);
+    }
+
+    // Show direction selection highlighting and direction-aware paused APNG preview.
+    if (m_App.m_WaitingForDirection && m_App.m_DragOperatorType >= 0) {
+        if (drawUnderlay) {
+            for (const auto& cell : rangeCells(m_App.m_DragOperatorType, m_App.m_DirectionCell, m_App.m_DeployingDirection)) {
+                drawStripedCell(cell);
+            }
+            return;
+        }
+
+        const auto q = cellQuad(m_App.m_DirectionCell);
+        draw->AddQuad(q[0], q[1], q[2], q[3], IM_COL32(255, 255, 255, 245), 3.0F);
+        const ImVec2 centerpos = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(m_App.m_DirectionCell)));
+        drawPreviewSprite(m_App.m_DragOperatorType, centerpos, m_App.m_DeployingDirection, false, 250);
+
+        if (!m_App.m_IsDirectionDragging) {
+            const float dist = layout.cellSize * 0.58F;
+            const float s = 8.0F;
+            draw->AddLine({centerpos.x - s, centerpos.y - dist + s}, {centerpos.x, centerpos.y - dist}, IM_COL32(255,255,255,210), 3.0F);
+            draw->AddLine({centerpos.x + s, centerpos.y - dist + s}, {centerpos.x, centerpos.y - dist}, IM_COL32(255,255,255,210), 3.0F);
+            draw->AddLine({centerpos.x - s, centerpos.y + dist - s}, {centerpos.x, centerpos.y + dist}, IM_COL32(255,255,255,210), 3.0F);
+            draw->AddLine({centerpos.x + s, centerpos.y + dist - s}, {centerpos.x, centerpos.y + dist}, IM_COL32(255,255,255,210), 3.0F);
+            draw->AddLine({centerpos.x - dist + s, centerpos.y - s}, {centerpos.x - dist, centerpos.y}, IM_COL32(255,255,255,210), 3.0F);
+            draw->AddLine({centerpos.x - dist + s, centerpos.y + s}, {centerpos.x - dist, centerpos.y}, IM_COL32(255,255,255,210), 3.0F);
+            draw->AddLine({centerpos.x + dist - s, centerpos.y - s}, {centerpos.x + dist, centerpos.y}, IM_COL32(255,255,255,210), 3.0F);
+            draw->AddLine({centerpos.x + dist - s, centerpos.y + s}, {centerpos.x + dist, centerpos.y}, IM_COL32(255,255,255,210), 3.0F);
         }
     }
 
     // Show attack range for selected deployed operator
-    if (m_App.m_SelectedOperatorId != -1 && !m_App.m_WaitingForDirection && !m_App.m_DraggingFromBar) {
+    if (drawUnderlay && m_App.m_SelectedOperatorId != -1 && !m_App.m_WaitingForDirection && !m_App.m_DraggingFromBar) {
         const Operator* selectedOp = nullptr;
         for (const auto& op : m_App.m_Operators) {
             if (op.id == m_App.m_SelectedOperatorId) {
@@ -181,36 +216,9 @@ void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std:
             }
         }
         if (selectedOp) {
-            const auto& st = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(selectedOp->typeIndex));
-            for (int dx = -5; dx <= 5; ++dx) for (int dy = -5; dy <= 5; ++dy) {
-                glm::ivec2 rel{dx, dy};
-                bool inR = false;
-                if (rel.x == 0 && rel.y == 0) {
-                    inR = true;
-                } else if (st.deployType == DeployType::GROUND_ONLY) {
-                    inR = rel == selectedOp->direction;
-                } else {
-                    int fw = rel.x*selectedOp->direction.x + rel.y*selectedOp->direction.y;
-                    int pp = rel.x*selectedOp->direction.y - rel.y*selectedOp->direction.x;
-                    inR = (fw>=1&&fw<=4&&std::abs(pp)<=1);
-                }
-                if (!inR) continue;
-                glm::ivec2 tc = selectedOp->cell + rel;
-                if (tc.x<0||tc.x>=m_App.m_StageWidth||tc.y<0||tc.y>=m_App.m_StageHeight) continue;
-                // Avoid drawing over the block itself or make it nice
-                float rl = layout.topLeftX + tc.x * layout.cellSize;
-                float rt = layout.topLeftY - tc.y * layout.cellSize;
-                float rr = rl + layout.cellSize, rb = rt - layout.cellSize;
-
-                ImVec2 rq1 = m_App.ToScreenPosition({rl,rt});
-                ImVec2 rq2 = m_App.ToScreenPosition({rr,rt});
-                ImVec2 rq3 = m_App.ToScreenPosition({rr,rb});
-                ImVec2 rq4 = m_App.ToScreenPosition({rl,rb});
-                // Draw orange highlight
-                draw->AddQuadFilled(rq1, rq2, rq3, rq4, IM_COL32(255, 165, 0, 80));
-                draw->AddQuad(rq1, rq2, rq3, rq4, IM_COL32(255, 180, 50, 160), 2.0F);
+            for (const auto& cell : rangeCells(selectedOp->typeIndex, selectedOp->cell, selectedOp->direction)) {
+                drawStripedCell(cell);
             }
         }
     }
 }
-

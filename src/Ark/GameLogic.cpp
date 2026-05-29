@@ -23,10 +23,9 @@ namespace {
 constexpr float WAVE_CLEAR_DP        = 5.0F;
 constexpr float REDEPLOY_COOLDOWN_MS = GameConst::REDEPLOY_COOLDOWN_MS;
 constexpr float PRE_STAGE_WAIT_MS    = 1500.0F;  // 2 seconds
-constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
-constexpr float FINISH_BLACKOUT_MS   = 1000.0F;  // 1 second
-constexpr float FINISH_FADE_IN_MS    = 700.0F;
-constexpr float FINISH_FADE_OUT_MS   = 700.0F;
+constexpr float MISSION_COMPLETE_TOTAL_MS = GameConst::MISSION_COMPLETE_TOTAL_MS;
+constexpr float MISSION_RESULT_FADE_IN_MS = GameConst::MISSION_RESULT_FADE_IN_MS;
+constexpr float FINISH_FADE_OUT_MS   = GameConst::MISSION_RESULT_FADE_OUT_MS;
 constexpr float BATTLE_TIME_SCALE     = 0.5F;
 constexpr float DEFAULT_CAMERA_SCALE_X = 1.0F;
 constexpr float DEFAULT_CAMERA_SCALE_Y = PERSPECTIVE_Y_SCALE;
@@ -90,6 +89,10 @@ void App::ResetDemo() {
     m_SelectedOperatorId   = -1;
     m_DraggingFromBar      = false;
     m_DragOperatorType     = -1;
+    m_SelectedOperatorCardType = -1;
+    m_OperatorCardPressActive = false;
+    m_PressedOperatorCardType = -1;
+    m_OperatorInfoTab = 0;
     m_WaitingForDirection  = false;
     ResetCameraToStageDefaults();
 
@@ -397,7 +400,8 @@ void App::UpdateGame(float dtMs) {
         if (m_MissionClear) {
             m_ClearTimerMs += dtMs;
 
-            const float clickableAt = FINISH_FADE_TO_BLACK_MS + FINISH_BLACKOUT_MS + FINISH_FADE_IN_MS;
+            const float clickableAt = MISSION_COMPLETE_TOTAL_MS +
+                (m_StageFinishPath.empty() ? 0.0F : MISSION_RESULT_FADE_IN_MS);
             if (!m_FinishExitRequested) {
                 if (m_ClearTimerMs >= clickableAt && Util::Input::IsKeyPressed(Util::Keycode::MOUSE_LB)) {
                     m_FinishExitRequested = true;
@@ -420,6 +424,7 @@ void App::UpdateGame(float dtMs) {
                         if (!LoadStageFromJsonModule()) BuildFallbackStage();
                         ResetDemo();
                         m_LoadingPhase = 0;
+                        m_LoadingTimerMs = 0.0F;
                         m_CurrentState = State::LOADING;
                     } else {
                         m_CurrentState = State::END;

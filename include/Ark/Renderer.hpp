@@ -21,11 +21,12 @@ public:
     void DrawHighgroundTopLayer();
     void DrawMarkerTopLayer();
     void DrawBeams();
-    void DrawDeployPreview(const glm::vec2& ptsdCursor, const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout);
+    void DrawDeployPreview(const glm::vec2& ptsdCursor, const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout, bool drawUnderlay);
     void DrawHUD(float screenW);
     void DrawOperatorBar(float screenW, float screenH);
     void DrawDeploymentInfo(float screenW, float screenH);
-    void DrawOperatorDetails(const OperatorTemplate& t, const Operator* opOnField, float screenH);
+    void DrawOperatorDetails(int typeIndex, const Operator* opOnField, float screenH);
+    void DrawMissionCompleteOverlay(float screenW, float screenH);
     void DrawLoadingScreen();
     void DrawImageCover(const std::string& imagePath, float alpha, bool drawBlackFill);
     std::shared_ptr<Util::Image> GetTileImage(const std::string& imagePath);

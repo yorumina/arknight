@@ -34,6 +34,9 @@ constexpr float OP_BAR_HEIGHT     = Ark::RendererConst::OP_BAR_HEIGHT;
 constexpr float OP_CARD_WIDTH     = Ark::RendererConst::OP_CARD_WIDTH;
 constexpr float OP_CARD_HEIGHT    = Ark::RendererConst::OP_CARD_HEIGHT;
 constexpr float OP_CARD_SPACING   = Ark::RendererConst::OP_CARD_SPACING;
+constexpr float LOADING_FADE_IN_MS = 500.0F;
+constexpr float LOADING_HOLD_MS = 250.0F;
+constexpr float LOADING_FADE_OUT_MS = 500.0F;
 } // namespace
 
 void App::Start() {
@@ -71,6 +74,7 @@ void App::Start() {
     // Transition to LOADING state — the loading screen will be rendered on the
     // next frame, then heavy work (animation decoding) happens afterwards.
     m_LoadingPhase = 0;
+    m_LoadingTimerMs = 0.0F;
     m_CurrentState = State::LOADING;
 }
 
@@ -80,33 +84,53 @@ void App::Loading() {
         return;
     }
 
-    // Phase 0: First frame — just render the loading screen so it appears
-    // immediately. The heavy work is deferred to the next frame.
-    if (m_LoadingPhase == 0) {
+    const float dt = std::clamp(Util::Time::GetDeltaTimeMs(), 0.0F, 100.0F);
+
+    auto drawLoading = [&](float alpha) {
         if (m_Renderer && !m_StageLoadingPath.empty()) {
-            m_Renderer->DrawImageCover(m_StageLoadingPath, m_StageLoadingAlpha, true);
+            m_Renderer->DrawImageCover(m_StageLoadingPath, m_StageLoadingAlpha * std::clamp(alpha, 0.0F, 1.0F), true);
         }
-        m_LoadingPhase = 1;
+    };
+
+    // Phase 0: fade in the loading art before heavy initialization starts.
+    if (m_LoadingPhase == 0) {
+        m_LoadingTimerMs += dt;
+        drawLoading(m_LoadingTimerMs / LOADING_FADE_IN_MS);
+        if (m_LoadingTimerMs >= LOADING_FADE_IN_MS) {
+            m_LoadingPhase = 1;
+            m_LoadingTimerMs = 0.0F;
+        }
         return;
     }
 
-    // Phase 1: Do the heavy initialization work (animation decoding, thumbnails).
-    // The loading screen from the previous frame is still visible.
+    // Phase 1: do heavy initialization while the loading art stays fully visible.
     if (m_LoadingPhase == 1) {
-        if (m_Renderer && !m_StageLoadingPath.empty()) {
-            m_Renderer->DrawImageCover(m_StageLoadingPath, m_StageLoadingAlpha, true);
-        }
+        drawLoading(1.0F);
         LoadOperatorAnimations();
         LoadEnemyAnimations();
         if (m_Renderer) {
             m_Renderer->LoadOperatorThumbnails();
         }
         m_LoadingPhase = 2;
+        m_LoadingTimerMs = 0.0F;
         return;
     }
 
-    // Phase 2: Done — transition to game. Since the loading screen was already shown
-    // during decoding, we skip the pre-stage wait.
+    // Phase 2: hold briefly, then fade out before entering gameplay.
+    if (m_LoadingPhase == 2) {
+        m_LoadingTimerMs += dt;
+        if (m_LoadingTimerMs < LOADING_HOLD_MS) {
+            drawLoading(1.0F);
+            return;
+        }
+
+        const float fadeT = (m_LoadingTimerMs - LOADING_HOLD_MS) / LOADING_FADE_OUT_MS;
+        drawLoading(1.0F - fadeT);
+        if (fadeT < 1.0F) return;
+    }
+
+    // Done — transition to game. Since the loading screen fades here, skip the
+    // pre-stage wait.
     m_PreStageWaiting = false;
     m_PreStageTimerMs = 0.0F;
     if (!m_WaveRunning && !m_GameOver && !m_MissionClear) {
@@ -164,8 +188,109 @@ void App::Update() {
     }
     const glm::vec2 ptsdCursor = RawCursorToPtsd(rawCursor);
 
+    auto buildDisplayOps = [&]() {
+        std::vector<int> displayOps;
+        const int opCount = static_cast<int>(m_OperatorTemplates.size());
+        for (int i = 0; i < opCount; ++i) {
+            if (!IsOperatorTypeOnField(i)) displayOps.push_back(i);
+        }
+        std::stable_sort(displayOps.begin(), displayOps.end(),
+                         [this](int lhs, int rhs) {
+                             const auto& a = m_OperatorTemplates.at(static_cast<std::size_t>(lhs));
+                             const auto& b = m_OperatorTemplates.at(static_cast<std::size_t>(rhs));
+                             return a.cost < b.cost;
+                         });
+        return displayOps;
+    };
+
+    auto findOperatorCardAt = [&](float x, float y) {
+        const float barY = screenH - OP_BAR_HEIGHT;
+        if (y < barY - 28.0F || y > barY + OP_CARD_HEIGHT || !m_WaveRunning) return -1;
+
+        const auto displayOps = buildDisplayOps();
+        const int dispCount = static_cast<int>(displayOps.size());
+        if (dispCount <= 0) return -1;
+
+        const float totalW = dispCount * OP_CARD_WIDTH + (dispCount - 1) * OP_CARD_SPACING;
+        const float startX = screenW - totalW - 24.0F;
+        for (int idx = 0; idx < dispCount; ++idx) {
+            const int typeIndex = displayOps[idx];
+            const float cx = startX + idx * (OP_CARD_WIDTH + OP_CARD_SPACING);
+            const float cy = barY - (typeIndex == m_SelectedOperatorCardType ? 22.0F : 0.0F);
+            if (x >= cx && x <= cx + OP_CARD_WIDTH && y >= cy && y <= cy + OP_CARD_HEIGHT) {
+                return typeIndex;
+            }
+        }
+        return -1;
+    };
+
+    auto canDragOperatorCard = [&](int typeIndex) {
+        if (typeIndex < 0 || typeIndex >= static_cast<int>(m_OperatorTemplates.size())) return false;
+        if (!IsOperatorTypeAvailable(typeIndex)) return false;
+        if (static_cast<int>(m_Operators.size()) >= MAX_OPS) return false;
+        const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(typeIndex));
+        return m_DP >= static_cast<float>(opType.cost);
+    };
+
+    auto operatorInfoVisible = [&]() {
+        return m_DraggingFromBar || m_WaitingForDirection ||
+               m_SelectedOperatorCardType >= 0 || m_SelectedOperatorId != -1;
+    };
+
+    auto operatorInfoTabAt = [&](float x, float y) {
+        if (!operatorInfoVisible()) return -1;
+        const float scale = uiLayout.scale;
+        const float panelW = std::clamp(screenW * 0.29F, 390.0F, 560.0F);
+        const float panelH = std::max(360.0F, screenH - OP_BAR_HEIGHT + 8.0F);
+        const float portraitH = std::min(panelH * 0.62F, 500.0F);
+        const float tabH = 44.0F * scale;
+        if (x < 0.0F || x > panelW || y < portraitH || y > portraitH + tabH) return -1;
+        const int tab = static_cast<int>(std::floor(x / (panelW / 3.0F)));
+        return std::clamp(tab, 0, 2);
+    };
+
+    if (!m_GameOver && !m_MissionClear && !m_PreStageWaiting && !m_ShowQuitConfirm &&
+        !uiConsumedLeftClick && Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB)) {
+        const int clickedTab = operatorInfoTabAt(screenCursorX, screenCursorY);
+        if (clickedTab >= 0) {
+            m_OperatorInfoTab = clickedTab;
+            uiConsumedLeftClick = true;
+        } else if (m_GamePaused) {
+            const int clickedCard = findOperatorCardAt(screenCursorX, screenCursorY);
+            if (clickedCard >= 0) {
+                m_SelectedOperatorCardType = clickedCard;
+                m_DragOperatorType = clickedCard;
+                m_SelectedOperatorType = clickedCard;
+                m_SelectedOperatorId = -1;
+                m_OperatorInfoTab = 0;
+                uiConsumedLeftClick = true;
+            }
+        }
+    }
+
     if (!m_GameOver && !m_MissionClear && !m_PreStageWaiting &&
         !m_GamePaused && !m_ShowQuitConfirm && !uiConsumedLeftClick) {
+        if (m_OperatorCardPressActive) {
+            m_DragScreenPos = {screenCursorX, screenCursorY};
+            if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_LB)) {
+                const glm::vec2 diff = m_DragScreenPos - m_OperatorCardPressPos;
+                if (!m_DraggingFromBar && glm::length(diff) > 8.0F &&
+                    canDragOperatorCard(m_PressedOperatorCardType)) {
+                    m_DraggingFromBar = true;
+                    m_DragOperatorType = m_PressedOperatorCardType;
+                    m_SelectedOperatorType = m_PressedOperatorCardType;
+                    m_SelectedOperatorCardType = m_PressedOperatorCardType;
+                    m_SelectedOperatorId = -1;
+                    m_OperatorCardPressActive = false;
+                    m_PressedOperatorCardType = -1;
+                }
+            }
+            if (Util::Input::IsKeyUp(Util::Keycode::MOUSE_LB)) {
+                m_OperatorCardPressActive = false;
+                m_PressedOperatorCardType = -1;
+            }
+        }
+
         // ── Right-click: retreat operator ────────────────────────────
         if (Util::Input::IsKeyPressed(Util::Keycode::MOUSE_RB) && !m_IsDeploying &&
             !m_DraggingFromBar && !m_WaitingForDirection) {
@@ -246,6 +371,8 @@ void App::Update() {
 
                         m_Operators.push_back(newOp);
                         m_SelectedOperatorId = -1;
+                        m_SelectedOperatorCardType = -1;
+                        m_DragOperatorType = -1;
                     } else {
                         // Cancel deployment if dropped inside the center area
                         m_SelectedOperatorId = -1;
@@ -254,6 +381,8 @@ void App::Update() {
                     m_DraggingFromBar = false;
                     m_IsDeploying = false;
                     m_IsDirectionDragging = false;
+                    m_OperatorCardPressActive = false;
+                    m_PressedOperatorCardType = -1;
                 }
             }
 
@@ -266,45 +395,20 @@ void App::Update() {
             }
         }
         // ── Drag from operator bar ────────────────────────────────────
-        else if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB) && !m_DraggingFromBar) {
-            // Check if click is inside the bottom operator bar area
-            const float barY = screenH - OP_BAR_HEIGHT;
-            if (screenCursorY >= barY && m_WaveRunning) {
-                const int opCount = static_cast<int>(m_OperatorTemplates.size());
-                
-                std::vector<int> displayOps;
-                for (int i = 0; i < opCount; ++i) {
-                    if (!IsOperatorTypeOnField(i)) displayOps.push_back(i);
-                }
-                std::stable_sort(displayOps.begin(), displayOps.end(),
-                                 [this](int lhs, int rhs) {
-                                     const auto& a = m_OperatorTemplates.at(static_cast<std::size_t>(lhs));
-                                     const auto& b = m_OperatorTemplates.at(static_cast<std::size_t>(rhs));
-                                     return a.cost < b.cost;
-                                 });
-                
-                const int dispCount = static_cast<int>(displayOps.size());
-                const float totalW = dispCount * OP_CARD_WIDTH + (dispCount - 1) * OP_CARD_SPACING;
-                const float startX = screenW - totalW - 24.0F;
-
-                for (int idx = 0; idx < dispCount; ++idx) {
-                    int i = displayOps[idx];
-                    float cx = startX + idx * (OP_CARD_WIDTH + OP_CARD_SPACING);
-                    if (screenCursorX >= cx && screenCursorX <= cx + OP_CARD_WIDTH &&
-                        screenCursorY >= barY && screenCursorY <= barY + OP_CARD_HEIGHT) {
-                        // Check availability
-                        if (IsOperatorTypeAvailable(i) &&
-                            static_cast<int>(m_Operators.size()) < MAX_OPS) {
-                            const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(i));
-                            if (m_DP >= static_cast<float>(opType.cost)) {
-                                m_DraggingFromBar = true;
-                                m_DragOperatorType = i;
-                                m_SelectedOperatorType = i;
-                                m_DragScreenPos = {screenCursorX, screenCursorY};
-                            }
-                        }
-                        break;
-                    }
+        else if (Util::Input::IsKeyDown(Util::Keycode::MOUSE_LB) &&
+                 !m_DraggingFromBar && !m_OperatorCardPressActive) {
+            const int clickedCard = findOperatorCardAt(screenCursorX, screenCursorY);
+            if (clickedCard >= 0) {
+                m_SelectedOperatorCardType = clickedCard;
+                m_DragOperatorType = clickedCard;
+                m_SelectedOperatorType = clickedCard;
+                m_SelectedOperatorId = -1;
+                m_DragScreenPos = {screenCursorX, screenCursorY};
+                m_OperatorInfoTab = 0;
+                if (canDragOperatorCard(clickedCard)) {
+                    m_OperatorCardPressActive = true;
+                    m_PressedOperatorCardType = clickedCard;
+                    m_OperatorCardPressPos = m_DragScreenPos;
                 }
             } else {
                 // Click on board – check skill activation or operator selection
@@ -315,6 +419,11 @@ void App::Update() {
                         if (op.cell != *cell) continue;
                         clickedOperator = true;
                         m_SelectedOperatorId = op.id;
+                        m_SelectedOperatorCardType = -1;
+                        m_DragOperatorType = -1;
+                        m_OperatorCardPressActive = false;
+                        m_PressedOperatorCardType = -1;
+                        m_OperatorInfoTab = 0;
                         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
                         const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == u8"風笛");
                         if (!isBagpipe && opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
@@ -328,7 +437,10 @@ void App::Update() {
                         }
                     }
                 }
-                if (!clickedOperator) m_SelectedOperatorId = -1;
+                if (!clickedOperator) {
+                    m_SelectedOperatorId = -1;
+                    m_SelectedOperatorCardType = -1;
+                }
             }
         }
 
@@ -353,7 +465,7 @@ void App::Update() {
                 m_SelectedOperatorType = m_DragOperatorType;
 
                 if (IsOperatorTypeAvailable(m_DragOperatorType) &&
-                    IsDeployableCellForSelectedOperator(*cell) && !IsCellOccupied(*cell) &&
+                    IsDeployableCellForOperatorType(m_DragOperatorType, *cell) && !IsCellOccupied(*cell) &&
                     static_cast<int>(m_Operators.size()) < MAX_OPS) {
                     const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(m_DragOperatorType));
                     if (m_DP >= static_cast<float>(opType.cost)) {
@@ -363,6 +475,7 @@ void App::Update() {
                         m_DeployingDirection = {1, 0};
                         m_IsDeploying = true;
                         m_DeployingCell = *cell;
+                        m_DraggingFromBar = false;
                     } else {
                         m_DraggingFromBar = false;
                         m_IsDeploying = false;
@@ -376,10 +489,15 @@ void App::Update() {
                 m_DraggingFromBar = false;
                 m_IsDeploying = false;
             }
+            m_OperatorCardPressActive = false;
+            m_PressedOperatorCardType = -1;
         }
     }
 
-    UpdateGame(dt * m_GameSpeedMultiplier);
+    const bool slowOperatorInfo = operatorInfoVisible() && !m_GamePaused && !m_ShowQuitConfirm;
+    const float playSpeed = m_GameSpeedMultiplier * (slowOperatorInfo ? 0.25F : 1.0F);
+    const float gameDt = (m_MissionClear || m_GameOver) ? dt : dt * playSpeed;
+    UpdateGame(gameDt);
     if (m_Renderer) {
         m_Renderer->DrawScene(ptsdCursor);
     }

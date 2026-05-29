@@ -196,6 +196,13 @@ std::vector<OperatorTemplate> LoadOperators() {
             t.initialSp       = j.value("initialSp",       0.0F);
             t.skillDuration   = j.value("skillDuration",   0.0F);
             t.isVanguard      = j.value("isVanguard",      false);
+            t.magicResistance = j.value("magicResistance", 0);
+            t.className       = j.value("class", std::string{});
+            if (j.contains("skill") && j["skill"].is_object()) {
+                const auto& skill = j["skill"];
+                t.skillName = skill.value("name", std::string{});
+                t.skillDescription = skill.value("description", std::string{});
+            }
             const std::string dt = j.value("deployType","ground");
             t.deployType = (dt == "highground") ? DeployType::HIGHGROUND_ONLY : DeployType::GROUND_ONLY;
             auto it = OP_COLORS.find(t.id);

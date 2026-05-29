@@ -62,7 +62,7 @@ private:
     void ResetDemo();
     void SpawnEnemy(const Ark::WavePlan& plan);
     void UpdateEnemies(float deltaTimeSec);
-    void UpdateEnemyAnimation(Ark::Enemy& enemy, bool isMoving, bool isAttacking);
+    void UpdateEnemyAnimation(Ark::Enemy& enemy, bool isMoving, bool isAttacking, float deltaTimeMs);
     void MarkEnemyDefeated(Ark::Enemy& enemy);
     void UpdateOperators(float deltaTimeMs);
     void CleanupDefeatedEnemies();
@@ -75,6 +75,7 @@ private:
     glm::vec2 RawCursorToPtsd(const glm::vec2& rawCursor) const;
 
     bool IsCellOccupied(const glm::ivec2& cell) const;
+    bool IsDeployableCellForOperatorType(int typeIndex, const glm::ivec2& cell) const;
     bool IsInsideBoard(const glm::vec2& ptsdPos) const;
     bool IsDeployableCellForSelectedOperator(const glm::ivec2& cell) const;
     bool IsDeployableTile(Ark::TileType tile, Ark::DeployType deployType) const;
@@ -133,7 +134,8 @@ private:
     float m_PreStageTimerMs = 0.0F;
     bool  m_FinishExitRequested = false;
     float m_FinishExitTimerMs = 0.0F;
-    int   m_LoadingPhase = 0;  // 0=show loading screen, 1=do heavy work, 2=done
+    int   m_LoadingPhase = 0;  // 0=fade in, 1=load assets, 2=hold/fade out
+    float m_LoadingTimerMs = 0.0F;
 
     // Economy
     float m_DP            = 10.0F;
@@ -154,6 +156,11 @@ private:
     bool m_DraggingFromBar       = false;   // currently dragging from operator bar
     int  m_DragOperatorType      = -1;      // which operator type is being dragged
     glm::vec2 m_DragScreenPos{0, 0};        // current screen-space drag position
+    int  m_SelectedOperatorCardType = -1;
+    bool m_OperatorCardPressActive = false;
+    int  m_PressedOperatorCardType = -1;
+    glm::vec2 m_OperatorCardPressPos{0, 0};
+    int  m_OperatorInfoTab = 0;              // 0=skill, 1=feature, 2=talent
     bool m_WaitingForDirection   = false;    // placed on cell, waiting for direction click
     glm::ivec2 m_DirectionCell{0, 0};       // cell where operator was dropped
     
@@ -207,6 +214,11 @@ private:
 
     std::vector<std::shared_ptr<Util::Image>> m_OperatorThumbnails;
     std::vector<std::shared_ptr<Util::Image>> m_OperatorCards;
+    std::vector<std::shared_ptr<Util::Image>> m_OperatorPortraits;
+    std::vector<std::shared_ptr<Util::Image>> m_OperatorLevelImages;
+    std::vector<std::shared_ptr<Util::Image>> m_OperatorSkillImages;
+    std::vector<std::shared_ptr<Util::Image>> m_OperatorFeatureImages;
+    std::shared_ptr<Util::Image> m_VanguardIcon;
     std::shared_ptr<Ark::AppRenderer> m_Renderer;
 };
 

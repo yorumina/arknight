@@ -8,6 +8,8 @@
 #include <cmath>
 #include <filesystem>
 #include <limits>
+#include <string>
+#include <vector>
 
 using namespace Ark;
 using namespace Ark::RendererConst;
@@ -114,7 +116,7 @@ std::shared_ptr<Util::Image> LoadHudIcon(const std::string& filename) {
 }
 
 void DrawIconImage(ImDrawList* draw, const std::shared_ptr<Util::Image>& image,
-                   const ImVec2& center, float maxW, float maxH) {
+                   const ImVec2& center, float maxW, float maxH, int alpha = 255) {
     if (!image || image->GetTextureId() == 0) return;
     const glm::vec2 size = image->GetSize();
     if (size.x <= 0.0F || size.y <= 0.0F) return;
@@ -125,7 +127,10 @@ void DrawIconImage(ImDrawList* draw, const std::shared_ptr<Util::Image>& image,
     draw->AddImage(
         reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
         {center.x - w * 0.5F, center.y - h * 0.5F},
-        {center.x + w * 0.5F, center.y + h * 0.5F}
+        {center.x + w * 0.5F, center.y + h * 0.5F},
+        {0.0F, 0.0F},
+        {1.0F, 1.0F},
+        IM_COL32(255, 255, 255, std::clamp(alpha, 0, 255))
     );
 }
 
@@ -166,6 +171,86 @@ void DrawButtonImageFit(ImDrawList* draw,
         {1.0F, 1.0F}
     );
 }
+
+void DrawImageCoverRect(ImDrawList* draw,
+                        const std::shared_ptr<Util::Image>& image,
+                        const UiRect& rect,
+                        int alpha = 255,
+                        const ImVec2& offset = {0.0F, 0.0F}) {
+    if (!image || image->GetTextureId() == 0) return;
+
+    const glm::vec2 size = image->GetSize();
+    if (size.x <= 0.0F || size.y <= 0.0F) return;
+
+    const float rectW = std::max(1.0F, rect.maxX - rect.minX);
+    const float rectH = std::max(1.0F, rect.maxY - rect.minY);
+    const float scale = std::max(rectW / size.x, rectH / size.y);
+    const float drawW = size.x * scale;
+    const float drawH = size.y * scale;
+    const ImVec2 center = RectCenter(rect);
+    const ImVec2 min{center.x - drawW * 0.5F + offset.x, center.y - drawH * 0.5F + offset.y};
+    const ImVec2 max{min.x + drawW, min.y + drawH};
+
+    draw->PushClipRect({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, true);
+    draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+                   min,
+                   max,
+                   {0.0F, 0.0F},
+                   {1.0F, 1.0F},
+                   IM_COL32(255, 255, 255, std::clamp(alpha, 0, 255)));
+    draw->PopClipRect();
+}
+
+void DrawImageCoverRectFadeRight(ImDrawList* draw,
+                                 const std::shared_ptr<Util::Image>& image,
+                                 const UiRect& rect,
+                                 float fadeWidth,
+                                 int alpha = 255,
+                                 const ImVec2& offset = {0.0F, 0.0F}) {
+    if (!image || image->GetTextureId() == 0) return;
+
+    const glm::vec2 size = image->GetSize();
+    if (size.x <= 0.0F || size.y <= 0.0F) return;
+
+    const float rectW = std::max(1.0F, rect.maxX - rect.minX);
+    const float rectH = std::max(1.0F, rect.maxY - rect.minY);
+    const float scale = std::max(rectW / size.x, rectH / size.y);
+    const float drawW = size.x * scale;
+    const float drawH = size.y * scale;
+    const ImVec2 center = RectCenter(rect);
+    const ImVec2 min{center.x - drawW * 0.5F + offset.x, center.y - drawH * 0.5F + offset.y};
+    const ImVec2 max{min.x + drawW, min.y + drawH};
+    const float fadeStart = rect.maxX - std::max(1.0F, fadeWidth);
+    constexpr int slices = 36;
+
+    draw->PushClipRect({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, true);
+    for (int i = 0; i < slices; ++i) {
+        const float x0 = rect.minX + rectW * static_cast<float>(i) / static_cast<float>(slices);
+        const float x1 = rect.minX + rectW * static_cast<float>(i + 1) / static_cast<float>(slices);
+        const float midX = (x0 + x1) * 0.5F;
+        const float fade = midX <= fadeStart
+            ? 1.0F
+            : std::clamp((rect.maxX - midX) / std::max(1.0F, fadeWidth), 0.0F, 1.0F);
+        const int localAlpha = static_cast<int>(static_cast<float>(alpha) * fade);
+        if (localAlpha <= 0) continue;
+
+        const float y0 = std::max(rect.minY, min.y);
+        const float y1 = std::min(rect.maxY, max.y);
+        if (x1 <= min.x || x0 >= max.x || y1 <= y0) continue;
+
+        const float uv0x = std::clamp((x0 - min.x) / drawW, 0.0F, 1.0F);
+        const float uv1x = std::clamp((x1 - min.x) / drawW, 0.0F, 1.0F);
+        const float uv0y = std::clamp((y0 - min.y) / drawH, 0.0F, 1.0F);
+        const float uv1y = std::clamp((y1 - min.y) / drawH, 0.0F, 1.0F);
+        draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+                       {x0, y0},
+                       {x1, y1},
+                       {uv0x, uv0y},
+                       {uv1x, uv1y},
+                       IM_COL32(255, 255, 255, localAlpha));
+    }
+    draw->PopClipRect();
+}
 } // namespace
 
 void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
@@ -196,9 +281,14 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
         const auto& t = m_App.m_OperatorTemplates[static_cast<std::size_t>(i)];
 
         bool affordable = m_App.m_DP >= static_cast<float>(t.cost);
+        const bool available = m_App.IsOperatorTypeAvailable(i) &&
+                               static_cast<int>(m_App.m_Operators.size()) < MAX_OPS;
+        const bool selected = i == m_App.m_SelectedOperatorCardType ||
+                              ((m_App.m_DraggingFromBar || m_App.m_WaitingForDirection) &&
+                               i == m_App.m_DragOperatorType);
 
         const float cx = startX + idx * (OP_CARD_WIDTH + OP_CARD_SPACING);
-        const float cy = barY;
+        const float cy = barY - (selected ? 22.0F : 0.0F);
         GLuint cardTex = 0;
         if (static_cast<std::size_t>(i) < m_App.m_OperatorCards.size() &&
             m_App.m_OperatorCards[static_cast<std::size_t>(i)]) {
@@ -212,7 +302,7 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
                 {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
                 {0.0F, 0.0F},
                 {1.0F, 1.0F},
-                IM_COL32(255, 255, 255, 255)
+                IM_COL32(255, 255, 255, selected ? 255 : 238)
             );
         } else {
             draw->AddRectFilled({cx, cy}, {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
@@ -222,7 +312,14 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
                           IM_COL32(235, 240, 248, 255), t.name.c_str());
         }
 
-        if (!affordable) {
+        if (selected) {
+            draw->AddRect({cx - 2.0F, cy - 2.0F}, {cx + OP_CARD_WIDTH + 2.0F, cy + OP_CARD_HEIGHT + 2.0F},
+                          IM_COL32(255, 255, 255, 240), 0.0F, 0, 2.0F);
+            draw->AddLine({cx, cy - 3.0F}, {cx + OP_CARD_WIDTH, cy - 3.0F},
+                          IM_COL32(255, 226, 70, 245), 3.0F);
+        }
+
+        if (!affordable || !available) {
             draw->AddRectFilled({cx, cy}, {cx + OP_CARD_WIDTH, cy + OP_CARD_HEIGHT},
                                 IM_COL32(0, 0, 0, 135), 2.0F);
         }
@@ -251,71 +348,250 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
 }
 
 // ── Operator Details Panel (Left side) ────────────────────────────────────────
-void Ark::AppRenderer::DrawOperatorDetails(const Ark::OperatorTemplate& t, const Ark::Operator* opOnField, float screenH) {
+void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* opOnField, float screenH) {
+    if (typeIndex < 0 || typeIndex >= static_cast<int>(m_App.m_OperatorTemplates.size())) return;
+
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
-    const float panelW = 320.0F;
-    const float panelH = 500.0F;
-    const float px = 0.0F; 
-    const float py = (screenH - panelH) * 0.5F; 
-    
-    // Panel background
-    draw->AddRectFilled({px, py}, {px + panelW, py + panelH}, IM_COL32(20, 24, 32, 230));
-    draw->AddRectFilled({px, py}, {px + 6.0F, py + panelH}, IM_COL32(30, 200, 255, 255)); // left strip
-    
-    float cy = py + 30.0F;
-    
-    // Name
-    draw->AddText(ImGui::GetFont(), 32.0F, {px + 30.0F, cy}, IM_COL32(255, 255, 255, 255), t.name.c_str());
-    cy += 50.0F;
-    
-    // Level Placeholder
-    draw->AddText({px + 30.0F, cy}, IM_COL32(200, 200, 200, 255), u8"LV 60");
-    cy += 40.0F;
-    
-    // Stats block
-    const float statX = px + 30.0F;
+    const auto& t = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(typeIndex));
+    const float screenW = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
+    const auto ui = ComputeBattleUiLayout(screenW, screenH);
+    const float scale = ui.scale;
+    const bool deploymentPreview = opOnField == nullptr &&
+        (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection);
+
+    const float panelW = std::clamp(screenW * 0.29F, 390.0F, 560.0F);
+    const float panelH = std::max(360.0F, screenH - OP_BAR_HEIGHT + 8.0F);
+    const float portraitH = std::min(panelH * 0.62F, 500.0F);
+    const float fadeW = 230.0F * scale;
+    const float px = 0.0F;
+    const float py = 0.0F;
+    const UiRect panel{px, py, px + panelW, py + panelH};
+    const UiRect portraitRect{px, py, px + panelW + fadeW, py + portraitH};
     const auto toInt = [](float v) { return static_cast<int>(std::lround(v)); };
+
+    draw->AddRectFilled({panel.minX, panel.minY}, {panel.maxX, panel.maxY},
+                        IM_COL32(7, 9, 13, deploymentPreview ? 178 : 210));
+
+    std::shared_ptr<Util::Image> portrait;
+    if (static_cast<std::size_t>(typeIndex) < m_App.m_OperatorPortraits.size()) {
+        portrait = m_App.m_OperatorPortraits[static_cast<std::size_t>(typeIndex)];
+    }
+    if (portrait && portrait->GetTextureId() != 0) {
+        DrawImageCoverRectFadeRight(draw, portrait, portraitRect, fadeW,
+                                    deploymentPreview ? 108 : 238,
+                                    {deploymentPreview ? -56.0F * scale : 0.0F, 0.0F});
+    }
+
+    draw->AddRectFilledMultiColor({px, py}, {px + panelW + fadeW, py + portraitH},
+                                  IM_COL32(0, 0, 0, 30), IM_COL32(0, 0, 0, 88),
+                                  IM_COL32(0, 0, 0, 190), IM_COL32(0, 0, 0, 126));
+    draw->AddRectFilled({px + panelW * 0.38F, py}, {px + panelW, py + portraitH},
+                        IM_COL32(10, 12, 16, deploymentPreview ? 86 : 118));
+    draw->AddRectFilledMultiColor({px + panelW, py}, {px + panelW + fadeW, py + portraitH},
+                                  IM_COL32(10, 12, 16, deploymentPreview ? 70 : 100), IM_COL32(10, 12, 16, 0),
+                                  IM_COL32(10, 12, 16, 0), IM_COL32(10, 12, 16, deploymentPreview ? 86 : 118));
+
+    GLuint cardTex = 0;
+    if (static_cast<std::size_t>(typeIndex) < m_App.m_OperatorCards.size() &&
+        m_App.m_OperatorCards[static_cast<std::size_t>(typeIndex)]) {
+        cardTex = m_App.m_OperatorCards[static_cast<std::size_t>(typeIndex)]->GetTextureId();
+    }
+    const float iconSize = 80.0F * scale;
+    const float iconX = px + 24.0F * scale;
+    const float iconY = py + 120.0F * scale;
+    draw->AddRectFilled({iconX - 5.0F * scale, iconY - 5.0F * scale},
+                        {iconX + iconSize + 5.0F * scale, iconY + iconSize + 5.0F * scale},
+                        IM_COL32(8, 10, 12, 185));
+    if (cardTex != 0) {
+        draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(cardTex)),
+                       {iconX, iconY}, {iconX + iconSize, iconY + iconSize},
+                       {0.0F, 0.0F}, {1.0F, 1.0F}, IM_COL32(255, 255, 255, 235));
+    }
+    if (t.isVanguard && m_App.m_VanguardIcon && m_App.m_VanguardIcon->GetTextureId() != 0) {
+        DrawIconImage(draw, m_App.m_VanguardIcon,
+                      {iconX + iconSize + 40.0F * scale, iconY + iconSize * 0.55F},
+                      48.0F * scale, 48.0F * scale, 225);
+    }
+
+    const float nameX = px + 24.0F * scale;
+    const float nameY = py + 244.0F * scale;
+    std::shared_ptr<Util::Image> levelImage;
+    if (static_cast<std::size_t>(typeIndex) < m_App.m_OperatorLevelImages.size()) {
+        levelImage = m_App.m_OperatorLevelImages[static_cast<std::size_t>(typeIndex)];
+    }
+    if (levelImage && levelImage->GetTextureId() != 0) {
+        DrawIconImage(draw, levelImage, {nameX + 94.0F * scale, nameY + 42.0F * scale},
+                      216.0F * scale, 122.0F * scale, 245);
+    } else {
+        AddStrongText(draw, {nameX, nameY}, 34.0F * scale, IM_COL32(248, 248, 248, 255), t.name.c_str());
+        AddTextAt(draw, {nameX, nameY + 44.0F * scale}, 20.0F * scale, IM_COL32(236, 240, 246, 238), "LV");
+        AddStrongText(draw, {nameX + 64.0F * scale, nameY + 26.0F * scale},
+                      58.0F * scale, IM_COL32(255, 255, 255, 255), "90");
+    }
+
+    const float statX = px + 24.0F * scale;
+    float statY = nameY + 112.0F * scale;
+    const ImU32 labelCol = IM_COL32(208, 214, 224, 220);
+    const ImU32 statCol = IM_COL32(238, 243, 250, 245);
+    auto drawStat = [&](const char* label, const std::string& value) {
+        AddTextAt(draw, {statX, statY}, 22.0F * scale, labelCol, label);
+        AddTextAt(draw, {statX + 58.0F * scale, statY}, 22.0F * scale, statCol, value.c_str());
+        statY += 26.0F * scale;
+    };
+    drawStat(u8"攻擊", std::to_string(toInt(t.damage)));
+    drawStat(u8"防禦", std::to_string(toInt(opOnField ? opOnField->def : t.def)));
+    drawStat(u8"法抗", std::to_string(t.magicResistance));
+    drawStat(u8"阻擋", std::to_string(t.blockCount));
+
+    const float rangeBox = 122.0F * scale;
+    const float rangeX = px + panelW * 0.39F;
+    const float rangeY = nameY + 76.0F * scale;
+    draw->AddRectFilled({rangeX, rangeY}, {rangeX + rangeBox, rangeY + rangeBox},
+                        IM_COL32(2, 3, 5, 156), 8.0F * scale);
+    draw->AddRect({rangeX, rangeY}, {rangeX + rangeBox, rangeY + rangeBox},
+                  IM_COL32(255, 255, 255, 22), 8.0F * scale, 0, 1.0F * scale);
+    draw->AddRectFilled({rangeX + 40.0F * scale, rangeY + 34.0F * scale},
+                        {rangeX + 58.0F * scale, rangeY + 50.0F * scale}, IM_COL32(255, 255, 255, 255));
+    draw->AddRect({rangeX + 58.0F * scale, rangeY + 34.0F * scale},
+                  {rangeX + 75.0F * scale, rangeY + 50.0F * scale}, IM_COL32(255, 136, 35, 255), 0.0F, 0, 2.0F);
+    AddCenteredText(draw, {rangeX + rangeBox * 0.5F, rangeY + rangeBox - 24.0F * scale},
+                    22.0F * scale, IM_COL32(255, 255, 255, 240), u8"攻擊範圍");
+
     const int curHp = opOnField ? toInt(opOnField->hp) : toInt(t.hp);
     const int maxHp = toInt(t.hp);
-    std::string hpStr = std::to_string(curHp) + " / " + std::to_string(maxHp);
-    
-    const ImU32 labelCol = IM_COL32(150, 160, 180, 255);
-    const ImU32 statCol = IM_COL32(255, 255, 255, 255);
+    const float hpY = py + portraitH - 28.0F * scale;
+    const float hpLabelW = 58.0F * scale;
+    draw->AddRectFilled({px, hpY}, {px + panelW, hpY + 9.0F * scale}, IM_COL32(17, 24, 32, 240));
+    draw->AddRectFilled({px, hpY}, {px + panelW * 0.90F, hpY + 9.0F * scale}, IM_COL32(18, 181, 255, 255));
+    draw->AddRectFilled({px + panelW * 0.80F, hpY + 9.0F * scale},
+                        {px + panelW + 38.0F * scale, hpY + 42.0F * scale}, IM_COL32(28, 138, 218, 220));
+    AddTextAt(draw, {px + panelW * 0.80F + 8.0F * scale, hpY + 12.0F * scale},
+              20.0F * scale, IM_COL32(255, 255, 255, 238), u8"生命");
+    const std::string hpStr = std::to_string(curHp) + "/" + std::to_string(maxHp);
+    AddTextAt(draw, {px + panelW * 0.80F + hpLabelW, hpY + 9.0F * scale},
+              26.0F * scale, IM_COL32(255, 255, 255, 255), hpStr.c_str());
 
-    draw->AddText({statX, cy}, labelCol, u8"生命");
-    draw->AddText({statX + 60.0F, cy}, statCol, hpStr.c_str());
-    cy += 24.0F;
-    
-    draw->AddText({statX, cy}, labelCol, u8"攻擊");
-    draw->AddText({statX + 60.0F, cy}, statCol, std::to_string(toInt(t.damage)).c_str());
-    cy += 24.0F;
-    
-    draw->AddText({statX, cy}, labelCol, u8"防禦");
-    draw->AddText({statX + 60.0F, cy}, statCol, std::to_string(opOnField ? toInt(opOnField->def) : toInt(t.def)).c_str());
-    cy += 24.0F;
-    
-    draw->AddText({statX, cy}, labelCol, u8"法抗");
-    draw->AddText({statX + 60.0F, cy}, statCol, "0"); 
-    cy += 24.0F;
+    const float bodyTop = py + portraitH;
+    draw->AddRectFilled({px, bodyTop}, {px + panelW, py + panelH}, IM_COL32(10, 12, 16, 205));
+    const float tabH = 44.0F * scale;
+    const float tabW = panelW / 3.0F;
+    const std::array<const char*, 3> tabs{u8"技能", u8"特性", u8"天賦"};
+    for (int i = 0; i < 3; ++i) {
+        const float tx0 = px + tabW * static_cast<float>(i);
+        const bool active = i == m_App.m_OperatorInfoTab;
+        draw->AddRectFilled({tx0, bodyTop}, {tx0 + tabW, bodyTop + tabH},
+                            active ? IM_COL32(72, 75, 80, 146) : IM_COL32(78, 80, 84, 90));
+        if (active) {
+            draw->AddLine({tx0, bodyTop + 1.0F}, {tx0 + tabW, bodyTop + 1.0F},
+                          IM_COL32(235, 238, 244, 120), 1.5F * scale);
+        }
+        AddCenteredText(draw, {tx0 + tabW * 0.5F, bodyTop + tabH * 0.5F},
+                        24.0F * scale,
+                        active ? IM_COL32(255, 255, 255, 248) : IM_COL32(214, 218, 224, 205),
+                        tabs[static_cast<std::size_t>(i)]);
+    }
 
-    draw->AddText({statX, cy}, labelCol, u8"阻擋");
-    draw->AddText({statX + 60.0F, cy}, statCol, std::to_string(t.blockCount).c_str());
-    cy += 40.0F;
-    
-    // Line separator
-    draw->AddLine({px + 10.0F, cy}, {px + panelW - 10.0F, cy}, IM_COL32(60, 70, 80, 255), 1.0F);
-    cy += 20.0F;
-    
-    // Skill info placeholder
-    draw->AddText({px + 30.0F, cy}, IM_COL32(200, 200, 200, 255), u8"技能   特性   天賦");
-    cy += 30.0F;
-    draw->AddRectFilled({px + 30.0F, cy}, {px + 80.0F, cy + 50.0F}, IM_COL32(80, 150, 80, 255)); // skill icon
-    draw->AddText({px + 100.0F, cy}, IM_COL32(255, 255, 255, 255), u8"支援號令");
-    
-    const int spNow = opOnField ? toInt(opOnField->sp) : toInt(t.initialSp);
-    const int maxSp = toInt(t.maxSp);
-    std::string spStr = std::to_string(spNow) + " / " + std::to_string(maxSp);
-    draw->AddText({px + 100.0F, cy + 25.0F}, IM_COL32(150, 220, 150, 255), spStr.c_str());
+    auto imageAt = [&](const std::vector<std::shared_ptr<Util::Image>>& images) {
+        if (static_cast<std::size_t>(typeIndex) < images.size()) {
+            return images[static_cast<std::size_t>(typeIndex)];
+        }
+        return std::shared_ptr<Util::Image>{};
+    };
+    auto drawIconBox = [&](const std::shared_ptr<Util::Image>& image, const UiRect& rect) {
+        draw->AddRectFilled({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, IM_COL32(14, 15, 18, 210), 1.0F * scale);
+        draw->AddRect({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, IM_COL32(255, 255, 255, 70), 0.0F, 0, 1.6F * scale);
+        if (image && image->GetTextureId() != 0) {
+            DrawButtonImageFit(draw, image, rect, 0.0F);
+        }
+    };
+    auto drawTag = [&](float& x, float y, const std::string& text, ImU32 fill) {
+        const float fontSize = 20.0F * scale;
+        const ImVec2 size = MeasureText(text.c_str(), fontSize);
+        const float w = size.x + 20.0F * scale;
+        draw->AddRectFilled({x, y}, {x + w, y + 30.0F * scale}, fill, 3.0F * scale);
+        AddCenteredText(draw, {x + w * 0.5F, y + 15.0F * scale}, fontSize, IM_COL32(255, 255, 255, 244), text.c_str());
+        x += w + 8.0F * scale;
+    };
+    auto drawWrapped = [&](const ImVec2& pos, float fontSize, ImU32 color,
+                           const std::string& text, float wrapW) {
+        draw->AddText(FontForSize(fontSize), fontSize, pos, color, text.c_str(), nullptr, wrapW);
+    };
+    auto traitInfo = [&]() {
+        if (t.id == "Bagpipe") {
+            return std::pair<std::string, std::string>{
+                u8"衝鋒手",
+                u8"擊殺敵人後獲得2點部署費用，撤退時返還該次部署費用"
+            };
+        }
+        return std::pair<std::string, std::string>{
+            u8"執旗手",
+            u8"技能發動期間阻擋數變為0，但使身前一名幹員阻擋數+1"
+        };
+    };
+    auto talentInfo = [&]() {
+        if (t.id == "Bagpipe") {
+            return std::vector<std::pair<std::string, std::string>>{
+                {u8"精密填彈", u8"每次攻擊有28%（+3%）的機率攻擊力提升至130%，且額外攻擊一個目標"},
+                {u8"軍事傳統", u8"編入隊伍時所有【先鋒】幹員的初始技力+8（+2），自身部署時額外獲得4點技力"}
+            };
+        }
+        return std::vector<std::pair<std::string, std::string>>{
+            {u8"浮光躍金", u8"在場時，所有【先鋒】幹員每秒回復33（+3）點生命"}
+        };
+    };
+
+    const float contentX = px + 24.0F * scale;
+    const float contentY = bodyTop + tabH + 28.0F * scale;
+    const float iconPage = 84.0F * scale;
+    const float textX = contentX + iconPage + 24.0F * scale;
+    const float wrapW = panelW - textX - 28.0F * scale;
+    if (m_App.m_OperatorInfoTab == 0) {
+        const UiRect iconRect{contentX, contentY, contentX + iconPage, contentY + iconPage};
+        drawIconBox(imageAt(m_App.m_OperatorSkillImages), iconRect);
+        const std::string skillName = !t.skillName.empty() ? t.skillName :
+            (t.id == "Myrtle" ? u8"支援號令·β型" : u8"高效衝擊");
+        const std::string skillDesc = t.id == "Myrtle"
+            ? u8"停止攻擊，持續時間內回復總共14點部署費用"
+            : (!t.skillDescription.empty() ? t.skillDescription : u8"下一次的攻擊力提升至200%，且額外攻擊一次，可充能3次");
+        AddStrongText(draw, {textX, contentY - 2.0F * scale}, 25.0F * scale,
+                      IM_COL32(255, 255, 255, 246), skillName.c_str());
+        float tagX = textX;
+        drawTag(tagX, contentY + 36.0F * scale, u8"自動回復", IM_COL32(138, 194, 66, 236));
+        drawTag(tagX, contentY + 36.0F * scale, t.id == "Myrtle" ? u8"手動觸發" : u8"自動觸發",
+                IM_COL32(126, 128, 132, 230));
+        if (t.id == "Myrtle") {
+            drawTag(tagX, contentY + 36.0F * scale, u8"8秒", IM_COL32(126, 128, 132, 230));
+        }
+        drawWrapped({textX, contentY + 76.0F * scale}, 24.0F * scale,
+                    IM_COL32(250, 252, 255, 245), skillDesc, wrapW);
+        if (t.id == "Bagpipe") {
+            AddTextAt(draw, {textX, contentY + 126.0F * scale}, 23.0F * scale,
+                      IM_COL32(238, 184, 60, 246), u8"可充能3次");
+        }
+    } else if (m_App.m_OperatorInfoTab == 1) {
+        const UiRect iconRect{contentX, contentY, contentX + iconPage, contentY + iconPage};
+        drawIconBox(imageAt(m_App.m_OperatorFeatureImages), iconRect);
+        const auto [title, desc] = traitInfo();
+        AddStrongText(draw, {textX, contentY}, 25.0F * scale,
+                      IM_COL32(255, 255, 255, 246), title.c_str());
+        drawWrapped({textX, contentY + 40.0F * scale}, 24.0F * scale,
+                    IM_COL32(250, 252, 255, 245), desc, wrapW);
+    } else {
+        float y = contentY + 2.0F * scale;
+        for (const auto& entry : talentInfo()) {
+            const float titleSize = 23.0F * scale;
+            const ImVec2 titleText = MeasureText(entry.first.c_str(), titleSize);
+            draw->AddRectFilled({contentX, y}, {contentX + titleText.x + 18.0F * scale, y + 34.0F * scale},
+                                IM_COL32(210, 214, 218, 218), 4.0F * scale);
+            AddTextAt(draw, {contentX + 9.0F * scale, y + 4.0F * scale}, titleSize,
+                      IM_COL32(48, 51, 56, 245), entry.first.c_str());
+            drawWrapped({contentX, y + 48.0F * scale}, 24.0F * scale,
+                        IM_COL32(250, 252, 255, 245), entry.second, panelW - 46.0F * scale);
+            y += 128.0F * scale;
+        }
+    }
+
+    draw->AddRect({panel.minX, panel.minY}, {panel.maxX, panel.maxY}, IM_COL32(255, 255, 255, 34));
 }
 
 // ── Compact right-side deployment info (DP + deployable count) ───────────────
@@ -399,6 +675,97 @@ void Ark::AppRenderer::DrawDeploymentInfo(float screenW, float screenH) {
                   textSize, IM_COL32(250, 250, 250, 245), remainingStr.c_str());
 }
 
+void Ark::AppRenderer::DrawMissionCompleteOverlay(float screenW, float screenH) {
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    static std::shared_ptr<Util::Image> missionCompleteImage = LoadHudIcon("mission complete.png");
+
+    const auto ui = ComputeBattleUiLayout(screenW, screenH);
+    const float scale = ui.scale;
+    const float t = std::clamp(m_App.m_ClearTimerMs, 0.0F, MISSION_COMPLETE_TOTAL_MS);
+    const float outStart = MISSION_COMPLETE_SLIDE_MS + MISSION_COMPLETE_HOLD_MS;
+
+    auto easeOut = [](float x) {
+        x = std::clamp(x, 0.0F, 1.0F);
+        const float inv = 1.0F - x;
+        return 1.0F - inv * inv * inv;
+    };
+    auto easeIn = [](float x) {
+        x = std::clamp(x, 0.0F, 1.0F);
+        return x * x * x;
+    };
+
+    float alpha = 1.0F;
+    float slide = 1.0F;
+    bool slidingOut = false;
+    if (t < MISSION_COMPLETE_SLIDE_MS) {
+        slide = easeOut(t / MISSION_COMPLETE_SLIDE_MS);
+        alpha = slide;
+    } else if (t >= outStart) {
+        slide = easeIn((t - outStart) / MISSION_COMPLETE_SLIDE_MS);
+        alpha = 1.0F - slide;
+        slidingOut = true;
+    }
+
+    const int dimAlpha = static_cast<int>(58.0F * alpha);
+    if (dimAlpha > 0) {
+        draw->AddRectFilled({0.0F, 0.0F}, {screenW, screenH}, IM_COL32(0, 0, 0, dimAlpha));
+    }
+
+    const float bandH = std::clamp(screenH * 0.18F, 128.0F * scale, 210.0F * scale);
+    const float bandW = std::min(screenW * 0.80F, 1640.0F * scale);
+    const float bandLeft = (screenW - bandW) * 0.5F;
+    const float bandRight = bandLeft + bandW;
+    const float bandY = screenH * 0.50F;
+    const float bandTop = bandY - bandH * 0.5F;
+    const float bandBottom = bandY + bandH * 0.5F;
+    const float slant = 48.0F * scale;
+    const int bandAlpha = static_cast<int>(178.0F * alpha);
+    if (bandAlpha > 0) {
+        draw->AddQuadFilled({bandLeft + slant, bandTop},
+                            {bandRight, bandTop},
+                            {bandRight - slant, bandBottom},
+                            {bandLeft, bandBottom},
+                            IM_COL32(0, 0, 0, bandAlpha));
+        draw->AddRectFilled({bandLeft + slant * 0.35F, bandTop + bandH * 0.44F},
+                            {bandRight - slant * 0.35F, bandBottom},
+                            IM_COL32(0, 0, 0, static_cast<int>(42.0F * alpha)));
+    }
+
+    const float imageMaxW = std::min(screenW * 0.63F, 1080.0F * scale);
+    const float imageMaxH = std::min(screenH * 0.42F, 470.0F * scale);
+    float drawW = imageMaxW;
+    float drawH = imageMaxH;
+    if (missionCompleteImage && missionCompleteImage->GetTextureId() != 0) {
+        const glm::vec2 imageSize = missionCompleteImage->GetSize();
+        if (imageSize.x > 0.0F && imageSize.y > 0.0F) {
+            const float imageScale = std::min(imageMaxW / imageSize.x, imageMaxH / imageSize.y);
+            drawW = imageSize.x * imageScale;
+            drawH = imageSize.y * imageScale;
+        }
+    }
+
+    const float centeredX = screenW * 0.50F;
+    const float hiddenLeftX = -drawW * 0.56F;
+    const float hiddenRightX = screenW + drawW * 0.56F;
+    const float centerX = slidingOut
+        ? centeredX + (hiddenRightX - centeredX) * slide
+        : hiddenLeftX + (centeredX - hiddenLeftX) * slide;
+    const float centerY = screenH * 0.50F - 4.0F * scale;
+    const int imageAlpha = static_cast<int>(255.0F * alpha);
+
+    if (missionCompleteImage && missionCompleteImage->GetTextureId() != 0) {
+        draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(missionCompleteImage->GetTextureId())),
+                       {centerX - drawW * 0.5F, centerY - drawH * 0.5F},
+                       {centerX + drawW * 0.5F, centerY + drawH * 0.5F},
+                       {0.0F, 0.0F},
+                       {1.0F, 1.0F},
+                       IM_COL32(255, 255, 255, imageAlpha));
+    } else {
+        AddCenteredText(draw, {centerX, centerY}, 82.0F * scale,
+                        IM_COL32(255, 255, 255, imageAlpha), "MISSION ACCOMPLISHED");
+    }
+}
+
 void Ark::AppRenderer::DrawHUD(float screenW) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const float SW = screenW;
@@ -409,6 +776,9 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
     static std::shared_ptr<Util::Image> speedButtonIcon1x = LoadHudIcon("1x.png");
     static std::shared_ptr<Util::Image> speedButtonIcon2x = LoadHudIcon("2X.png");
     static std::shared_ptr<Util::Image> pauseButtonIcon = LoadHudIcon("pause.png");
+    static std::shared_ptr<Util::Image> pauseWordImage = LoadHudIcon("pause_word.png");
+    static std::shared_ptr<Util::Image> quitLogoImage = LoadHudIcon("IQUIT.png");
+    static std::shared_ptr<Util::Image> quitPanelImage = LoadHudIcon("QUIT.png");
 
     // Top-center battle status (enemy count / life point)
     {
@@ -506,11 +876,17 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
     // Pause overlay
     if (m_App.m_GamePaused && !m_App.m_ShowQuitConfirm && !m_App.m_GameOver && !m_App.m_MissionClear) {
         draw->AddRectFilled({0.0F, 0.0F}, {SW, SH}, IM_COL32(0, 0, 0, 128));
-        const ImVec2 center{SW * 0.5F, SH * 0.5F - 35.0F * ui.scale};
-        AddCenteredText(draw, {center.x + 2.0F, center.y + 2.0F}, 112.0F * ui.scale, IM_COL32(0, 0, 0, 140), "PAUSE");
-        AddCenteredText(draw, center, 112.0F * ui.scale, IM_COL32(245, 245, 245, 255), "PAUSE");
-        AddCenteredText(draw, {SW * 0.5F, SH * 0.5F + 62.0F * ui.scale},
-                        56.0F * ui.scale, IM_COL32(238, 238, 238, 245), u8"----暫停中----");
+        const ImVec2 center{SW * 0.5F, SH * 0.5F - 10.0F * ui.scale};
+        if (pauseWordImage && pauseWordImage->GetTextureId() != 0) {
+            DrawIconImage(draw, pauseWordImage, center, 536.0F * ui.scale, 227.0F * ui.scale);
+        } else {
+            AddCenteredText(draw, {center.x + 2.0F, center.y - 25.0F * ui.scale + 2.0F},
+                            112.0F * ui.scale, IM_COL32(0, 0, 0, 140), "PAUSE");
+            AddCenteredText(draw, {center.x, center.y - 25.0F * ui.scale},
+                            112.0F * ui.scale, IM_COL32(245, 245, 245, 255), "PAUSE");
+            AddCenteredText(draw, {SW * 0.5F, SH * 0.5F + 62.0F * ui.scale},
+                            56.0F * ui.scale, IM_COL32(238, 238, 238, 245), u8"----暫停中----");
+        }
     }
 
     // Settings -> quit confirmation dialog
@@ -520,94 +896,66 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
         const UiRect& panel = ui.quitPanel;
         const float panelW = panel.maxX - panel.minX;
         const float panelH = panel.maxY - panel.minY;
-        const float headerH = std::max(120.0F * ui.scale, panelH * 0.24F);
-        const float bodyTop = panel.minY + headerH;
+        const bool hasQuitPanelImage = quitPanelImage && quitPanelImage->GetTextureId() != 0;
 
-        draw->AddRectFilled({panel.minX, panel.minY}, {panel.maxX, bodyTop},
-                            IM_COL32(43, 47, 57, 244), 2.0F * ui.scale, ImDrawFlags_RoundCornersTop);
-        draw->AddRectFilled({panel.minX, bodyTop}, {panel.maxX, panel.maxY},
-                            IM_COL32(236, 236, 238, 252), 2.0F * ui.scale, ImDrawFlags_RoundCornersBottom);
-        draw->AddLine({panel.minX, bodyTop}, {panel.maxX, bodyTop}, IM_COL32(60, 63, 70, 230), 2.0F);
-        draw->AddRect({panel.minX, panel.minY}, {panel.maxX, panel.maxY},
-                      IM_COL32(104, 110, 124, 180), 2.0F * ui.scale, 0, 1.5F);
-
-        const float stripeY = bodyTop - 18.0F * ui.scale;
-        const float stripeW = 12.0F * ui.scale;
-        for (int i = 0; i < 3; ++i) {
-            const float x0 = panel.minX + 8.0F * ui.scale + i * (stripeW + 3.0F * ui.scale);
-            draw->AddRectFilled({x0, stripeY}, {x0 + stripeW, stripeY + 16.0F * ui.scale},
-                                IM_COL32(246, 213, 79, 240));
+        draw->AddRectFilled({0.0F, 0.0F}, {SW, panel.minY}, IM_COL32(0, 0, 0, 70));
+        if (quitLogoImage && quitLogoImage->GetTextureId() != 0) {
+            const ImVec2 logoCenter{SW * 0.5F, panel.minY * 0.58F};
+            DrawIconImage(draw, quitLogoImage, logoCenter,
+                          std::min(panelW * 0.26F, 360.0F * ui.scale),
+                          panel.minY * 0.78F);
         }
 
-        const ImVec2 logoCenter{panel.minX + panelW * 0.5F, panel.minY + headerH * 0.46F};
-        AddCenteredText(draw, {logoCenter.x - 22.0F * ui.scale, logoCenter.y + 2.0F * ui.scale},
-                        125.0F * ui.scale, IM_COL32(245, 245, 247, 255), "Q");
-        AddCenteredText(draw, {logoCenter.x + 18.0F * ui.scale, logoCenter.y - 2.0F * ui.scale},
-                        58.0F * ui.scale, IM_COL32(245, 245, 247, 255), "QUIT");
+        if (hasQuitPanelImage) {
+            DrawButtonImage(draw, quitPanelImage, panel, 0.0F, {0.0F, 0.0F}, {1.0F, 1.0F});
+        } else {
+            const float headerH = std::max(90.0F * ui.scale, panelH * 0.20F);
+            const float bodyTop = panel.minY + headerH;
 
-        const char* msgA = u8"放棄行動";
-        const char* msgB = u8"將會恢復6理智";
-        const char* msgC = u8"（全部返還）";
-        const char* msgD = u8"：";
-        const float msgSize = 58.0F * ui.scale;
-        const ImVec2 sizeA = MeasureText(msgA, msgSize);
-        const ImVec2 sizeB = MeasureText(msgB, msgSize);
-        const ImVec2 sizeC = MeasureText(msgC, msgSize);
-        const ImVec2 sizeD = MeasureText(msgD, msgSize);
-        float msgX = panel.minX + (panelW - (sizeA.x + sizeB.x + sizeC.x + sizeD.x)) * 0.5F;
-        const float msgY = bodyTop + 54.0F * ui.scale;
-        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(244, 132, 41, 255), msgA);
-        msgX += sizeA.x;
-        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(47, 50, 58, 255), msgB);
-        msgX += sizeB.x;
-        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(244, 132, 41, 255), msgC);
-        msgX += sizeC.x;
-        draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(47, 50, 58, 255), msgD);
+            draw->AddRectFilled({panel.minX, panel.minY}, {panel.maxX, bodyTop},
+                                IM_COL32(43, 47, 57, 244), 2.0F * ui.scale, ImDrawFlags_RoundCornersTop);
+            draw->AddRectFilled({panel.minX, bodyTop}, {panel.maxX, panel.maxY},
+                                IM_COL32(236, 236, 238, 252), 2.0F * ui.scale, ImDrawFlags_RoundCornersBottom);
+            draw->AddLine({panel.minX, bodyTop}, {panel.maxX, bodyTop}, IM_COL32(60, 63, 70, 230), 2.0F);
+            draw->AddRect({panel.minX, panel.minY}, {panel.maxX, panel.maxY},
+                          IM_COL32(104, 110, 124, 180), 2.0F * ui.scale, 0, 1.5F);
 
-        const float rewardW = std::min(panelW * 0.42F, 460.0F * ui.scale);
-        const float rewardH = 130.0F * ui.scale;
-        const float rewardX = panel.minX + (panelW - rewardW) * 0.5F;
-        const float rewardY = msgY + 92.0F * ui.scale;
-        draw->AddRectFilledMultiColor({rewardX, rewardY}, {rewardX + rewardW, rewardY + rewardH},
-                                      IM_COL32(65, 68, 75, 245), IM_COL32(52, 55, 62, 245),
-                                      IM_COL32(58, 61, 68, 245), IM_COL32(45, 47, 54, 245));
-        draw->AddRect({rewardX, rewardY}, {rewardX + rewardW, rewardY + rewardH},
-                      IM_COL32(125, 128, 138, 190), 0.0F, 0, 1.3F);
+            const ImVec2 logoCenter{panel.minX + panelW * 0.5F, panel.minY + headerH * 0.46F};
+            AddCenteredText(draw, {logoCenter.x - 22.0F * ui.scale, logoCenter.y + 2.0F * ui.scale},
+                            100.0F * ui.scale, IM_COL32(245, 245, 247, 255), "Q");
+            AddCenteredText(draw, {logoCenter.x + 18.0F * ui.scale, logoCenter.y - 2.0F * ui.scale},
+                            46.0F * ui.scale, IM_COL32(245, 245, 247, 255), "QUIT");
 
-        const ImVec2 tokenCenter{rewardX + 78.0F * ui.scale, rewardY + rewardH * 0.5F};
-        const float tokenR = 43.0F * ui.scale;
-        draw->AddCircleFilled(tokenCenter, tokenR + 7.0F * ui.scale, IM_COL32(254, 223, 44, 255), 40);
-        draw->AddCircleFilled(tokenCenter, tokenR, IM_COL32(74, 79, 90, 255), 40);
-        draw->AddCircle(tokenCenter, tokenR * 0.76F, IM_COL32(198, 204, 217, 220), 30, 2.0F);
-        draw->AddPolyline(
-            std::array<ImVec2, 5>{
-                ImVec2{tokenCenter.x - 5.0F * ui.scale, tokenCenter.y - 22.0F * ui.scale},
-                ImVec2{tokenCenter.x + 8.0F * ui.scale, tokenCenter.y - 5.0F * ui.scale},
-                ImVec2{tokenCenter.x - 1.0F * ui.scale, tokenCenter.y - 5.0F * ui.scale},
-                ImVec2{tokenCenter.x + 5.0F * ui.scale, tokenCenter.y + 21.0F * ui.scale},
-                ImVec2{tokenCenter.x - 9.0F * ui.scale, tokenCenter.y + 3.0F * ui.scale}
-            }.data(), 5, IM_COL32(255, 255, 255, 240), ImDrawFlags_None, 3.0F * ui.scale);
+            const char* msgA = u8"放棄行動";
+            const char* msgB = u8"將會恢復6理智";
+            const char* msgC = u8"（全部返還）";
+            const char* msgD = u8"：";
+            const float msgSize = 50.0F * ui.scale;
+            const ImVec2 sizeA = MeasureText(msgA, msgSize);
+            const ImVec2 sizeB = MeasureText(msgB, msgSize);
+            const ImVec2 sizeC = MeasureText(msgC, msgSize);
+            const ImVec2 sizeD = MeasureText(msgD, msgSize);
+            float msgX = panel.minX + (panelW - (sizeA.x + sizeB.x + sizeC.x + sizeD.x)) * 0.5F;
+            const float msgY = bodyTop + 38.0F * ui.scale;
+            draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(244, 132, 41, 255), msgA);
+            msgX += sizeA.x;
+            draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(47, 50, 58, 255), msgB);
+            msgX += sizeB.x;
+            draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(244, 132, 41, 255), msgC);
+            msgX += sizeC.x;
+            draw->AddText(ImGui::GetFont(), msgSize, {msgX, msgY}, IM_COL32(47, 50, 58, 255), msgD);
 
-        AddCenteredText(draw, {rewardX + rewardW * 0.70F, rewardY + rewardH * 0.52F},
-                        90.0F * ui.scale, IM_COL32(246, 246, 249, 255), "+6");
-
-        AddCenteredText(draw, {panel.minX + panelW * 0.5F, rewardY + rewardH + 70.0F * ui.scale},
-                        62.0F * ui.scale, IM_COL32(40, 43, 49, 255), u8"是否放棄行動?");
-
-        draw->AddRectFilled({ui.quitBackButton.minX, ui.quitBackButton.minY},
-                            {ui.quitBackButton.maxX, ui.quitBackButton.maxY},
-                            IM_COL32(18, 19, 24, 245), 0.0F);
-        draw->AddRectFilled({ui.quitConfirmButton.minX, ui.quitConfirmButton.minY},
-                            {ui.quitConfirmButton.maxX, ui.quitConfirmButton.maxY},
-                            IM_COL32(137, 21, 26, 245), 0.0F);
-        draw->AddLine({ui.quitBackButton.maxX, ui.quitBackButton.minY},
-                      {ui.quitBackButton.maxX, ui.quitBackButton.maxY},
-                      IM_COL32(80, 82, 90, 180), 1.0F);
-
-        AddCenteredText(draw, RectCenter(ui.quitBackButton), 64.0F * ui.scale,
-                        IM_COL32(245, 245, 248, 255), u8"返回");
-        AddCenteredText(draw, RectCenter(ui.quitConfirmButton), 64.0F * ui.scale,
-                        IM_COL32(248, 248, 248, 255), u8"放棄行動");
+            draw->AddRectFilled({ui.quitBackButton.minX, ui.quitBackButton.minY},
+                                {ui.quitBackButton.maxX, ui.quitBackButton.maxY},
+                                IM_COL32(18, 19, 24, 245), 0.0F);
+            draw->AddRectFilled({ui.quitConfirmButton.minX, ui.quitConfirmButton.minY},
+                                {ui.quitConfirmButton.maxX, ui.quitConfirmButton.maxY},
+                                IM_COL32(137, 21, 26, 245), 0.0F);
+            AddCenteredText(draw, RectCenter(ui.quitBackButton), 52.0F * ui.scale,
+                            IM_COL32(245, 245, 248, 255), u8"返回");
+            AddCenteredText(draw, RectCenter(ui.quitConfirmButton), 52.0F * ui.scale,
+                            IM_COL32(248, 248, 248, 255), u8"放棄行動");
+        }
     }
 
     if (m_App.m_GameOver) {
@@ -618,13 +966,5 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
         const std::string h = "Press R to restart";
         auto hs = ImGui::CalcTextSize(h.c_str());
         draw->AddText({SW*0.5F-hs.x*0.5F, SH*0.5F+12}, COLOR_TEXT_MAIN, h.c_str());
-    } else if (m_App.m_MissionClear) {
-        draw->AddRectFilled({0,0},{SW,SH}, IM_COL32(0,0,0,110));
-        const std::string t = "MISSION ACCOMPLISHED";
-        auto ts = ImGui::CalcTextSize(t.c_str());
-        draw->AddText({SW*0.5F-ts.x*0.5F, SH*0.5F-ts.y}, IM_COL32(128,236,177,255), t.c_str());
-        const std::string h = "Loading next stage in 2s...";
-        auto hs = ImGui::CalcTextSize(h.c_str());
-        draw->AddText({SW*0.5F-hs.x*0.5F, SH*0.5F+14}, COLOR_TEXT_MAIN, h.c_str());
     }
 }

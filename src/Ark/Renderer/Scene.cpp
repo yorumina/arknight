@@ -16,22 +16,24 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
     auto drawGameplayFrame = [&]() {
         DrawStageBackground();
         DrawGrid();
+        DrawDeployPreview(cursor, m_App.ToCell(cursor), layout, true);
         DrawEnemies(layout);
         DrawOperators(layout, false);
         DrawHighgroundTopLayer();
         DrawMarkerTopLayer();
         DrawOperators(layout, true);
         DrawBeams();
-        DrawDeployPreview(cursor, m_App.ToCell(cursor), layout);
+        DrawDeployPreview(cursor, m_App.ToCell(cursor), layout, false);
         DrawHUD(W);
         DrawOperatorBar(W, H);
         DrawDeploymentInfo(W, H);
         
         // Draw Operator Details panel
-        if (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection) {
+        if (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection || m_App.m_SelectedOperatorCardType >= 0) {
             if (m_App.m_DragOperatorType >= 0) {
-                const auto& t = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(m_App.m_DragOperatorType));
-                DrawOperatorDetails(t, nullptr, H);
+                DrawOperatorDetails(m_App.m_DragOperatorType, nullptr, H);
+            } else if (m_App.m_SelectedOperatorCardType >= 0) {
+                DrawOperatorDetails(m_App.m_SelectedOperatorCardType, nullptr, H);
             }
         } else if (m_App.m_SelectedOperatorId != -1) {
             const Operator* op = nullptr;
@@ -39,8 +41,7 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
                 if (o.id == m_App.m_SelectedOperatorId) { op = &o; break; }
             }
             if (op) {
-                const auto& t = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(op->typeIndex));
-                DrawOperatorDetails(t, op, H);
+                DrawOperatorDetails(op->typeIndex, op, H);
             }
         }
     };
@@ -53,27 +54,21 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
         return;
     }
 
-    if (m_App.m_MissionClear && !m_App.m_StageFinishPath.empty()) {
+    if (m_App.m_MissionClear) {
         const float t = std::max(0.0F, m_App.m_ClearTimerMs);
-        if (t < FINISH_FADE_TO_BLACK_MS + FINISH_BLACKOUT_MS) {
-            drawGameplayFrame();
-            float blackAlpha = 1.0F;
-            if (t < FINISH_FADE_TO_BLACK_MS) {
-                blackAlpha = std::clamp(t / FINISH_FADE_TO_BLACK_MS, 0.0F, 1.0F);
-            }
-            ImGui::GetBackgroundDrawList()->AddRectFilled(
-                {0.0F, 0.0F},
-                {static_cast<float>(PTSD_Config::WINDOW_WIDTH), static_cast<float>(PTSD_Config::WINDOW_HEIGHT)},
-                IM_COL32(0, 0, 0, static_cast<int>(blackAlpha * 255.0F))
-            );
+        drawGameplayFrame();
+        if (t < MISSION_COMPLETE_TOTAL_MS) {
+            DrawMissionCompleteOverlay(W, H);
             return;
         }
 
-        float alpha = std::clamp((t - FINISH_FADE_TO_BLACK_MS - FINISH_BLACKOUT_MS) / FINISH_FADE_IN_MS, 0.0F, 1.0F);
-        if (m_App.m_FinishExitRequested) {
-            alpha = std::min(alpha, 1.0F - std::clamp(m_App.m_FinishExitTimerMs / FINISH_FADE_OUT_MS, 0.0F, 1.0F));
+        if (!m_App.m_StageFinishPath.empty()) {
+            float alpha = std::clamp((t - MISSION_COMPLETE_TOTAL_MS) / FINISH_FADE_IN_MS, 0.0F, 1.0F);
+            if (m_App.m_FinishExitRequested) {
+                alpha = std::min(alpha, 1.0F - std::clamp(m_App.m_FinishExitTimerMs / FINISH_FADE_OUT_MS, 0.0F, 1.0F));
+            }
+            DrawImageCover(m_App.m_StageFinishPath, m_App.m_StageFinishAlpha * alpha, false);
         }
-        DrawImageCover(m_App.m_StageFinishPath, m_App.m_StageFinishAlpha * alpha, true);
         return;
     }
 

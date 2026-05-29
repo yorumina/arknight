@@ -13,4 +13,11 @@ inline constexpr float BAGPIPE_MAX_SP =
     BAGPIPE_SP_PER_SKILL * static_cast<float>(BAGPIPE_MAX_CHARGES);
 inline constexpr float BAGPIPE_SKILL_DURATION_MS = 1000.0F;
 
+inline constexpr float MISSION_COMPLETE_SLIDE_MS = 260.0F;
+inline constexpr float MISSION_COMPLETE_HOLD_MS = 2000.0F;
+inline constexpr float MISSION_COMPLETE_TOTAL_MS =
+    MISSION_COMPLETE_SLIDE_MS + MISSION_COMPLETE_HOLD_MS + MISSION_COMPLETE_SLIDE_MS;
+inline constexpr float MISSION_RESULT_FADE_IN_MS = 700.0F;
+inline constexpr float MISSION_RESULT_FADE_OUT_MS = 700.0F;
+
 } // namespace Ark::GameConst

@@ -62,7 +62,7 @@ void App::MarkEnemyDefeated(Enemy& enemy) {
     pack.activeInstances[enemy.id] = anim;
 }
 
-void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking) {
+void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking, float deltaTimeMs) {
     if (enemy.typeIndex < 0 ||
         enemy.typeIndex >= static_cast<int>(m_EnemyAnims.size())) {
         if (!enemy.alive) enemy.deathAnimationFinished = true;
@@ -136,7 +136,7 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking) {
         enemy.animState = desiredState;
         pack.activeInstances[enemy.id] = sharedInstance;
         if (sharedUpdateSerial != m_EnemyAnimationUpdateSerial) {
-            sharedInstance->Update();
+            sharedInstance->Update(deltaTimeMs);
             sharedUpdateSerial = m_EnemyAnimationUpdateSerial;
         }
         return;
@@ -170,7 +170,7 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking) {
     }
 
     if (animInst) {
-        animInst->Update();
+        animInst->Update(deltaTimeMs);
         if (desiredState == Enemy::AnimState::DIE &&
             animInst->GetState() == Util::Animation::State::ENDED) {
             enemy.deathAnimationFinished = true;
@@ -238,7 +238,7 @@ void App::UpdateEnemies(float dtSec) {
         if (!enemy.alive) {
             if (!enemy.deathAnimationFinished) {
                 enemy.deathElapsedMs += dtSec * 1000.0F;
-                UpdateEnemyAnimation(enemy, false, false);
+                UpdateEnemyAnimation(enemy, false, false, dtSec * 1000.0F);
                 if (enemy.deathElapsedMs >= MAX_DEATH_ANIMATION_MS) {
                     enemy.deathAnimationFinished = true;
                 }
@@ -294,7 +294,7 @@ void App::UpdateEnemies(float dtSec) {
                     didAttack = true;
                 }
             }
-            UpdateEnemyAnimation(enemy, false, didAttack);
+            UpdateEnemyAnimation(enemy, false, didAttack, dtSec * 1000.0F);
             continue; // blocked – don't move
         }
 
@@ -374,7 +374,7 @@ void App::UpdateEnemies(float dtSec) {
 
         if (enemy.alive) {
             const bool isMoving = glm::length(enemy.boardPos - frameStartPos) > 0.0001F;
-            UpdateEnemyAnimation(enemy, isMoving, didAttack);
+            UpdateEnemyAnimation(enemy, isMoving, didAttack, dtSec * 1000.0F);
         }
     }
 }

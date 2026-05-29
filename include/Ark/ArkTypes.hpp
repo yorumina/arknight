@@ -63,6 +63,10 @@ struct OperatorTemplate {
     ImU32 color = IM_COL32_WHITE;
     DeployType deployType = DeployType::GROUND_ONLY;
     bool isVanguard = false;
+    int magicResistance = 0;
+    std::string className;
+    std::string skillName;
+    std::string skillDescription;
 };
 
 struct Operator {

@@ -23,13 +23,19 @@ inline constexpr float BEAM_DURATION_MS = Ark::GameConst::BEAM_DURATION_MS;
 inline constexpr float BAGPIPE_SP_PER_SKILL = Ark::GameConst::BAGPIPE_SP_PER_SKILL;
 inline constexpr int BAGPIPE_MAX_CHARGES = Ark::GameConst::BAGPIPE_MAX_CHARGES;
 inline constexpr float BAGPIPE_SKILL_DURATION_MS = Ark::GameConst::BAGPIPE_SKILL_DURATION_MS;
+inline constexpr float OPERATOR_VISUAL_SCALE = 1.1F;
 inline constexpr float ENEMY_VISUAL_SCALE = 1.2F;
 inline constexpr float PRE_STAGE_TOTAL_MS = 2000.0F;
 inline constexpr float PRE_STAGE_FADE_MS = 500.0F;
 inline constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
 inline constexpr float FINISH_BLACKOUT_MS = 1000.0F;
-inline constexpr float FINISH_FADE_IN_MS = 700.0F;
-inline constexpr float FINISH_FADE_OUT_MS = 700.0F;
+inline constexpr float FINISH_FADE_IN_MS = Ark::GameConst::MISSION_RESULT_FADE_IN_MS;
+inline constexpr float FINISH_FADE_OUT_MS = Ark::GameConst::MISSION_RESULT_FADE_OUT_MS;
+inline constexpr float MISSION_COMPLETE_SLIDE_MS = Ark::GameConst::MISSION_COMPLETE_SLIDE_MS;
+inline constexpr float MISSION_COMPLETE_HOLD_MS = Ark::GameConst::MISSION_COMPLETE_HOLD_MS;
+inline constexpr float MISSION_COMPLETE_TOTAL_MS = Ark::GameConst::MISSION_COMPLETE_TOTAL_MS;
+inline constexpr float QUIT_PANEL_ASPECT = 2611.0F / 671.0F;
+inline constexpr float QUIT_PANEL_BUTTON_HEIGHT_RATIO = 120.0F / 671.0F;
 
 inline constexpr float OP_BAR_HEIGHT = 116.0F;
 inline constexpr float OP_CARD_WIDTH = 106.0F;
@@ -68,9 +74,15 @@ inline BattleUiLayout ComputeBattleUiLayout(float screenW, float screenH) {
     const float top = 20.0F * layout.scale;
     const float buttonHeight = 110.0F * layout.scale;
     const float topButtonWidth = 150.0F * layout.scale;
+    const float settingsScale = 1.20F;
     const float gap = 8.0F * layout.scale;
 
-    layout.settingsButton = {margin, top, margin + topButtonWidth, top + buttonHeight};
+    layout.settingsButton = {
+        margin,
+        top,
+        margin + topButtonWidth * settingsScale,
+        top + buttonHeight * settingsScale
+    };
     layout.pauseButton = {
         screenW - margin - topButtonWidth,
         top,
@@ -84,13 +96,20 @@ inline BattleUiLayout ComputeBattleUiLayout(float screenW, float screenH) {
         top + buttonHeight
     };
 
-    const float panelW = std::min(screenW * 0.92F, 1860.0F * layout.scale);
-    const float panelH = std::min(screenH * 0.80F, 920.0F * layout.scale);
+    float panelW = std::min(screenW * 0.936F, 1916.0F * layout.scale);
+    float panelH = panelW / QUIT_PANEL_ASPECT;
+    const float maxPanelH = screenH * 0.56F;
+    if (panelH > maxPanelH) {
+        panelH = maxPanelH;
+        panelW = panelH * QUIT_PANEL_ASPECT;
+    }
     const float panelX = (screenW - panelW) * 0.5F;
-    const float panelY = (screenH - panelH) * 0.5F;
+    const float bottomMargin = 24.0F * layout.scale;
+    const float preferredPanelY = screenH * 0.345F;
+    const float panelY = std::min(preferredPanelY, std::max(bottomMargin, screenH - panelH - bottomMargin));
     layout.quitPanel = {panelX, panelY, panelX + panelW, panelY + panelH};
 
-    const float buttonY = layout.quitPanel.maxY - 120.0F * layout.scale;
+    const float buttonY = layout.quitPanel.maxY - panelH * QUIT_PANEL_BUTTON_HEIGHT_RATIO;
     const float midX = panelX + panelW * 0.5F;
     layout.quitBackButton = {panelX, buttonY, midX, layout.quitPanel.maxY};
     layout.quitConfirmButton = {midX, buttonY, panelX + panelW, layout.quitPanel.maxY};

@@ -17,12 +17,44 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
     m_App.m_OperatorThumbnails.resize(m_App.m_OperatorTemplates.size());
     m_App.m_OperatorCards.clear();
     m_App.m_OperatorCards.resize(m_App.m_OperatorTemplates.size());
+    m_App.m_OperatorPortraits.clear();
+    m_App.m_OperatorPortraits.resize(m_App.m_OperatorTemplates.size());
+    m_App.m_OperatorLevelImages.clear();
+    m_App.m_OperatorLevelImages.resize(m_App.m_OperatorTemplates.size());
+    m_App.m_OperatorSkillImages.clear();
+    m_App.m_OperatorSkillImages.resize(m_App.m_OperatorTemplates.size());
+    m_App.m_OperatorFeatureImages.clear();
+    m_App.m_OperatorFeatureImages.resize(m_App.m_OperatorTemplates.size());
     const auto operatorDir = Ark::ResolveOperatorDir();
+    m_App.m_VanguardIcon.reset();
+    if (!operatorDir.empty()) {
+        const auto vanguardIcon = operatorDir / "vanguard.png";
+        if (std::filesystem::exists(vanguardIcon)) {
+            m_App.m_VanguardIcon = std::make_shared<Util::Image>(vanguardIcon.string());
+        }
+    }
     for (std::size_t i = 0; i < m_App.m_OperatorTemplates.size(); ++i) {
         const auto& op = m_App.m_OperatorTemplates[i];
         if (!operatorDir.empty()) {
+            const auto opDir = operatorDir / op.id;
             const auto photoDir = operatorDir / op.id / "photo";
+            const auto preferredPortrait = photoDir / (op.id + "_pic.png");
             const auto preferredCard = photoDir / (op.id + ".png");
+            auto loadFirstExisting = [](const std::vector<std::filesystem::path>& candidates) {
+                for (const auto& path : candidates) {
+                    if (std::filesystem::exists(path)) {
+                        return std::make_shared<Util::Image>(path.string());
+                    }
+                }
+                return std::shared_ptr<Util::Image>{};
+            };
+
+            if (std::filesystem::exists(preferredPortrait)) {
+                m_App.m_OperatorPortraits[i] = std::make_shared<Util::Image>(preferredPortrait.string());
+            } else if (std::filesystem::exists(preferredCard)) {
+                m_App.m_OperatorPortraits[i] = std::make_shared<Util::Image>(preferredCard.string());
+            }
+
             if (std::filesystem::exists(preferredCard)) {
                 m_App.m_OperatorCards[i] = std::make_shared<Util::Image>(preferredCard.string());
             } else if (std::filesystem::exists(photoDir) && std::filesystem::is_directory(photoDir)) {
@@ -37,6 +69,25 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
                     m_App.m_OperatorCards[i] = std::make_shared<Util::Image>(cards.front().string());
                 }
             }
+
+            m_App.m_OperatorLevelImages[i] = loadFirstExisting({
+                opDir / (op.id + "_level.png"),
+                photoDir / (op.id + "_level.png"),
+                opDir / "level.png",
+                photoDir / "level.png",
+            });
+            m_App.m_OperatorSkillImages[i] = loadFirstExisting({
+                opDir / (op.id + "_skill.png"),
+                photoDir / (op.id + "_skill.png"),
+                opDir / "skill.png",
+                photoDir / "skill.png",
+            });
+            m_App.m_OperatorFeatureImages[i] = loadFirstExisting({
+                opDir / (op.id + "_feature.png"),
+                photoDir / (op.id + "_feature.png"),
+                opDir / "feature.png",
+                photoDir / "feature.png",
+            });
         }
 
         // Try to load the first frame of the default animation as a thumbnail
@@ -127,7 +178,7 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         }
 
         if (tex != 0) {
-            float imgS = layout.cellSize * 0.8F;
+            float imgS = layout.cellSize * 0.8F * OPERATOR_VISUAL_SCALE;
             // No runtime UV flip needed — pre-generated front_flip/ handles LEFT/DOWN
             draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)), 
                            {center.x - imgS, center.y - imgS}, 
