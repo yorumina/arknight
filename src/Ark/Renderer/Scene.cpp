@@ -14,35 +14,43 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
     const float H = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
     const auto layout = m_App.GetBoardLayout();
     auto drawGameplayFrame = [&]() {
+        auto drawOperatorDetailsPanel = [&]() {
+            if (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection || m_App.m_SelectedOperatorCardType >= 0) {
+                if (m_App.m_DragOperatorType >= 0) {
+                    DrawOperatorDetails(m_App.m_DragOperatorType, nullptr, H);
+                } else if (m_App.m_SelectedOperatorCardType >= 0) {
+                    DrawOperatorDetails(m_App.m_SelectedOperatorCardType, nullptr, H);
+                }
+            } else if (m_App.m_SelectedOperatorId != -1) {
+                const Operator* op = nullptr;
+                for (auto& o : m_App.m_Operators) {
+                    if (o.id == m_App.m_SelectedOperatorId) { op = &o; break; }
+                }
+                if (op) {
+                    DrawOperatorDetails(op->typeIndex, op, H);
+                }
+            }
+        };
+
         DrawStageBackground();
-        DrawGrid();
-        DrawDeployPreview(cursor, m_App.ToCell(cursor), layout, true);
+        if (m_App.m_ShowMapModel) DrawGrid();
+        DrawDeployPreview(m_App.ToCell(cursor), layout, true);
         DrawEnemies(layout);
         DrawOperators(layout, false);
         DrawHighgroundTopLayer();
         DrawMarkerTopLayer();
         DrawOperators(layout, true);
         DrawBeams();
-        DrawDeployPreview(cursor, m_App.ToCell(cursor), layout, false);
-        DrawHUD(W);
+        DrawDeployPreview(m_App.ToCell(cursor), layout, false);
         DrawOperatorBar(W, H);
         DrawDeploymentInfo(W, H);
-        
-        // Draw Operator Details panel
-        if (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection || m_App.m_SelectedOperatorCardType >= 0) {
-            if (m_App.m_DragOperatorType >= 0) {
-                DrawOperatorDetails(m_App.m_DragOperatorType, nullptr, H);
-            } else if (m_App.m_SelectedOperatorCardType >= 0) {
-                DrawOperatorDetails(m_App.m_SelectedOperatorCardType, nullptr, H);
-            }
-        } else if (m_App.m_SelectedOperatorId != -1) {
-            const Operator* op = nullptr;
-            for (auto& o : m_App.m_Operators) {
-                if (o.id == m_App.m_SelectedOperatorId) { op = &o; break; }
-            }
-            if (op) {
-                DrawOperatorDetails(op->typeIndex, op, H);
-            }
+
+        if (m_App.m_ShowQuitConfirm) {
+            drawOperatorDetailsPanel();
+            DrawHUD(W);
+        } else {
+            DrawHUD(W);
+            drawOperatorDetailsPanel();
         }
     };
 
@@ -89,6 +97,11 @@ void Ark::AppRenderer::DrawStageBackground() {
         IM_COL32(12, 15, 20, 255)
     );
 
+    const bool hasStageArt = !m_App.m_StageBackgroundPath.empty();
+    if (hasStageArt) {
+        DrawImageCover(m_App.m_StageBackgroundPath, m_App.m_StageBackgroundAlpha, false);
+    }
+
     const float edgeW = std::max(42.0F, screenW * 0.032F);
     draw->AddRectFilledMultiColor({0.0F, 0.0F}, {edgeW, screenH},
                                   IM_COL32(10, 11, 12, 255), IM_COL32(38, 39, 39, 255),
@@ -114,20 +127,22 @@ void Ark::AppRenderer::DrawStageBackground() {
     const ImVec2 q3 = m_App.ToScreenPosition({r, b});
     const ImVec2 q4 = m_App.ToScreenPosition({l, b});
 
-    draw->AddQuadFilled(q1, q2, q3, q4, IM_COL32(39, 45, 52, 235));
-    draw->AddQuad(q1, q2, q3, q4, IM_COL32(95, 107, 122, 120), 1.4F);
+    if (!hasStageArt) {
+        draw->AddQuadFilled(q1, q2, q3, q4, IM_COL32(39, 45, 52, 235));
+        draw->AddQuad(q1, q2, q3, q4, IM_COL32(95, 107, 122, 120), 1.4F);
 
-    for (int i = -2; i <= m_App.m_StageWidth + 2; i += 2) {
-        const float x = layout.topLeftX + static_cast<float>(i) * layout.cellSize;
-        const ImVec2 a = m_App.ToScreenPosition({x, t});
-        const ImVec2 c = m_App.ToScreenPosition({x, b});
-        draw->AddLine(a, c, IM_COL32(20, 24, 30, 125), 2.0F);
-    }
-    for (int i = -2; i <= m_App.m_StageHeight + 2; i += 2) {
-        const float y = layout.topLeftY - static_cast<float>(i) * layout.cellSize;
-        const ImVec2 a = m_App.ToScreenPosition({l, y});
-        const ImVec2 c = m_App.ToScreenPosition({r, y});
-        draw->AddLine(a, c, IM_COL32(76, 86, 98, 72), 1.4F);
+        for (int i = -2; i <= m_App.m_StageWidth + 2; i += 2) {
+            const float x = layout.topLeftX + static_cast<float>(i) * layout.cellSize;
+            const ImVec2 a = m_App.ToScreenPosition({x, t});
+            const ImVec2 c = m_App.ToScreenPosition({x, b});
+            draw->AddLine(a, c, IM_COL32(20, 24, 30, 125), 2.0F);
+        }
+        for (int i = -2; i <= m_App.m_StageHeight + 2; i += 2) {
+            const float y = layout.topLeftY - static_cast<float>(i) * layout.cellSize;
+            const ImVec2 a = m_App.ToScreenPosition({l, y});
+            const ImVec2 c = m_App.ToScreenPosition({r, y});
+            draw->AddLine(a, c, IM_COL32(76, 86, 98, 72), 1.4F);
+        }
     }
 
     draw->AddRectFilledMultiColor(

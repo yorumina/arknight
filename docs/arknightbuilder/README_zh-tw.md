@@ -46,6 +46,7 @@ ArknightBuilder spawn-add <file> --enemy <enemy-id> --route <route-id> --count <
 ArknightBuilder validate <file>
 ArknightBuilder simulate <file> [--duration <sec>]
 ArknightBuilder show <file>
+ArknightBuilder calibrate [file]
 ```
 
 ## 快速開始
@@ -56,6 +57,7 @@ ArknightBuilder show <file>
 ./build/ArknightBuilder validate tutorial_1.json
 ./build/ArknightBuilder show tutorial_1.json
 ./build/ArknightBuilder simulate tutorial_1.json --duration 60
+./build/ArknightBuilder calibrate 'Operation 1-1/stage.json'
 ```
 
 建立一個小型直線關卡：
@@ -72,6 +74,14 @@ ArknightBuilder show <file>
 ```
 
 產生的檔案會寫入 `data/levels/stage_01.json`。
+
+## 座標映射校準
+
+當關卡背景圖要作為實際美術地圖，而 JSON 格子只保留為不可見邏輯層時，請使用 `calibrate`。校準視窗可以選擇關卡與格子，並直接拖曳地圖上的四個黃色角點；相連角點會一起移動，按下 `Save` 後會把該格四角座標寫回關卡 JSON。
+
+```bash
+./build/ArknightBuilder calibrate 'Operation 1-1/stage.json'
+```
 
 ## 地形類型
 

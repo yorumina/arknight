@@ -88,14 +88,24 @@ void Input::Update() {
     s_Io = ImGui::GetIO();
 
     while (SDL_PollEvent(&s_Event) != 0) {
-        if (s_Io.WantCaptureMouse) {
-            ImGui_ImplSDL2_ProcessEvent(&s_Event);
+        ImGui_ImplSDL2_ProcessEvent(&s_Event);
+
+        s_Exit = s_Event.type == SDL_QUIT || s_Exit;
+
+        const bool mouseEvent = s_Event.type == SDL_MOUSEBUTTONDOWN ||
+                                s_Event.type == SDL_MOUSEBUTTONUP ||
+                                s_Event.type == SDL_MOUSEMOTION ||
+                                s_Event.type == SDL_MOUSEWHEEL;
+        const bool keyboardEvent = s_Event.type == SDL_KEYDOWN ||
+                                   s_Event.type == SDL_KEYUP;
+        if ((mouseEvent && s_Io.WantCaptureMouse) ||
+            (keyboardEvent && s_Io.WantCaptureKeyboard)) {
             continue;
         }
-        if (s_Event.type == SDL_KEYDOWN || s_Event.type == SDL_KEYUP) {
+
+        if (keyboardEvent) {
             UpdateKeyState(&s_Event);
-        } else if (s_Event.type == SDL_MOUSEBUTTONDOWN ||
-                   s_Event.type == SDL_MOUSEBUTTONUP) {
+        } else if (s_Event.type == SDL_MOUSEBUTTONDOWN || s_Event.type == SDL_MOUSEBUTTONUP) {
             UpdateKeyState(&s_Event);
         }
 
@@ -106,7 +116,6 @@ void Input::Update() {
             s_ScrollDistance.y = static_cast<float>(s_Event.wheel.y);
         }
         s_MouseMoving = s_Event.type == SDL_MOUSEMOTION || s_MouseMoving;
-        s_Exit = s_Event.type == SDL_QUIT;
     }
 }
 

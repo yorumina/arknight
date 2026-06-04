@@ -46,6 +46,7 @@ ArknightBuilder spawn-add <file> --enemy <enemy-id> --route <route-id> --count <
 ArknightBuilder validate <file>
 ArknightBuilder simulate <file> [--duration <sec>]
 ArknightBuilder show <file>
+ArknightBuilder calibrate [file]
 ```
 
 ## Quickstart
@@ -56,6 +57,7 @@ Validate and inspect an existing stage:
 ./build/ArknightBuilder validate tutorial_1.json
 ./build/ArknightBuilder show tutorial_1.json
 ./build/ArknightBuilder simulate tutorial_1.json --duration 60
+./build/ArknightBuilder calibrate 'Operation 1-1/stage.json'
 ```
 
 Create a small linear stage:
@@ -72,6 +74,14 @@ Create a small linear stage:
 ```
 
 The generated file is written under `data/levels/stage_01.json`.
+
+## Coordinate Calibration
+
+Use `calibrate` when a stage background image should become the visual map while the JSON grid remains the invisible logic layer. The calibration window lets you choose a stage, choose a cell, and drag the four yellow cell corners directly on the map. Connected corners move together, and `Save` writes the mapped cell corners back into the stage JSON.
+
+```bash
+./build/ArknightBuilder calibrate 'Operation 1-1/stage.json'
+```
 
 ## Tile Types
 

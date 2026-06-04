@@ -223,8 +223,10 @@ Context::Context() {
         PTSD_Config::WINDOW_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
 
     if (m_Window == nullptr) {
+        const std::string error = SDL_GetError();
         LOG_ERROR("Failed to create window");
-        LOG_ERROR(SDL_GetError());
+        LOG_ERROR(error);
+        throw std::runtime_error("Failed to create SDL window: " + error);
     }
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
@@ -235,14 +237,19 @@ Context::Context() {
     m_GlContext = SDL_GL_CreateContext(m_Window);
 
     if (m_GlContext == nullptr) {
+        const std::string error = SDL_GetError();
         LOG_ERROR("Failed to initialize GL context");
-        LOG_ERROR(SDL_GetError());
+        LOG_ERROR(error);
+        throw std::runtime_error("Failed to initialize OpenGL context: " + error);
     }
 
     glewExperimental = GL_TRUE;
-    if (glewInit() != GLEW_OK) {
-        GLuint err = glGetError();
-        LOG_ERROR(reinterpret_cast<const char *>(glewGetErrorString(err)));
+    const GLenum glewStatus = glewInit();
+    if (glewStatus != GLEW_OK) {
+        const auto* glewError = reinterpret_cast<const char *>(glewGetErrorString(glewStatus));
+        LOG_ERROR(glewError == nullptr ? "Failed to initialize GLEW" : glewError);
+        throw std::runtime_error(glewError == nullptr ? "Failed to initialize GLEW"
+                                                      : std::string("Failed to initialize GLEW: ") + glewError);
     }
 
 #ifndef __APPLE__

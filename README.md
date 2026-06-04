@@ -54,9 +54,12 @@ Windows:
 - `Right Mouse Button`: cancel deployment or retreat a deployed operator
 - `SPACE`: start the next wave while waiting before combat
 - `R`: restart the current demo
+- `M`: toggle the visible map model/grid overlay
+- `Z`: toggle cheat mode, which runs battle time at 10x and gives operators 10x attack damage
 - `ESC`: open quit confirmation or exit
 - Top-right `1X` / `2X` button: toggle game speed
 - Top-right pause button: pause or resume
+- Top-left `MAP` button: toggle the visible map model/grid overlay
 
 ## Data Layout
 
@@ -106,6 +109,7 @@ Examples:
 ./build/ArknightBuilder validate tutorial_1.json
 ./build/ArknightBuilder show tutorial_1.json
 ./build/ArknightBuilder simulate tutorial_1.json --duration 60
+./build/ArknightBuilder calibrate 'Operation 1-1/stage.json'
 ```
 
 Stage file arguments are automatically mapped to `data/levels/`, so `tutorial_1.json` resolves to `data/levels/tutorial_1.json`.

@@ -84,7 +84,6 @@ void App::ResetDemo() {
     m_LifePoint   = 10;
     m_KillCount   = 0;
 
-    m_SelectedOperatorType = 0;
     m_IsDeploying          = false;
     m_SelectedOperatorId   = -1;
     m_DraggingFromBar      = false;
@@ -93,6 +92,7 @@ void App::ResetDemo() {
     m_OperatorCardPressActive = false;
     m_PressedOperatorCardType = -1;
     m_OperatorInfoTab = 0;
+    m_OperatorDetailDragBlend = 0.0F;
     m_WaitingForDirection  = false;
     ResetCameraToStageDefaults();
 
@@ -115,24 +115,6 @@ void App::ResetDemo() {
         pack.activeInstances.clear();
         pack.attackInstances.clear();
         pack.dieInstances.clear();
-    }
-}
-
-void App::InitializeStage() {
-    m_OperatorTemplates = Ark::LoadOperators();
-    if (m_OperatorTemplates.empty()) {
-        // Fallback hardcoded operators if JSON not found
-        m_OperatorTemplates = {
-            OperatorTemplate{"Bagpipe","風笛",  11,2664,769,382,1000,1,4,2,1000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
-            OperatorTemplate{"Sniper","Sniper",   11,1200,500,150,1000,0,0,0,0, IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false},
-            OperatorTemplate{"Myrtle","桃金娘",  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
-        };
-    }
-    if (!LoadStageFromJsonModule()) BuildFallbackStage();
-    LoadOperatorAnimations();
-    LoadEnemyAnimations();
-    if (m_Renderer) {
-        m_Renderer->LoadOperatorThumbnails();
     }
 }
 
@@ -256,6 +238,7 @@ bool App::LoadStageFromJsonModule() {
     if (m_HasBoardLayoutOverride) {
         m_BoardLayoutOverride = d.boardLayoutOverride;
     }
+    m_BoardArtTransform = d.boardArt;
 
     m_Camera.projectionScaleX = std::max(0.05F, d.camera.projectionScaleX);
     m_Camera.projectionScaleY = std::max(0.05F, d.camera.projectionScaleY);
@@ -283,6 +266,7 @@ void App::BuildFallbackStage() {
     m_StageName   = "fallback_stage";
     m_StageLoadSource = "embedded fallback";
     m_HasBoardLayoutOverride = false;
+    m_BoardArtTransform = {};
     m_StageBackgroundPath.clear();
     m_StageBackgroundAlpha = 1.0F;
     m_StageBackground.reset();
@@ -413,14 +397,7 @@ void App::UpdateGame(float dtMs) {
                     if (Ark::ResolveStagePath(STAGE_1_2_FILE).has_value()) {
                         m_CurrentStageFile = STAGE_1_2_FILE;
                         // Reload stage JSON (lightweight), then go through LOADING for animations
-                        m_OperatorTemplates = Ark::LoadOperators();
-                        if (m_OperatorTemplates.empty()) {
-                            m_OperatorTemplates = {
-                                OperatorTemplate{"Bagpipe","風笛",  11,2664,769,382,1000,1,4,2,1000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
-                                OperatorTemplate{"Sniper","Sniper",   11,1200,500,150,1000,0,0,0,0, IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false},
-                                OperatorTemplate{"Myrtle","桃金娘",  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
-                            };
-                        }
+                        m_OperatorTemplates = Ark::LoadOperatorsWithFallback();
                         if (!LoadStageFromJsonModule()) BuildFallbackStage();
                         ResetDemo();
                         m_LoadingPhase = 0;
@@ -438,10 +415,18 @@ void App::UpdateGame(float dtMs) {
     // DP regenerates in visible 1-second ticks. UpdateGame already receives
     // speed-scaled dt, so 2x speed completes a tick in 0.5 real seconds.
     if (m_WaveRunning) {
-        m_DPRegenTimerMs += dtMs * std::max(0.0F, m_DPRegenPerSec);
-        while (m_DPRegenTimerMs >= 1000.0F) {
-            m_DP = std::min(m_MaxDP, m_DP + 1.0F);
-            m_DPRegenTimerMs -= 1000.0F;
+        if (m_DP >= m_MaxDP) {
+            m_DP = m_MaxDP;
+            m_DPRegenTimerMs = 0.0F;
+        } else {
+            m_DPRegenTimerMs += dtMs * std::max(0.0F, m_DPRegenPerSec);
+            while (m_DPRegenTimerMs >= 1000.0F && m_DP < m_MaxDP) {
+                m_DP = std::min(m_MaxDP, m_DP + 1.0F);
+                m_DPRegenTimerMs -= 1000.0F;
+            }
+            if (m_DP >= m_MaxDP) {
+                m_DPRegenTimerMs = 0.0F;
+            }
         }
     } else {
         m_DPRegenTimerMs = 0.0F;
@@ -455,7 +440,8 @@ void App::UpdateGame(float dtMs) {
 
     // Dead operators stay visible until their death animation finishes.
     for (auto& op : m_Operators) {
-        if (op.hp <= 0.0F && !op.redeployCooldownStarted) {
+        if (op.hp <= 0.0F && !op.redeployCooldownStarted &&
+            IsValidOperatorTypeIndex(op.typeIndex)) {
             if (m_SelectedOperatorId == op.id) m_SelectedOperatorId = -1;
             m_OperatorRedeployCooldownMs[op.typeIndex] = REDEPLOY_COOLDOWN_MS;
             op.redeployCooldownStarted = true;

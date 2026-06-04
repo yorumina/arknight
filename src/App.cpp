@@ -5,7 +5,7 @@
 //   Camera.cpp        –Projection & coordinate mapping
 //   EnemySystem.cpp   –Enemy spawning, movement & AI
 //   OperatorSystem.cpp–Operator combat, skills & deployment helpers
-//   Renderer.cpp      –All drawing / rendering code
+//   Renderer/*        –All drawing / rendering code
 //   GameLogic.cpp     - Wave management, game state, stage init
 // ─────────────────────────────────────────────────────────────────────────────
 #include "App.hpp"
@@ -46,14 +46,7 @@ void App::Start() {
 
     // Phase 1: Lightweight stage JSON loading (fast — sets m_StageLoadingPath so
     // the loading screen image is available for rendering immediately).
-    m_OperatorTemplates = Ark::LoadOperators();
-    if (m_OperatorTemplates.empty()) {
-        m_OperatorTemplates = {
-            OperatorTemplate{"Bagpipe","風笛",  11,2664,769,382,1000,1,4,2,1000, IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true},
-            OperatorTemplate{"Sniper","Sniper",   11,1200,500,150,1000,0,0,0,0, IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false},
-            OperatorTemplate{"Myrtle","桃金娘",  8,1654,508,400,1000,1,22,13,8000, IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true},
-        };
-    }
+    m_OperatorTemplates = Ark::LoadOperatorsWithFallback();
     if (!LoadStageFromJsonModule()) BuildFallbackStage();
     ResetDemo();
 
@@ -145,6 +138,8 @@ void App::Update() {
         return;
     }
     if (Util::Input::IsKeyDown(Util::Keycode::R)) ResetDemo();
+    if (Util::Input::IsKeyDown(Util::Keycode::M)) m_ShowMapModel = !m_ShowMapModel;
+    if (Util::Input::IsKeyDown(Util::Keycode::Z)) m_CheatMode = !m_CheatMode;
     const float dt = std::clamp(Util::Time::GetDeltaTimeMs(), 0.0F, 100.0F);
 
     const auto raw = Util::Input::GetCursorPosition();
@@ -174,6 +169,9 @@ void App::Update() {
             m_PauseBeforeQuitConfirm = m_GamePaused;
             m_GamePaused = true;
             m_ShowQuitConfirm = true;
+        } else if (uiLayout.mapToggleButton.Contains(screenCursorX, screenCursorY)) {
+            uiConsumedLeftClick = true;
+            m_ShowMapModel = !m_ShowMapModel;
         } else if (uiLayout.speedButton.Contains(screenCursorX, screenCursorY)) {
             uiConsumedLeftClick = true;
             m_GameSpeedMultiplier = (m_GameSpeedMultiplier < 1.5F) ? 2.0F : 1.0F;
@@ -236,12 +234,15 @@ void App::Update() {
         return m_DraggingFromBar || m_WaitingForDirection ||
                m_SelectedOperatorCardType >= 0 || m_SelectedOperatorId != -1;
     };
+    const float dragBlendTarget = (m_DraggingFromBar || m_WaitingForDirection) ? 1.0F : 0.0F;
+    const float dragBlendStep = std::clamp(dt / 170.0F, 0.0F, 1.0F);
+    m_OperatorDetailDragBlend += (dragBlendTarget - m_OperatorDetailDragBlend) * dragBlendStep;
 
     auto operatorInfoTabAt = [&](float x, float y) {
         if (!operatorInfoVisible()) return -1;
         const float scale = uiLayout.scale;
         const float panelW = std::clamp(screenW * 0.29F, 390.0F, 560.0F);
-        const float panelH = std::max(360.0F, screenH - OP_BAR_HEIGHT + 8.0F);
+        const float panelH = screenH;
         const float portraitH = std::min(panelH * 0.62F, 500.0F);
         const float tabH = 44.0F * scale;
         if (x < 0.0F || x > panelW || y < portraitH || y > portraitH + tabH) return -1;
@@ -260,7 +261,6 @@ void App::Update() {
             if (clickedCard >= 0) {
                 m_SelectedOperatorCardType = clickedCard;
                 m_DragOperatorType = clickedCard;
-                m_SelectedOperatorType = clickedCard;
                 m_SelectedOperatorId = -1;
                 m_OperatorInfoTab = 0;
                 uiConsumedLeftClick = true;
@@ -278,7 +278,6 @@ void App::Update() {
                     canDragOperatorCard(m_PressedOperatorCardType)) {
                     m_DraggingFromBar = true;
                     m_DragOperatorType = m_PressedOperatorCardType;
-                    m_SelectedOperatorType = m_PressedOperatorCardType;
                     m_SelectedOperatorCardType = m_PressedOperatorCardType;
                     m_SelectedOperatorId = -1;
                     m_OperatorCardPressActive = false;
@@ -299,6 +298,10 @@ void App::Update() {
                 for (auto it = m_Operators.begin(); it != m_Operators.end(); ++it) {
                     if (it->cell == *cell) {
                         if (m_SelectedOperatorId == it->id) m_SelectedOperatorId = -1;
+                        if (!IsValidOperatorTypeIndex(it->typeIndex)) {
+                            m_Operators.erase(it);
+                            break;
+                        }
                         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(it->typeIndex));
                         // Retreat refund
                         if (opType.name == "Bagpipe" || opType.name == u8"風笛") {
@@ -311,8 +314,9 @@ void App::Update() {
                             if (e.blockedByOperatorId == it->id) e.blockedByOperatorId = -1;
                         }
                         // Cleanup animation instance
-                        if (static_cast<std::size_t>(it->typeIndex) < m_OperatorAnims.size()) {
-                            m_OperatorAnims[it->typeIndex].activeInstances.erase(it->id);
+                        if (it->typeIndex >= 0 &&
+                            it->typeIndex < static_cast<int>(m_OperatorAnims.size())) {
+                            m_OperatorAnims[static_cast<std::size_t>(it->typeIndex)].activeInstances.erase(it->id);
                         }
                         // Start redeploy cooldown (90 seconds)
                         m_OperatorRedeployCooldownMs[it->typeIndex] = REDEPLOY_COOLDOWN_MS;
@@ -345,7 +349,8 @@ void App::Update() {
                 
                 if (Util::Input::IsKeyUp(Util::Keycode::MOUSE_LB)) {
                     // Finalize deployment if they dragged far enough
-                    if (std::abs(diff.x) > 25.0F || std::abs(diff.y) > 25.0F) {
+                    if ((std::abs(diff.x) > 25.0F || std::abs(diff.y) > 25.0F) &&
+                        IsValidOperatorTypeIndex(m_DragOperatorType)) {
                         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(m_DragOperatorType));
                         m_DP -= static_cast<float>(opType.cost);
 
@@ -401,7 +406,6 @@ void App::Update() {
             if (clickedCard >= 0) {
                 m_SelectedOperatorCardType = clickedCard;
                 m_DragOperatorType = clickedCard;
-                m_SelectedOperatorType = clickedCard;
                 m_SelectedOperatorId = -1;
                 m_DragScreenPos = {screenCursorX, screenCursorY};
                 m_OperatorInfoTab = 0;
@@ -424,17 +428,8 @@ void App::Update() {
                         m_OperatorCardPressActive = false;
                         m_PressedOperatorCardType = -1;
                         m_OperatorInfoTab = 0;
-                        const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
-                        const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == u8"風笛");
-                        if (!isBagpipe && opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
-                            op.skillActive  = true;
-                            op.skillTimerMs = opType.skillDuration;
-                            op.sp           = 0;
-                            if (opType.name == "Myrtle" || opType.name == u8"桃金娘") {
-                                m_DP = std::min(m_MaxDP, m_DP + 6.0F);
-                            }
-                            break;
-                        }
+                        HandleSkillActivation(*cell);
+                        break;
                     }
                 }
                 if (!clickedOperator) {
@@ -449,21 +444,19 @@ void App::Update() {
             m_DragScreenPos = {screenCursorX, screenCursorY};
             
             // Show deploy preview based on hovered cell
-            const auto cell = ToCell(ptsdCursor);
+            const auto cell = ResolveDeploymentCell(m_DragOperatorType, ptsdCursor);
             if (cell) {
                 m_IsDeploying = true;
                 m_DeployingCell = *cell;
+            } else {
+                m_IsDeploying = false;
             }
         }
 
         // ── Release drag – drop on cell ───────────────────────────────
         if (m_DraggingFromBar && Util::Input::IsKeyUp(Util::Keycode::MOUSE_LB)) {
-            const auto cell = ToCell(ptsdCursor);
+            const auto cell = ResolveDeploymentCell(m_DragOperatorType, ptsdCursor);
             if (cell && m_WaveRunning && m_DragOperatorType >= 0) {
-                // Temporarily set selected type for deploy check
-                int prevSelected = m_SelectedOperatorType;
-                m_SelectedOperatorType = m_DragOperatorType;
-
                 if (IsOperatorTypeAvailable(m_DragOperatorType) &&
                     IsDeployableCellForOperatorType(m_DragOperatorType, *cell) && !IsCellOccupied(*cell) &&
                     static_cast<int>(m_Operators.size()) < MAX_OPS) {
@@ -484,7 +477,6 @@ void App::Update() {
                     m_DraggingFromBar = false;
                     m_IsDeploying = false;
                 }
-                m_SelectedOperatorType = prevSelected;
             } else {
                 m_DraggingFromBar = false;
                 m_IsDeploying = false;
@@ -495,7 +487,8 @@ void App::Update() {
     }
 
     const bool slowOperatorInfo = operatorInfoVisible() && !m_GamePaused && !m_ShowQuitConfirm;
-    const float playSpeed = m_GameSpeedMultiplier * (slowOperatorInfo ? 0.25F : 1.0F);
+    const float cheatSpeedMultiplier = m_CheatMode ? 10.0F : 1.0F;
+    const float playSpeed = m_GameSpeedMultiplier * cheatSpeedMultiplier * (slowOperatorInfo ? 0.125F : 1.0F);
     const float gameDt = (m_MissionClear || m_GameOver) ? dt : dt * playSpeed;
     UpdateGame(gameDt);
     if (m_Renderer) {

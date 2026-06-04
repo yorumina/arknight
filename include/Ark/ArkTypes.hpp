@@ -1,5 +1,6 @@
 #pragma once
 #include "pch.hpp"
+#include <array>
 #include <string>
 #include <vector>
 
@@ -97,6 +98,28 @@ struct BoardLayout {
     float cellSize = 60.0F;
     float topLeftX = -300.0F;
     float topLeftY =  200.0F;
+};
+
+struct BoardArtCell {
+    bool enabled = false;
+    std::array<glm::vec2, 4> corners{
+        glm::vec2{0.0F, 0.0F},
+        glm::vec2{0.0F, 0.0F},
+        glm::vec2{0.0F, 0.0F},
+        glm::vec2{0.0F, 0.0F}
+    };
+};
+
+struct BoardArtTransform {
+    bool enabled = false;
+    std::array<glm::vec2, 4> corners{
+        glm::vec2{0.0F, 0.0F},
+        glm::vec2{0.0F, 0.0F},
+        glm::vec2{0.0F, 0.0F},
+        glm::vec2{0.0F, 0.0F}
+    };
+    glm::vec2 referenceSize{0.0F, 0.0F};
+    std::vector<std::vector<BoardArtCell>> cells;
 };
 
 } // namespace Ark

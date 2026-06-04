@@ -6,6 +6,7 @@
 #include <iostream>
 
 #include "cli_utils.hpp"
+#include "enemy_catalog.hpp"
 #include "json_utils.hpp"
 #include "stage.hpp"
 #include "types.hpp"
@@ -245,6 +246,7 @@ void RunSimulate(const std::vector<std::string>& args) {
     }
 
     std::vector<SimulationRecord> records;
+    const auto enemyAliases = LoadEnemyAliases();
     const auto& waves = stage["waves"];
     for (size_t waveIndex = 0; waveIndex < waves.size(); ++waveIndex) {
         const auto& wave = waves[waveIndex];
@@ -253,8 +255,11 @@ void RunSimulate(const std::vector<std::string>& args) {
         const int count = wave["count"].get<int>();
         const double start = wave["start"].get<double>();
         const double interval = wave["interval"].get<double>();
-        const double speed =
-            stage["enemies"][enemyId]["speed"].get<double>();
+        const json* enemy = FindStageEnemyByRuntimeId(stage, enemyAliases, enemyId);
+        if (enemy == nullptr || !enemy->contains("speed") || !(*enemy)["speed"].is_number()) {
+            throw CliError("cannot resolve speed for enemy '" + enemyId + "'");
+        }
+        const double speed = (*enemy)["speed"].get<double>();
         const auto& route = stage["routes"][routeId];
         const double routeDuration = ComputeRouteDuration(route, speed);
 

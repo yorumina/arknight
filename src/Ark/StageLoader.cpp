@@ -215,6 +215,54 @@ std::vector<OperatorTemplate> LoadOperators() {
     return result;
 }
 
+std::vector<OperatorTemplate> LoadOperatorsWithFallback() {
+    auto operators = LoadOperators();
+    if (!operators.empty()) {
+        return operators;
+    }
+
+    auto makeOperator = [](std::string id,
+                           std::string name,
+                           int cost,
+                           float hp,
+                           float damage,
+                           float def,
+                           float attackIntervalMs,
+                           int blockCount,
+                           float maxSp,
+                           float initialSp,
+                           float skillDuration,
+                           ImU32 color,
+                           DeployType deployType,
+                           bool isVanguard) {
+        OperatorTemplate op;
+        op.id = std::move(id);
+        op.name = std::move(name);
+        op.cost = cost;
+        op.hp = hp;
+        op.damage = damage;
+        op.def = def;
+        op.attackIntervalMs = attackIntervalMs;
+        op.blockCount = blockCount;
+        op.maxSp = maxSp;
+        op.initialSp = initialSp;
+        op.skillDuration = skillDuration;
+        op.color = color;
+        op.deployType = deployType;
+        op.isVanguard = isVanguard;
+        return op;
+    };
+
+    return {
+        makeOperator("Bagpipe", "風笛", 11, 2664.0F, 769.0F, 382.0F, 1000.0F, 1, 4.0F, 2.0F, 1000.0F,
+                     IM_COL32(225,120,80,255), DeployType::GROUND_ONLY, true),
+        makeOperator("Sniper", "Sniper", 11, 1200.0F, 500.0F, 150.0F, 1000.0F, 0, 0.0F, 0.0F, 0.0F,
+                     IM_COL32(255,196,66,255), DeployType::HIGHGROUND_ONLY, false),
+        makeOperator("Myrtle", "桃金娘", 8, 1654.0F, 508.0F, 400.0F, 1000.0F, 1, 22.0F, 13.0F, 8000.0F,
+                     IM_COL32(255,215,0,255), DeployType::GROUND_ONLY, true),
+    };
+}
+
 // Load a full stage from JSON, wiring in enemies from the data/enemy directory
 StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
     StageLoadResult result;
@@ -274,6 +322,42 @@ StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
             data.boardLayoutOverride.topLeftY = boardLayout.value("top_left_y", data.boardLayoutOverride.topLeftY);
             data.hasBoardLayoutOverride = data.boardLayoutOverride.cellSize > 0.0F;
         }
+        if (stage.contains("board_art") && stage["board_art"].is_object()) {
+            const auto& boardArt = stage["board_art"];
+            auto readPoint = [&](const char* key) -> std::optional<glm::vec2> {
+                if (!boardArt.contains(key) || !boardArt[key].is_array() || boardArt[key].size() != 2) {
+                    return std::nullopt;
+                }
+                const auto& point = boardArt[key];
+                if (!point[0].is_number() || !point[1].is_number()) {
+                    return std::nullopt;
+                }
+                return glm::vec2{point[0].get<float>(), point[1].get<float>()};
+            };
+            auto readReferenceSize = [&]() -> glm::vec2 {
+                if (!boardArt.contains("reference_size") || !boardArt["reference_size"].is_array() ||
+                    boardArt["reference_size"].size() != 2) {
+                    return {0.0F, 0.0F};
+                }
+                const auto& size = boardArt["reference_size"];
+                if (!size[0].is_number() || !size[1].is_number()) {
+                    return {0.0F, 0.0F};
+                }
+                return {std::max(0.0F, size[0].get<float>()), std::max(0.0F, size[1].get<float>())};
+            };
+
+            const auto topLeft = readPoint("top_left");
+            const auto topRight = readPoint("top_right");
+            const auto bottomRight = readPoint("bottom_right");
+            const auto bottomLeft = readPoint("bottom_left");
+            if (topLeft && topRight && bottomRight && bottomLeft) {
+                data.boardArt.enabled = true;
+                data.boardArt.corners = {*topLeft, *topRight, *bottomRight, *bottomLeft};
+                data.boardArt.referenceSize = readReferenceSize();
+            } else {
+                result.errors.push_back("board_art requires top_left, top_right, bottom_right, and bottom_left point arrays");
+            }
+        }
         if (stage.contains("background") && stage["background"].is_object()) {
             const auto& background = stage["background"];
             const auto imagePath = ResolveAssetPath(*stagePath, background.value("image", std::string{}));
@@ -332,6 +416,65 @@ StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
                     if (!imagePath.empty()) {
                         data.tileImages[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] = imagePath.string();
                     }
+                }
+            }
+        }
+        if (data.boardArt.enabled) {
+            auto boardArtPoint = [&](float x, float y) {
+                const float u = std::clamp(x / static_cast<float>(std::max(1, W)), 0.0F, 1.0F);
+                const float v = std::clamp(y / static_cast<float>(std::max(1, H)), 0.0F, 1.0F);
+                const glm::vec2 top = data.boardArt.corners[0] + (data.boardArt.corners[1] - data.boardArt.corners[0]) * u;
+                const glm::vec2 bottom = data.boardArt.corners[3] + (data.boardArt.corners[2] - data.boardArt.corners[3]) * u;
+                return top + (bottom - top) * v;
+            };
+            data.boardArt.cells.assign(static_cast<std::size_t>(H),
+                                       std::vector<BoardArtCell>(static_cast<std::size_t>(W)));
+            for (int y = 0; y < H; ++y) {
+                for (int x = 0; x < W; ++x) {
+                    if (data.tileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] ==
+                        TileType::UNUSABLE_HIGHGROUND) {
+                        continue;
+                    }
+                    auto& cell = data.boardArt.cells[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)];
+                    cell.enabled = true;
+                    cell.corners = {
+                        boardArtPoint(static_cast<float>(x), static_cast<float>(y)),
+                        boardArtPoint(static_cast<float>(x + 1), static_cast<float>(y)),
+                        boardArtPoint(static_cast<float>(x + 1), static_cast<float>(y + 1)),
+                        boardArtPoint(static_cast<float>(x), static_cast<float>(y + 1))
+                    };
+                }
+            }
+
+            const auto& boardArt = stage["board_art"];
+            if (boardArt.contains("cells") && boardArt["cells"].is_array()) {
+                auto readPoint = [](const nlohmann::json& owner, const char* key) -> std::optional<glm::vec2> {
+                    if (!owner.contains(key) || !owner[key].is_array() || owner[key].size() != 2) {
+                        return std::nullopt;
+                    }
+                    const auto& point = owner[key];
+                    if (!point[0].is_number() || !point[1].is_number()) {
+                        return std::nullopt;
+                    }
+                    return glm::vec2{point[0].get<float>(), point[1].get<float>()};
+                };
+                for (const auto& overrideCell : boardArt["cells"]) {
+                    if (!overrideCell.is_object()) continue;
+                    const int x = overrideCell.value("x", -1);
+                    const int y = overrideCell.value("y", -1);
+                    if (x < 0 || x >= W || y < 0 || y >= H) continue;
+                    if (data.tileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] ==
+                        TileType::UNUSABLE_HIGHGROUND) {
+                        continue;
+                    }
+                    const auto topLeft = readPoint(overrideCell, "top_left");
+                    const auto topRight = readPoint(overrideCell, "top_right");
+                    const auto bottomRight = readPoint(overrideCell, "bottom_right");
+                    const auto bottomLeft = readPoint(overrideCell, "bottom_left");
+                    if (!(topLeft && topRight && bottomRight && bottomLeft)) continue;
+                    auto& cell = data.boardArt.cells[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)];
+                    cell.enabled = true;
+                    cell.corners = {*topLeft, *topRight, *bottomRight, *bottomLeft};
                 }
             }
         }

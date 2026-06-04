@@ -59,6 +59,7 @@ struct UiRect {
 struct BattleUiLayout {
     float scale = 1.0F;
     UiRect settingsButton;
+    UiRect mapToggleButton;
     UiRect speedButton;
     UiRect pauseButton;
     UiRect quitPanel;
@@ -82,6 +83,14 @@ inline BattleUiLayout ComputeBattleUiLayout(float screenW, float screenH) {
         top,
         margin + topButtonWidth * settingsScale,
         top + buttonHeight * settingsScale
+    };
+    const float utilityButtonW = 110.0F * layout.scale;
+    const float utilityButtonH = 52.0F * layout.scale;
+    layout.mapToggleButton = {
+        layout.settingsButton.maxX + gap,
+        top + (buttonHeight * settingsScale - utilityButtonH) * 0.5F,
+        layout.settingsButton.maxX + gap + utilityButtonW,
+        top + (buttonHeight * settingsScale + utilityButtonH) * 0.5F
     };
     layout.pauseButton = {
         screenW - margin - topButtonWidth,

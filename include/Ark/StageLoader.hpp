@@ -21,6 +21,7 @@ std::vector<EnemyTemplate> LoadEnemies(const std::vector<std::string>& enemyIds)
 
 // Loads all operator definitions from the data/operators directory
 std::vector<OperatorTemplate> LoadOperators();
+std::vector<OperatorTemplate> LoadOperatorsWithFallback();
 
 // Loads a stage JSON and populates stage data + wave plans
 struct StageData {
@@ -47,6 +48,7 @@ struct StageData {
 
     bool hasBoardLayoutOverride = false;
     BoardLayout boardLayoutOverride{};
+    BoardArtTransform boardArt{};
 
     std::string backgroundImage;
     float backgroundAlpha = 1.0F;

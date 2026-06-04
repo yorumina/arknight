@@ -50,6 +50,9 @@ target_include_directories(Arknight PRIVATE
     include
     include/Ark
 )
+target_compile_options(Arknight PRIVATE
+    -Wall -Wextra -pedantic
+)
 
 # Link PTSD and other required libraries
 target_link_libraries(Arknight
@@ -65,10 +68,17 @@ add_executable(ArknightBuilder
     ${ARKNIGHT_BUILDER_SRC}
 )
 target_link_libraries(ArknightBuilder
+    PTSD
+    SDL2::SDL2main
     nlohmann_json
 )
 target_include_directories(ArknightBuilder SYSTEM PRIVATE
+    ${DEPENDENCY_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/PTSD/include
     ${CMAKE_CURRENT_SOURCE_DIR}/PTSD/third_party/nlohmann_json/include
+)
+target_include_directories(ArknightBuilder PRIVATE
+    include
 )
 target_compile_options(ArknightBuilder PRIVATE
     -Wall -Wextra -pedantic

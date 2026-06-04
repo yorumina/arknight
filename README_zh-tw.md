@@ -54,9 +54,12 @@ Windows：
 - `滑鼠右鍵`：取消部署或撤退已部署幹員
 - `SPACE`：等待戰鬥開始時啟動下一波
 - `R`：重新開始目前 Demo
+- `M`：開啟或關閉可見的地圖模型/格線疊層
+- `Z`：開啟或關閉作弊模式，戰鬥時間流速變為 10 倍，幹員攻擊傷害變為 10 倍
 - `ESC`：開啟離開確認或結束遊戲
 - 右上角 `1X` / `2X` 按鈕：切換遊戲速度
 - 右上角暫停按鈕：暫停或繼續
+- 左上角 `MAP` 按鈕：開啟或關閉可見的地圖模型/格線疊層(開發用工具)
 
 ## 資料目錄
 
@@ -106,6 +109,7 @@ ARKNIGHT_ANIMATION_PRELOAD=1 ./build/Arknight
 ./build/ArknightBuilder validate tutorial_1.json
 ./build/ArknightBuilder show tutorial_1.json
 ./build/ArknightBuilder simulate tutorial_1.json --duration 60
+./build/ArknightBuilder calibrate 'Operation 1-1/stage.json'
 ```
 
 關卡檔參數會自動映射到 `data/levels/`，所以 `tutorial_1.json` 會解析成 `data/levels/tutorial_1.json`。

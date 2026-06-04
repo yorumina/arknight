@@ -115,6 +115,27 @@ std::shared_ptr<Util::Image> LoadHudIcon(const std::string& filename) {
     return std::make_shared<Util::Image>(path);
 }
 
+std::string ResolveOperatorUiImagePath(const std::string& filename) {
+    const std::array<std::filesystem::path, 5> bases{
+        "data/operators",
+        "../data/operators",
+        "../../data/operators",
+        "../../../data/operators",
+        ".",
+    };
+    for (const auto& base : bases) {
+        const auto path = base / filename;
+        if (std::filesystem::exists(path)) return path.lexically_normal().string();
+    }
+    return {};
+}
+
+std::shared_ptr<Util::Image> LoadOperatorUiImage(const std::string& filename) {
+    const auto path = ResolveOperatorUiImagePath(filename);
+    if (path.empty()) return nullptr;
+    return std::make_shared<Util::Image>(path);
+}
+
 void DrawIconImage(ImDrawList* draw, const std::shared_ptr<Util::Image>& image,
                    const ImVec2& center, float maxW, float maxH, int alpha = 255) {
     if (!image || image->GetTextureId() == 0) return;
@@ -172,32 +193,24 @@ void DrawButtonImageFit(ImDrawList* draw,
     );
 }
 
-void DrawImageCoverRect(ImDrawList* draw,
-                        const std::shared_ptr<Util::Image>& image,
-                        const UiRect& rect,
-                        int alpha = 255,
-                        const ImVec2& offset = {0.0F, 0.0F}) {
+void DrawImageStretchRect(ImDrawList* draw,
+                          const std::shared_ptr<Util::Image>& image,
+                          const UiRect& rect,
+                          int alpha = 255,
+                          const ImVec2& offset = {0.0F, 0.0F}) {
     if (!image || image->GetTextureId() == 0) return;
 
-    const glm::vec2 size = image->GetSize();
-    if (size.x <= 0.0F || size.y <= 0.0F) return;
-
-    const float rectW = std::max(1.0F, rect.maxX - rect.minX);
-    const float rectH = std::max(1.0F, rect.maxY - rect.minY);
-    const float scale = std::max(rectW / size.x, rectH / size.y);
-    const float drawW = size.x * scale;
-    const float drawH = size.y * scale;
-    const ImVec2 center = RectCenter(rect);
-    const ImVec2 min{center.x - drawW * 0.5F + offset.x, center.y - drawH * 0.5F + offset.y};
-    const ImVec2 max{min.x + drawW, min.y + drawH};
-
+    const ImVec2 min{rect.minX + offset.x, rect.minY + offset.y};
+    const ImVec2 max{rect.maxX + offset.x, rect.maxY + offset.y};
     draw->PushClipRect({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, true);
-    draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
-                   min,
-                   max,
-                   {0.0F, 0.0F},
-                   {1.0F, 1.0F},
-                   IM_COL32(255, 255, 255, std::clamp(alpha, 0, 255)));
+    draw->AddImage(
+        reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+        min,
+        max,
+        {0.0F, 0.0F},
+        {1.0F, 1.0F},
+        IM_COL32(255, 255, 255, std::clamp(alpha, 0, 255))
+    );
     draw->PopClipRect();
 }
 
@@ -214,29 +227,25 @@ void DrawImageCoverRectFadeRight(ImDrawList* draw,
 
     const float rectW = std::max(1.0F, rect.maxX - rect.minX);
     const float rectH = std::max(1.0F, rect.maxY - rect.minY);
-    const float scale = std::max(rectW / size.x, rectH / size.y);
+    const float heightScale = rectH / size.y;
+    const float scale = (size.x * heightScale >= rectW) ? heightScale : (rectW / size.x);
     const float drawW = size.x * scale;
     const float drawH = size.y * scale;
     const ImVec2 center = RectCenter(rect);
     const ImVec2 min{center.x - drawW * 0.5F + offset.x, center.y - drawH * 0.5F + offset.y};
     const ImVec2 max{min.x + drawW, min.y + drawH};
     const float fadeStart = rect.maxX - std::max(1.0F, fadeWidth);
-    constexpr int slices = 36;
 
     draw->PushClipRect({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, true);
-    for (int i = 0; i < slices; ++i) {
-        const float x0 = rect.minX + rectW * static_cast<float>(i) / static_cast<float>(slices);
-        const float x1 = rect.minX + rectW * static_cast<float>(i + 1) / static_cast<float>(slices);
-        const float midX = (x0 + x1) * 0.5F;
-        const float fade = midX <= fadeStart
-            ? 1.0F
-            : std::clamp((rect.maxX - midX) / std::max(1.0F, fadeWidth), 0.0F, 1.0F);
-        const int localAlpha = static_cast<int>(static_cast<float>(alpha) * fade);
-        if (localAlpha <= 0) continue;
 
+    auto drawSegment = [&](float segX0, float segX1, int localAlpha) {
+        if (localAlpha <= 0) return;
+
+        const float x0 = std::max({segX0, rect.minX, min.x});
+        const float x1 = std::min({segX1, rect.maxX, max.x});
         const float y0 = std::max(rect.minY, min.y);
         const float y1 = std::min(rect.maxY, max.y);
-        if (x1 <= min.x || x0 >= max.x || y1 <= y0) continue;
+        if (x1 <= x0 || y1 <= y0) return;
 
         const float uv0x = std::clamp((x0 - min.x) / drawW, 0.0F, 1.0F);
         const float uv1x = std::clamp((x1 - min.x) / drawW, 0.0F, 1.0F);
@@ -248,6 +257,19 @@ void DrawImageCoverRectFadeRight(ImDrawList* draw,
                        {uv0x, uv0y},
                        {uv1x, uv1y},
                        IM_COL32(255, 255, 255, localAlpha));
+    };
+
+    drawSegment(rect.minX, fadeStart, alpha);
+
+    const int fadeSlices = std::clamp(static_cast<int>(std::ceil(std::max(1.0F, fadeWidth))), 24, 64);
+    for (int i = 0; i < fadeSlices; ++i) {
+        const float x0 = fadeStart + std::max(1.0F, fadeWidth) *
+            static_cast<float>(i) / static_cast<float>(fadeSlices);
+        const float x1 = fadeStart + std::max(1.0F, fadeWidth) *
+            static_cast<float>(i + 1) / static_cast<float>(fadeSlices);
+        const float fade = 1.0F - (static_cast<float>(i) + 0.5F) / static_cast<float>(fadeSlices);
+        const float easedFade = fade * fade;
+        drawSegment(x0, x1, static_cast<int>(static_cast<float>(alpha) * easedFade));
     }
     draw->PopClipRect();
 }
@@ -325,26 +347,6 @@ void Ark::AppRenderer::DrawOperatorBar(float screenW, float screenH) {
         }
     }
 
-    if (m_App.m_DraggingFromBar && m_App.m_DragOperatorType >= 0) {
-        const float gx = m_App.m_DragScreenPos.x;
-        const float gy = m_App.m_DragScreenPos.y;
-        GLuint cardTex = 0;
-        if (static_cast<std::size_t>(m_App.m_DragOperatorType) < m_App.m_OperatorCards.size() &&
-            m_App.m_OperatorCards[static_cast<std::size_t>(m_App.m_DragOperatorType)]) {
-            cardTex = m_App.m_OperatorCards[static_cast<std::size_t>(m_App.m_DragOperatorType)]->GetTextureId();
-        }
-
-        if (cardTex != 0) {
-            draw->AddImage(
-                reinterpret_cast<void*>(static_cast<intptr_t>(cardTex)),
-                {gx - OP_CARD_WIDTH * 0.5F, gy - OP_CARD_HEIGHT * 0.5F},
-                {gx + OP_CARD_WIDTH * 0.5F, gy + OP_CARD_HEIGHT * 0.5F},
-                {0.0F, 0.0F},
-                {1.0F, 1.0F},
-                IM_COL32(255, 255, 255, 190)
-            );
-        }
-    }
 }
 
 // ── Operator Details Panel (Left side) ────────────────────────────────────────
@@ -358,19 +360,30 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
     const float scale = ui.scale;
     const bool deploymentPreview = opOnField == nullptr &&
         (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection);
+    const float dragBlend = std::clamp(m_App.m_OperatorDetailDragBlend, 0.0F, 1.0F);
 
     const float panelW = std::clamp(screenW * 0.29F, 390.0F, 560.0F);
-    const float panelH = std::max(360.0F, screenH - OP_BAR_HEIGHT + 8.0F);
+    const float panelH = screenH;
     const float portraitH = std::min(panelH * 0.62F, 500.0F);
-    const float fadeW = 230.0F * scale;
+    const float fadeW = 50.0F;
     const float px = 0.0F;
     const float py = 0.0F;
     const UiRect panel{px, py, px + panelW, py + panelH};
-    const UiRect portraitRect{px, py, px + panelW + fadeW, py + portraitH};
+    const UiRect portraitRect{px, py, px + panelW + fadeW, py + panelH};
     const auto toInt = [](float v) { return static_cast<int>(std::lround(v)); };
 
     draw->AddRectFilled({panel.minX, panel.minY}, {panel.maxX, panel.maxY},
-                        IM_COL32(7, 9, 13, deploymentPreview ? 178 : 210));
+                        IM_COL32(7, 9, 13, deploymentPreview ? 82 : 126));
+
+    const float portraitAlpha = 238.0F + (108.0F - 238.0F) * dragBlend;
+    const float portraitOffsetX = (-130.0F - 46.0F * dragBlend) * scale;
+    const float blurOffsetX = -46.0F * dragBlend * scale;
+    static std::shared_ptr<Util::Image> infoBlurImage = LoadOperatorUiImage("blur.png");
+    if (infoBlurImage && infoBlurImage->GetTextureId() != 0) {
+        DrawImageStretchRect(draw, infoBlurImage, portraitRect,
+                             deploymentPreview ? 188 : 228,
+                             {blurOffsetX, 0.0F});
+    }
 
     std::shared_ptr<Util::Image> portrait;
     if (static_cast<std::size_t>(typeIndex) < m_App.m_OperatorPortraits.size()) {
@@ -378,18 +391,14 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
     }
     if (portrait && portrait->GetTextureId() != 0) {
         DrawImageCoverRectFadeRight(draw, portrait, portraitRect, fadeW,
-                                    deploymentPreview ? 108 : 238,
-                                    {deploymentPreview ? -56.0F * scale : 0.0F, 0.0F});
+                                    static_cast<int>(portraitAlpha),
+                                    {portraitOffsetX, 0.0F});
     }
 
-    draw->AddRectFilledMultiColor({px, py}, {px + panelW + fadeW, py + portraitH},
-                                  IM_COL32(0, 0, 0, 30), IM_COL32(0, 0, 0, 88),
-                                  IM_COL32(0, 0, 0, 190), IM_COL32(0, 0, 0, 126));
-    draw->AddRectFilled({px + panelW * 0.38F, py}, {px + panelW, py + portraitH},
-                        IM_COL32(10, 12, 16, deploymentPreview ? 86 : 118));
-    draw->AddRectFilledMultiColor({px + panelW, py}, {px + panelW + fadeW, py + portraitH},
-                                  IM_COL32(10, 12, 16, deploymentPreview ? 70 : 100), IM_COL32(10, 12, 16, 0),
-                                  IM_COL32(10, 12, 16, 0), IM_COL32(10, 12, 16, deploymentPreview ? 86 : 118));
+    draw->AddRectFilledMultiColor({px, py}, {px + panelW, py + panelH},
+                                  IM_COL32(0, 0, 0, 24), IM_COL32(0, 0, 0, deploymentPreview ? 46 : 70),
+                                  IM_COL32(0, 0, 0, deploymentPreview ? 150 : 184),
+                                  IM_COL32(0, 0, 0, deploymentPreview ? 176 : 208));
 
     GLuint cardTex = 0;
     if (static_cast<std::size_t>(typeIndex) < m_App.m_OperatorCards.size() &&
@@ -472,7 +481,9 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
               26.0F * scale, IM_COL32(255, 255, 255, 255), hpStr.c_str());
 
     const float bodyTop = py + portraitH;
-    draw->AddRectFilled({px, bodyTop}, {px + panelW, py + panelH}, IM_COL32(10, 12, 16, 205));
+    draw->AddRectFilledMultiColor({px, bodyTop}, {px + panelW, py + panelH},
+                                  IM_COL32(10, 12, 16, 196), IM_COL32(10, 12, 16, 0),
+                                  IM_COL32(10, 12, 16, 0), IM_COL32(10, 12, 16, 218));
     const float tabH = 44.0F * scale;
     const float tabW = panelW / 3.0F;
     const std::array<const char*, 3> tabs{u8"技能", u8"特性", u8"天賦"};
@@ -591,7 +602,25 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
         }
     }
 
-    draw->AddRect({panel.minX, panel.minY}, {panel.maxX, panel.maxY}, IM_COL32(255, 255, 255, 34));
+    draw->AddRect({panel.minX, panel.minY}, {panel.maxX, panel.maxY}, IM_COL32(255, 255, 255, 24));
+
+    static std::shared_ptr<Util::Image> settingsButtonIcon = LoadHudIcon("Setting.png");
+    if (settingsButtonIcon && settingsButtonIcon->GetTextureId() != 0) {
+        DrawButtonImage(draw, settingsButtonIcon, ui.settingsButton, 0.0F, {0.0F, 0.0F}, {1.0F, 1.0F});
+    } else {
+        DrawTopUiButton(draw, ui.settingsButton, 4.0F * scale, false);
+        DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * scale,
+                     IM_COL32(242, 246, 252, 255), 2.6F * scale);
+    }
+    DrawTopUiButton(draw, ui.mapToggleButton, 3.0F * scale, m_App.m_ShowMapModel);
+    const ImVec2 mapCenter = RectCenter(ui.mapToggleButton);
+    const ImU32 mapLabelColor = m_App.m_ShowMapModel
+        ? IM_COL32(255, 234, 180, 255)
+        : IM_COL32(204, 214, 228, 210);
+    AddCenteredText(draw, {mapCenter.x, mapCenter.y - 8.0F * scale},
+                    18.0F * scale, mapLabelColor, "MAP");
+    AddCenteredText(draw, {mapCenter.x, mapCenter.y + 12.0F * scale},
+                    15.0F * scale, mapLabelColor, m_App.m_ShowMapModel ? "ON" : "OFF");
 }
 
 // ── Compact right-side deployment info (DP + deployable count) ───────────────
@@ -661,11 +690,14 @@ void Ark::AppRenderer::DrawDeploymentInfo(float screenW, float screenH) {
 
     const float lineY = dpBgY + dpBgH + 5.0F * scale;
     const float lineH = 5.0F * scale;
-    const float regenProgress = std::clamp(m_App.m_DPRegenTimerMs / 1000.0F, 0.0F, 1.0F);
+    const bool dpAtCap = m_App.m_DP >= m_App.m_MaxDP || static_cast<int>(m_App.m_DP) >= 99;
+    const float regenProgress = dpAtCap ? 0.0F : std::clamp(m_App.m_DPRegenTimerMs / 1000.0F, 0.0F, 1.0F);
     draw->AddRectFilled({dpBgX, lineY}, {dpBgRight, lineY + lineH}, IM_COL32(35, 38, 43, 214));
-    draw->AddRectFilled({dpBgX, lineY},
-                        {dpBgX + (dpBgRight - dpBgX) * regenProgress, lineY + lineH},
-                        IM_COL32(255, 255, 255, 255));
+    if (!dpAtCap) {
+        draw->AddRectFilled({dpBgX, lineY},
+                            {dpBgX + (dpBgRight - dpBgX) * regenProgress, lineY + lineH},
+                            IM_COL32(255, 255, 255, 255));
+    }
 
     const float textY = labelY + (labelH - textSize) * 0.5F - 2.0F * scale;
 
@@ -711,8 +743,8 @@ void Ark::AppRenderer::DrawMissionCompleteOverlay(float screenW, float screenH) 
         draw->AddRectFilled({0.0F, 0.0F}, {screenW, screenH}, IM_COL32(0, 0, 0, dimAlpha));
     }
 
-    const float bandH = std::clamp(screenH * 0.18F, 128.0F * scale, 210.0F * scale);
-    const float bandW = std::min(screenW * 0.80F, 1640.0F * scale);
+    const float bandH = std::clamp(screenH * 0.234F, 166.0F * scale, 273.0F * scale);
+    const float bandW = std::min(screenW * 1.04F, 2132.0F * scale);
     const float bandLeft = (screenW - bandW) * 0.5F;
     const float bandRight = bandLeft + bandW;
     const float bandY = screenH * 0.50F;
@@ -731,8 +763,8 @@ void Ark::AppRenderer::DrawMissionCompleteOverlay(float screenW, float screenH) 
                             IM_COL32(0, 0, 0, static_cast<int>(42.0F * alpha)));
     }
 
-    const float imageMaxW = std::min(screenW * 0.63F, 1080.0F * scale);
-    const float imageMaxH = std::min(screenH * 0.42F, 470.0F * scale);
+    const float imageMaxW = std::min(screenW * 1.42F, 2430.0F * scale);
+    const float imageMaxH = std::min(screenH * 0.945F, 1058.0F * scale);
     float drawW = imageMaxW;
     float drawH = imageMaxH;
     if (missionCompleteImage && missionCompleteImage->GetTextureId() != 0) {
@@ -761,7 +793,7 @@ void Ark::AppRenderer::DrawMissionCompleteOverlay(float screenW, float screenH) 
                        {1.0F, 1.0F},
                        IM_COL32(255, 255, 255, imageAlpha));
     } else {
-        AddCenteredText(draw, {centerX, centerY}, 82.0F * scale,
+        AddCenteredText(draw, {centerX, centerY}, 185.0F * scale,
                         IM_COL32(255, 255, 255, imageAlpha), "MISSION ACCOMPLISHED");
     }
 }
@@ -841,6 +873,18 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
         DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * ui.scale, IM_COL32(242, 246, 252, 255), 2.6F * ui.scale);
     }
 
+    {
+        DrawTopUiButton(draw, ui.mapToggleButton, 3.0F * ui.scale, m_App.m_ShowMapModel);
+        const ImVec2 mapCenter = RectCenter(ui.mapToggleButton);
+        const ImU32 labelColor = m_App.m_ShowMapModel
+            ? IM_COL32(255, 234, 180, 255)
+            : IM_COL32(204, 214, 228, 210);
+        AddCenteredText(draw, {mapCenter.x, mapCenter.y - 8.0F * ui.scale},
+                        18.0F * ui.scale, labelColor, "MAP");
+        AddCenteredText(draw, {mapCenter.x, mapCenter.y + 12.0F * ui.scale},
+                        15.0F * ui.scale, labelColor, m_App.m_ShowMapModel ? "ON" : "OFF");
+    }
+
     // Top-right speed and pause controls
     const bool isDoubleSpeed = m_App.m_GameSpeedMultiplier >= 1.5F;
     const auto& speedButtonIcon = isDoubleSpeed ? speedButtonIcon2x : speedButtonIcon1x;
@@ -871,6 +915,22 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
         } else {
             DrawPauseIcon(draw, pauseCenter, 28.0F * ui.scale, 32.0F * ui.scale, IM_COL32(255, 255, 255, 255));
         }
+    }
+
+    if (m_App.m_CheatMode) {
+        const float badgeY = ui.speedButton.maxY + 8.0F * ui.scale;
+        const UiRect badge{
+            ui.speedButton.minX,
+            badgeY,
+            ui.pauseButton.maxX,
+            badgeY + 30.0F * ui.scale
+        };
+        draw->AddRectFilled({badge.minX, badge.minY}, {badge.maxX, badge.maxY},
+                            IM_COL32(128, 34, 24, 188), 3.0F * ui.scale);
+        draw->AddRect({badge.minX, badge.minY}, {badge.maxX, badge.maxY},
+                      IM_COL32(255, 147, 86, 210), 3.0F * ui.scale, 0, 1.2F * ui.scale);
+        AddCenteredText(draw, RectCenter(badge), 19.0F * ui.scale,
+                        IM_COL32(255, 234, 216, 255), "CHEAT x10");
     }
 
     // Pause overlay

@@ -224,9 +224,14 @@ void App::UpdateEnemies(float dtSec) {
         auto it = std::find_if(m_Operators.begin(), m_Operators.end(),
             [&](const Operator& op){ return op.id == enemy.blockedByOperatorId && op.hp > 0; });
         if (it != m_Operators.end()) {
-            int blockCap = m_OperatorTemplates.at(it->typeIndex).blockCount;
-            if (it->skillActive && (m_OperatorTemplates.at(it->typeIndex).name == "Myrtle" ||
-                                    m_OperatorTemplates.at(it->typeIndex).name == "桃金娘")) blockCap = 0;
+            if (!IsValidOperatorTypeIndex(it->typeIndex)) {
+                enemy.blockedByOperatorId = -1;
+                continue;
+            }
+            const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(it->typeIndex));
+            int blockCap = opType.blockCount;
+            if (it->skillActive && (opType.name == "Myrtle" ||
+                                    opType.name == "桃金娘")) blockCap = 0;
             if (it->blockedEnemyCount < blockCap) ++it->blockedEnemyCount;
             else enemy.blockedByOperatorId = -1;
         } else {
@@ -264,10 +269,12 @@ void App::UpdateEnemies(float dtSec) {
                              static_cast<int>(std::floor(enemy.boardPos.y)));
             for (auto& op : m_Operators) {
                 if (op.hp <= 0) continue;
+                if (!IsValidOperatorTypeIndex(op.typeIndex)) continue;
                 if (op.cell != eCell) continue;
-                int blockCap = m_OperatorTemplates.at(op.typeIndex).blockCount;
-                if (op.skillActive && (m_OperatorTemplates.at(op.typeIndex).name == "Myrtle" ||
-                                       m_OperatorTemplates.at(op.typeIndex).name == "桃金娘")) blockCap = 0;
+                const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
+                int blockCap = opType.blockCount;
+                if (op.skillActive && (opType.name == "Myrtle" ||
+                                       opType.name == "桃金娘")) blockCap = 0;
                 if (op.blockedEnemyCount < blockCap) {
                     blockOp = &op;
                     enemy.blockedByOperatorId = op.id;

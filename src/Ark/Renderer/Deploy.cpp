@@ -11,20 +11,11 @@
 using namespace Ark;
 using namespace Ark::RendererConst;
 
-void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout, bool drawUnderlay) {
+void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout, bool drawUnderlay) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
 
     auto cellQuad = [&](const glm::ivec2& cell) {
-        const float l = layout.topLeftX + static_cast<float>(cell.x) * layout.cellSize;
-        const float t = layout.topLeftY - static_cast<float>(cell.y) * layout.cellSize;
-        const float r = l + layout.cellSize;
-        const float b = t - layout.cellSize;
-        return std::array<ImVec2, 4>{
-            m_App.ToScreenPosition({l, t}),
-            m_App.ToScreenPosition({r, t}),
-            m_App.ToScreenPosition({r, b}),
-            m_App.ToScreenPosition({l, b}),
-        };
+        return m_App.GetCellQuad(cell);
     };
 
     auto drawCellTint = [&](const glm::ivec2& cell, ImU32 fill, ImU32 line, float thickness = 1.0F) {
@@ -35,7 +26,6 @@ void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std:
 
     auto drawStripedCell = [&](const glm::ivec2& cell) {
         const auto q = cellQuad(cell);
-        draw->AddQuadFilled(q[0], q[1], q[2], q[3], IM_COL32(238, 139, 28, 104));
         const float minX = std::min({q[0].x, q[1].x, q[2].x, q[3].x});
         const float maxX = std::max({q[0].x, q[1].x, q[2].x, q[3].x});
         const float minY = std::min({q[0].y, q[1].y, q[2].y, q[3].y});
@@ -47,6 +37,19 @@ void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std:
         }
         draw->PopClipRect();
         draw->AddQuad(q[0], q[1], q[2], q[3], IM_COL32(255, 178, 45, 190), 1.6F);
+    };
+
+    auto operatorSpriteCenter = [&](int typeIndex, const glm::ivec2& cell) {
+        ImVec2 center = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(cell)));
+        float yOff = 0.0F;
+        if (typeIndex >= 0 && typeIndex < static_cast<int>(m_App.m_OperatorTemplates.size())) {
+            const auto& opType = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(typeIndex));
+            if (opType.deployType == DeployType::HIGHGROUND_ONLY && !m_App.UsesBoardArtTransform()) {
+                yOff = layout.cellSize * 0.22F;
+            }
+        }
+        center.y -= yOff + layout.cellSize * 0.18F;
+        return center;
     };
 
     auto isReadyToDeploy = [&](int typeIndex) {
@@ -150,11 +153,16 @@ void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std:
                                (m_App.m_DraggingFromBar || m_App.m_WaitingForDirection))
         ? m_App.m_DragOperatorType
         : m_App.m_SelectedOperatorCardType;
+    std::optional<glm::ivec2> effectiveHoverCell = hoverCell;
+    if (m_App.m_DraggingFromBar && !m_App.m_WaitingForDirection && m_App.m_IsDeploying) {
+        effectiveHoverCell = m_App.m_DeployingCell;
+    }
 
     const bool hoverDeployable = m_App.m_DraggingFromBar && !m_App.m_WaitingForDirection &&
-                                 hoverCell && canDeployTo(m_App.m_DragOperatorType, *hoverCell);
+                                 effectiveHoverCell && canDeployTo(m_App.m_DragOperatorType, *effectiveHoverCell);
 
-    if (drawUnderlay && activeCardType >= 0 && !m_App.m_WaitingForDirection && isReadyToDeploy(activeCardType)) {
+    if (drawUnderlay && activeCardType >= 0 && !m_App.m_DraggingFromBar &&
+        !m_App.m_WaitingForDirection && isReadyToDeploy(activeCardType)) {
         for (int y = 0; y < m_App.m_StageHeight; ++y) {
             for (int x = 0; x < m_App.m_StageWidth; ++x) {
                 const glm::ivec2 cell{x, y};
@@ -165,15 +173,13 @@ void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std:
     }
 
     if (drawUnderlay && hoverDeployable) {
-        for (const auto& cell : rangeCells(m_App.m_DragOperatorType, *hoverCell, {1, 0})) {
-            drawStripedCell(cell);
-        }
+        drawCellTint(*effectiveHoverCell, IM_COL32(238, 139, 28, 126), IM_COL32(255, 178, 45, 210), 1.8F);
     }
 
     if (!drawUnderlay && m_App.m_DraggingFromBar && m_App.m_DragOperatorType >= 0 && !m_App.m_WaitingForDirection) {
         ImVec2 centerpos{m_App.m_DragScreenPos.x, m_App.m_DragScreenPos.y};
         if (hoverDeployable) {
-            centerpos = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(*hoverCell)));
+            centerpos = operatorSpriteCenter(m_App.m_DragOperatorType, *effectiveHoverCell);
         }
         drawPreviewSprite(m_App.m_DragOperatorType, centerpos, {1, 0}, true, hoverDeployable ? 245 : 214);
     }
@@ -189,7 +195,7 @@ void Ark::AppRenderer::DrawDeployPreview(const glm::vec2& ptsdCursor, const std:
 
         const auto q = cellQuad(m_App.m_DirectionCell);
         draw->AddQuad(q[0], q[1], q[2], q[3], IM_COL32(255, 255, 255, 245), 3.0F);
-        const ImVec2 centerpos = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(m_App.m_DirectionCell)));
+        const ImVec2 centerpos = operatorSpriteCenter(m_App.m_DragOperatorType, m_App.m_DirectionCell);
         drawPreviewSprite(m_App.m_DragOperatorType, centerpos, m_App.m_DeployingDirection, false, 250);
 
         if (!m_App.m_IsDirectionDragging) {

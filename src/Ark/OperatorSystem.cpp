@@ -40,7 +40,8 @@ void App::UpdateOperators(float dtMs) {
     bool myrtleOnField = std::any_of(m_Operators.begin(), m_Operators.end(),
         [&](const Operator& op) {
             if (op.hp <= 0) return false;
-            const auto& t = m_OperatorTemplates.at(op.typeIndex);
+            if (!IsValidOperatorTypeIndex(op.typeIndex)) return false;
+            const auto& t = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
             return t.name == "Myrtle" || t.name == "桃金娘";
         });
 
@@ -127,8 +128,15 @@ void App::UpdateOperators(float dtMs) {
             continue;
         }
 
+        if (!IsValidOperatorTypeIndex(op.typeIndex) ||
+            op.typeIndex >= static_cast<int>(m_OperatorAnims.size())) {
+            op.hp = 0.0F;
+            op.deathAnimationFinished = true;
+            continue;
+        }
+
         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
-        auto& pack = m_OperatorAnims[op.typeIndex];
+        auto& pack = m_OperatorAnims[static_cast<std::size_t>(op.typeIndex)];
 
         // Initialize state if missing
         if (pack.activeInstances.find(op.id) == pack.activeInstances.end()) {
@@ -303,7 +311,7 @@ void App::UpdateOperators(float dtMs) {
         for (const auto& t : validTargets) {
             if (hitCount >= maxTargets) break;
             auto& tgt = m_Enemies[static_cast<std::size_t>(t.idx)];
-            float finalDmg = opType.damage * dmgMult;
+            float finalDmg = opType.damage * dmgMult * (m_CheatMode ? 10.0F : 1.0F);
             tgt.hp -= std::max(1.0F, finalDmg - tgt.def);
             m_Beams.push_back(AttackBeam{opPos, tgt.boardPos, BEAM_DURATION_MS});
             
@@ -324,41 +332,23 @@ void App::UpdateOperators(float dtMs) {
         // Trigger attack animation wrapper
         if (op.animState != Ark::Operator::AnimState::SKILL) { // Skill animations override attack
             op.animState = Ark::Operator::AnimState::ATTACK;
-            auto& pack2 = m_OperatorAnims[op.typeIndex];
-            if (auto anim = makeOperatorAnimInstance(pack2, op, Ark::Operator::AnimState::ATTACK)) {
-                pack2.activeInstances[op.id] = anim;
+            if (op.typeIndex >= 0 && op.typeIndex < static_cast<int>(m_OperatorAnims.size())) {
+                auto& pack2 = m_OperatorAnims[static_cast<std::size_t>(op.typeIndex)];
+                if (auto anim = makeOperatorAnimInstance(pack2, op, Ark::Operator::AnimState::ATTACK)) {
+                    pack2.activeInstances[op.id] = anim;
+                }
             }
         }
     }
 }
 
 // ─── Deployment helpers ─────────────────────────────────────────────────────
-void App::HandleDeploymentClick(const glm::vec2& cursor) {
-    const auto cell = ToCell(cursor);
-    if (!cell || !IsDeployableCellForSelectedOperator(*cell) || IsCellOccupied(*cell)) return;
-    if (static_cast<int>(m_Operators.size()) >= MAX_OPS) return;
-    const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(m_SelectedOperatorType));
-    if (m_DP < static_cast<float>(opType.cost)) return;
-    m_DP -= static_cast<float>(opType.cost);
-    Operator newOp;
-    newOp.id=m_NextOperatorId++; newOp.typeIndex=m_SelectedOperatorType;
-    newOp.cell=*cell; newOp.direction={1,0}; newOp.cooldownMs=200;
-    const bool isBagpipe = IsBagpipe(opType);
-    newOp.hp=opType.hp;
-    newOp.maxHp=opType.hp;
-    newOp.def=opType.def;
-    newOp.deathAnimationFinished = false;
-    newOp.deathElapsedMs = 0.0F;
-    newOp.redeployCooldownStarted = false;
-    newOp.sp=isBagpipe ? 2.0F : opType.initialSp;
-    newOp.sp=std::clamp(newOp.sp, 0.0F, isBagpipe ? BAGPIPE_MAX_SP : opType.maxSp);
-    m_Operators.push_back(newOp);
-}
-
 void App::HandleSkillActivation(const glm::ivec2& cell) {
     for (auto& op : m_Operators) {
         if (op.cell != cell) continue;
-        const auto& opType = m_OperatorTemplates.at(op.typeIndex);
+        if (op.hp <= 0.0F) continue;
+        if (!IsValidOperatorTypeIndex(op.typeIndex)) continue;
+        const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
         if (IsBagpipe(opType)) return; // Bagpipe skill is auto-triggered
         if (opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
             op.skillActive  = true;
@@ -370,6 +360,10 @@ void App::HandleSkillActivation(const glm::ivec2& cell) {
     }
 }
 
+bool App::IsValidOperatorTypeIndex(int typeIndex) const {
+    return typeIndex >= 0 && typeIndex < static_cast<int>(m_OperatorTemplates.size());
+}
+
 bool App::IsCellOccupied(const glm::ivec2& cell) const {
     return std::any_of(m_Operators.begin(), m_Operators.end(),
         [&](const Operator& op){ return op.cell == cell; });
@@ -377,30 +371,14 @@ bool App::IsCellOccupied(const glm::ivec2& cell) const {
 
 bool App::IsDeployableCellForOperatorType(int typeIndex, const glm::ivec2& cell) const {
     if (cell.x < 0 || cell.x >= m_StageWidth || cell.y < 0 || cell.y >= m_StageHeight) return false;
-    if (typeIndex < 0 || typeIndex >= static_cast<int>(m_OperatorTemplates.size())) return false;
+    if (!IsValidOperatorTypeIndex(typeIndex)) return false;
     const auto tile = m_TileMap[static_cast<std::size_t>(cell.y)][static_cast<std::size_t>(cell.x)];
     return IsDeployableTile(tile, m_OperatorTemplates[static_cast<std::size_t>(typeIndex)].deployType);
-}
-
-bool App::IsDeployableCellForSelectedOperator(const glm::ivec2& cell) const {
-    return IsDeployableCellForOperatorType(m_SelectedOperatorType, cell);
 }
 
 bool App::IsDeployableTile(TileType tile, DeployType dt) const {
     if (dt == DeployType::GROUND_ONLY) return tile == TileType::GROUND || tile == TileType::ROAD;
     return tile == TileType::HIGHGROUND;
-}
-
-int App::FindRouteIndex(const std::string& id) const {
-    for (std::size_t i = 0; i < m_Routes.size(); ++i)
-        if (m_Routes[i].id == id) return static_cast<int>(i);
-    return -1;
-}
-
-int App::FindEnemyTemplateIndex(const std::string& id) const {
-    for (std::size_t i = 0; i < m_EnemyTemplates.size(); ++i)
-        if (m_EnemyTemplates[i].id == id) return static_cast<int>(i);
-    return -1;
 }
 
 // ─── Operator availability ──────────────────────────────────────────────────

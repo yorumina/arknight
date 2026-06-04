@@ -35,6 +35,8 @@ auto main(int argc, char** argv) -> int {
             ark_builder::RunSimulate(args);
         } else if (command == "show") {
             ark_builder::RunShow(args);
+        } else if (command == "calibrate") {
+            ark_builder::RunCalibrate(args);
         } else {
             throw ark_builder::CliError("unknown command: " + command);
         }

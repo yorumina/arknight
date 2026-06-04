@@ -134,10 +134,11 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
 
     for (const auto& op : m_App.m_Operators) {
+        if (!m_App.IsValidOperatorTypeIndex(op.typeIndex)) continue;
         const auto& opType = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
         bool isHigh = (opType.deployType == DeployType::HIGHGROUND_ONLY);
         if (isHigh != drawHighgroundOnly) continue;
-        float yOff  = isHigh ? layout.cellSize * 0.22F : 0.0F;
+        float yOff  = (isHigh && !m_App.UsesBoardArtTransform()) ? layout.cellSize * 0.22F : 0.0F;
         const float operatorVisualLift = layout.cellSize * 0.18F;
 
         auto center0 = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(op.cell)));
@@ -155,7 +156,7 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         ImVec2 p3 = q({ hs, -hs});
         ImVec2 p4 = q({-hs, -hs});
 
-        if (isHigh) {
+        if (isHigh && !m_App.UsesBoardArtTransform()) {
             // Side panel to look elevated
             float bodyOff = layout.cellSize * 0.22F;
             ImVec2 p1b = {p1.x, p1.y + bodyOff};
@@ -169,8 +170,8 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
 
         // Get per-operator animation texture
         GLuint tex = 0;
-        if (static_cast<std::size_t>(op.typeIndex) < m_App.m_OperatorAnims.size()) {
-            auto& pack = m_App.m_OperatorAnims[op.typeIndex];
+        if (op.typeIndex >= 0 && op.typeIndex < static_cast<int>(m_App.m_OperatorAnims.size())) {
+            auto& pack = m_App.m_OperatorAnims[static_cast<std::size_t>(op.typeIndex)];
             auto it = pack.activeInstances.find(op.id);
             if (it != pack.activeInstances.end() && it->second) {
                 tex = it->second->GetTextureId();
@@ -188,7 +189,8 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
             draw->AddQuad(p1, p2, p3, p4, IM_COL32(255,255,255,60), 1.5F);
 
             // Label
-            const std::string sym(1, opType.name[0]);
+            const std::string labelSource = !opType.id.empty() ? opType.id : opType.name;
+            const std::string sym = labelSource.empty() ? "?" : labelSource.substr(0, 1);
             const auto ts = ImGui::CalcTextSize(sym.c_str());
             draw->AddText({center.x - ts.x*0.5F, center.y - ts.y*0.5F}, IM_COL32(12,14,19,255), sym.c_str());
         }

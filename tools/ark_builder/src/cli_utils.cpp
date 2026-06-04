@@ -79,6 +79,7 @@ Commands:
   validate <file>
   simulate <file> [--duration <sec>]
   show <file>
+  calibrate [file]
 
 Tiles:
   empty | road | ground | highground | unusablehighground | spawn | goal

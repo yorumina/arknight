@@ -3,6 +3,7 @@
 
 #include "pch.hpp" // IWYU pragma: export
 
+#include <array>
 #include <map>
 #include <optional>
 #include <string>
@@ -47,7 +48,6 @@ private:
         glm::vec2 dragCursorStart{0.0F, 0.0F};
         glm::vec2 dragPanStart{0.0F, 0.0F};
     };
-    void InitializeStage();
     bool LoadStageFromJsonModule();
     void BuildFallbackStage();
     void LoadOperatorAnimations();
@@ -69,28 +69,30 @@ private:
     void UpdateRedeployCooldowns(float dtMs);
 
     // Input
-    void HandleDeploymentClick(const glm::vec2& cursorPtsd);
     void HandleSkillActivation(const glm::ivec2& cell);
     void UpdateCameraControls(float deltaTimeMs, const glm::vec2& rawCursor);
     glm::vec2 RawCursorToPtsd(const glm::vec2& rawCursor) const;
 
+    bool IsValidOperatorTypeIndex(int typeIndex) const;
     bool IsCellOccupied(const glm::ivec2& cell) const;
     bool IsDeployableCellForOperatorType(int typeIndex, const glm::ivec2& cell) const;
     bool IsInsideBoard(const glm::vec2& ptsdPos) const;
-    bool IsDeployableCellForSelectedOperator(const glm::ivec2& cell) const;
     bool IsDeployableTile(Ark::TileType tile, Ark::DeployType deployType) const;
-    int  FindRouteIndex(const std::string& routeId) const;
-    int  FindEnemyTemplateIndex(const std::string& enemyId) const;
 
     // Operator availability
     bool IsOperatorTypeOnField(int typeIndex) const;
     bool IsOperatorTypeAvailable(int typeIndex) const;
 
     std::optional<glm::ivec2> ToCell(const glm::vec2& ptsdPos) const;
+    std::optional<glm::ivec2> ResolveDeploymentCell(int typeIndex, const glm::vec2& ptsdPos) const;
     glm::vec2  ToBoardCenter(const glm::ivec2& cell) const;
     glm::vec2  ToPtsdPosition(const glm::vec2& boardPos) const;
     ImVec2     ToScreenPosition(const glm::vec2& ptsdPos) const;
     Ark::BoardLayout GetBoardLayout() const;
+    bool UsesBoardArtTransform() const;
+    bool IsBoardArtCellMapped(const glm::ivec2& cell) const;
+    std::array<ImVec2, 4> GetCellQuad(const glm::ivec2& cell) const;
+    float GetBoardCellScreenSize() const;
 
 private:
     // Stage
@@ -108,6 +110,7 @@ private:
     CameraState m_Camera;
     bool m_HasBoardLayoutOverride = false;
     Ark::BoardLayout m_BoardLayoutOverride{};
+    Ark::BoardArtTransform m_BoardArtTransform{};
     std::string m_StageBackgroundPath;
     float m_StageBackgroundAlpha = 1.0F;
     std::shared_ptr<Util::Image> m_StageBackground;
@@ -129,6 +132,8 @@ private:
     bool  m_ShowQuitConfirm = false;
     bool  m_PauseBeforeQuitConfirm = false;
     float m_GameSpeedMultiplier = 1.0F; // 1x or 2x
+    bool  m_ShowMapModel = true;
+    bool  m_CheatMode = false;
     float m_ClearTimerMs = 0.0F;
     bool  m_PreStageWaiting = true;
     float m_PreStageTimerMs = 0.0F;
@@ -146,7 +151,6 @@ private:
     int   m_KillCount     = 0;
 
     // Deployment
-    int  m_SelectedOperatorType = 0;
     bool m_IsDeploying          = false;
     glm::ivec2 m_DeployingCell{0, 0};
     glm::ivec2 m_DeployingDirection{1, 0};
@@ -161,6 +165,7 @@ private:
     int  m_PressedOperatorCardType = -1;
     glm::vec2 m_OperatorCardPressPos{0, 0};
     int  m_OperatorInfoTab = 0;              // 0=skill, 1=feature, 2=talent
+    float m_OperatorDetailDragBlend = 0.0F;
     bool m_WaitingForDirection   = false;    // placed on cell, waiting for direction click
     glm::ivec2 m_DirectionCell{0, 0};       // cell where operator was dropped
     

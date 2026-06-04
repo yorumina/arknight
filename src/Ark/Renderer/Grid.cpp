@@ -3,6 +3,7 @@
 #include "RendererShared.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 using namespace Ark;
@@ -157,6 +158,7 @@ std::shared_ptr<Util::Image> Ark::AppRenderer::GetTileImage(const std::string& i
 void Ark::AppRenderer::DrawGrid() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const auto layout = m_App.GetBoardLayout();
+    const bool artMode = m_App.UsesBoardArtTransform();
     const float pad = layout.cellSize * 0.03F;
     const float highgroundOffset = layout.cellSize * 0.22F;
     const float markerOffset = layout.cellSize * 0.5F;
@@ -166,16 +168,25 @@ void Ark::AppRenderer::DrawGrid() {
         for (int col = 0; col < m_App.m_StageWidth; ++col) {
             const auto tile = m_App.m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
             if (tile == TileType::EMPTY) continue;
+            const glm::ivec2 cell{col, row};
+            if (artMode && !m_App.IsBoardArtCellMapped(cell)) continue;
 
-            const float l = layout.topLeftX + col * layout.cellSize + pad;
-            const float r = l + layout.cellSize - 2.0F * pad;
-            const float t = layout.topLeftY - row * layout.cellSize - pad;
-            const float b = t - layout.cellSize + 2.0F * pad;
-
-            const ImVec2 q1 = m_App.ToScreenPosition({l, t});
-            const ImVec2 q2 = m_App.ToScreenPosition({r, t});
-            const ImVec2 q3 = m_App.ToScreenPosition({r, b});
-            const ImVec2 q4 = m_App.ToScreenPosition({l, b});
+            const auto q = artMode
+                ? m_App.GetCellQuad(cell)
+                : std::array<ImVec2, 4>{
+                    m_App.ToScreenPosition({layout.topLeftX + col * layout.cellSize + pad,
+                                            layout.topLeftY - row * layout.cellSize - pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + (col + 1) * layout.cellSize - pad,
+                                            layout.topLeftY - row * layout.cellSize - pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + (col + 1) * layout.cellSize - pad,
+                                            layout.topLeftY - (row + 1) * layout.cellSize + pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + col * layout.cellSize + pad,
+                                            layout.topLeftY - (row + 1) * layout.cellSize + pad}),
+                };
+            const ImVec2 q1 = q[0];
+            const ImVec2 q2 = q[1];
+            const ImVec2 q3 = q[2];
+            const ImVec2 q4 = q[3];
             const bool hasTileImagePath =
                 static_cast<std::size_t>(row) < m_App.m_TileImageMap.size() &&
                 static_cast<std::size_t>(col) < m_App.m_TileImageMap[static_cast<std::size_t>(row)].size() &&
@@ -237,6 +248,7 @@ void Ark::AppRenderer::DrawGrid() {
 void Ark::AppRenderer::DrawMarkerTopLayer() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const auto layout = m_App.GetBoardLayout();
+    const bool artMode = m_App.UsesBoardArtTransform();
     const float pad = layout.cellSize * 0.03F;
     const float markerOffset = layout.cellSize * 0.5F;
 
@@ -244,16 +256,25 @@ void Ark::AppRenderer::DrawMarkerTopLayer() {
         for (int col = 0; col < m_App.m_StageWidth; ++col) {
             const auto tile = m_App.m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
             if (tile != TileType::SPAWN && tile != TileType::GOAL) continue;
+            const glm::ivec2 cell{col, row};
+            if (artMode && !m_App.IsBoardArtCellMapped(cell)) continue;
 
-            const float l = layout.topLeftX + col * layout.cellSize + pad;
-            const float r = l + layout.cellSize - 2.0F * pad;
-            const float t = layout.topLeftY - row * layout.cellSize - pad;
-            const float b = t - layout.cellSize + 2.0F * pad;
-
-            const ImVec2 q1 = m_App.ToScreenPosition({l, t});
-            const ImVec2 q2 = m_App.ToScreenPosition({r, t});
-            const ImVec2 q3 = m_App.ToScreenPosition({r, b});
-            const ImVec2 q4 = m_App.ToScreenPosition({l, b});
+            const auto q = artMode
+                ? m_App.GetCellQuad(cell)
+                : std::array<ImVec2, 4>{
+                    m_App.ToScreenPosition({layout.topLeftX + col * layout.cellSize + pad,
+                                            layout.topLeftY - row * layout.cellSize - pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + (col + 1) * layout.cellSize - pad,
+                                            layout.topLeftY - row * layout.cellSize - pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + (col + 1) * layout.cellSize - pad,
+                                            layout.topLeftY - (row + 1) * layout.cellSize + pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + col * layout.cellSize + pad,
+                                            layout.topLeftY - (row + 1) * layout.cellSize + pad}),
+                };
+            const ImVec2 q1 = q[0];
+            const ImVec2 q2 = q[1];
+            const ImVec2 q3 = q[2];
+            const ImVec2 q4 = q[3];
             const ImVec2 u1{q1.x, q1.y - markerOffset};
             const ImVec2 u2{q2.x, q2.y - markerOffset};
             const ImVec2 u3{q3.x, q3.y - markerOffset};
@@ -271,6 +292,7 @@ void Ark::AppRenderer::DrawMarkerTopLayer() {
 void Ark::AppRenderer::DrawHighgroundTopLayer() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const auto layout = m_App.GetBoardLayout();
+    const bool artMode = m_App.UsesBoardArtTransform();
     const float pad = layout.cellSize * 0.03F;
     const float highgroundOffset = layout.cellSize * 0.22F;
     const bool hasStageArt = !m_App.m_StageBackgroundPath.empty();
@@ -279,16 +301,25 @@ void Ark::AppRenderer::DrawHighgroundTopLayer() {
         for (int col = 0; col < m_App.m_StageWidth; ++col) {
             const auto tile = m_App.m_TileMap[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
             if (!IsHighgroundVisual(tile)) continue;
+            const glm::ivec2 cell{col, row};
+            if (artMode && !m_App.IsBoardArtCellMapped(cell)) continue;
 
-            const float l = layout.topLeftX + col * layout.cellSize + pad;
-            const float r = l + layout.cellSize - 2.0F * pad;
-            const float t = layout.topLeftY - row * layout.cellSize - pad;
-            const float b = t - layout.cellSize + 2.0F * pad;
-
-            const ImVec2 q1 = m_App.ToScreenPosition({l, t});
-            const ImVec2 q2 = m_App.ToScreenPosition({r, t});
-            const ImVec2 q3 = m_App.ToScreenPosition({r, b});
-            const ImVec2 q4 = m_App.ToScreenPosition({l, b});
+            const auto q = artMode
+                ? m_App.GetCellQuad(cell)
+                : std::array<ImVec2, 4>{
+                    m_App.ToScreenPosition({layout.topLeftX + col * layout.cellSize + pad,
+                                            layout.topLeftY - row * layout.cellSize - pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + (col + 1) * layout.cellSize - pad,
+                                            layout.topLeftY - row * layout.cellSize - pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + (col + 1) * layout.cellSize - pad,
+                                            layout.topLeftY - (row + 1) * layout.cellSize + pad}),
+                    m_App.ToScreenPosition({layout.topLeftX + col * layout.cellSize + pad,
+                                            layout.topLeftY - (row + 1) * layout.cellSize + pad}),
+                };
+            const ImVec2 q1 = q[0];
+            const ImVec2 q2 = q[1];
+            const ImVec2 q3 = q[2];
+            const ImVec2 q4 = q[3];
             const ImVec2 u1{q1.x, q1.y - highgroundOffset};
             const ImVec2 u2{q2.x, q2.y - highgroundOffset};
             const ImVec2 u3{q3.x, q3.y - highgroundOffset};

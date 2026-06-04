@@ -19,7 +19,6 @@ void Giraffe::Update() {
     static glm::vec2 dir = {1, 0.5};
 
     auto &pos = m_Transform.translation;
-    auto &scale = m_Transform.scale;
     auto &rotation = m_Transform.rotation;
 
     if (pos.y >= static_cast<float>(PTSD_Config::WINDOW_HEIGHT) / 2 ||
