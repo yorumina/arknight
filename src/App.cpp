@@ -178,9 +178,6 @@ void App::Update() {
             m_PauseBeforeQuitConfirm = m_GamePaused;
             m_GamePaused = true;
             m_ShowQuitConfirm = true;
-        } else if (uiLayout.mapToggleButton.Contains(screenCursorX, screenCursorY)) {
-            uiConsumedLeftClick = true;
-            m_ShowMapModel = !m_ShowMapModel;
         } else if (uiLayout.speedButton.Contains(screenCursorX, screenCursorY)) {
             uiConsumedLeftClick = true;
             m_GameSpeedMultiplier = (m_GameSpeedMultiplier < 1.5F) ? 2.0F : 1.0F;

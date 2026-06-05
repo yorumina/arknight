@@ -193,27 +193,6 @@ void DrawButtonImageFit(ImDrawList* draw,
     );
 }
 
-void DrawImageStretchRect(ImDrawList* draw,
-                          const std::shared_ptr<Util::Image>& image,
-                          const UiRect& rect,
-                          int alpha = 255,
-                          const ImVec2& offset = {0.0F, 0.0F}) {
-    if (!image || image->GetTextureId() == 0) return;
-
-    const ImVec2 min{rect.minX + offset.x, rect.minY + offset.y};
-    const ImVec2 max{rect.maxX + offset.x, rect.maxY + offset.y};
-    draw->PushClipRect({rect.minX, rect.minY}, {rect.maxX, rect.maxY}, true);
-    draw->AddImage(
-        reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
-        min,
-        max,
-        {0.0F, 0.0F},
-        {1.0F, 1.0F},
-        IM_COL32(255, 255, 255, std::clamp(alpha, 0, 255))
-    );
-    draw->PopClipRect();
-}
-
 void DrawImageCoverRectFadeRight(ImDrawList* draw,
                                  const std::shared_ptr<Util::Image>& image,
                                  const UiRect& rect,
@@ -227,8 +206,9 @@ void DrawImageCoverRectFadeRight(ImDrawList* draw,
 
     const float rectW = std::max(1.0F, rect.maxX - rect.minX);
     const float rectH = std::max(1.0F, rect.maxY - rect.minY);
-    const float heightScale = rectH / size.y;
-    const float scale = (size.x * heightScale >= rectW) ? heightScale : (rectW / size.x);
+    const float requiredW = rectW + std::abs(offset.x) * 2.0F;
+    const float requiredH = rectH + std::abs(offset.y) * 2.0F;
+    const float scale = std::max(requiredH / size.y, requiredW / size.x);
     const float drawW = size.x * scale;
     const float drawH = size.y * scale;
     const ImVec2 center = RectCenter(rect);
@@ -368,21 +348,16 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
     const float fadeW = 50.0F;
     const float px = 0.0F;
     const float py = 0.0F;
-    const UiRect panel{px, py, px + panelW, py + panelH};
     const UiRect portraitRect{px, py, px + panelW + fadeW, py + panelH};
     const auto toInt = [](float v) { return static_cast<int>(std::lround(v)); };
 
-    draw->AddRectFilled({panel.minX, panel.minY}, {panel.maxX, panel.maxY},
-                        IM_COL32(7, 9, 13, deploymentPreview ? 82 : 126));
-
     const float portraitAlpha = 238.0F + (108.0F - 238.0F) * dragBlend;
-    const float portraitOffsetX = (-130.0F - 46.0F * dragBlend) * scale;
-    const float blurOffsetX = -46.0F * dragBlend * scale;
+    const float portraitOffsetX = (-130.0F - 76.0F * dragBlend) * scale;
     static std::shared_ptr<Util::Image> infoBlurImage = LoadOperatorUiImage("blur.png");
     if (infoBlurImage && infoBlurImage->GetTextureId() != 0) {
-        DrawImageStretchRect(draw, infoBlurImage, portraitRect,
-                             deploymentPreview ? 188 : 228,
-                             {blurOffsetX, 0.0F});
+        DrawImageCoverRectFadeRight(draw, infoBlurImage, portraitRect, fadeW,
+                                    deploymentPreview ? 160 : 205,
+                                    {portraitOffsetX, 0.0F});
     }
 
     std::shared_ptr<Util::Image> portrait;
@@ -395,10 +370,10 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
                                     {portraitOffsetX, 0.0F});
     }
 
-    draw->AddRectFilledMultiColor({px, py}, {px + panelW, py + panelH},
-                                  IM_COL32(0, 0, 0, 24), IM_COL32(0, 0, 0, deploymentPreview ? 46 : 70),
-                                  IM_COL32(0, 0, 0, deploymentPreview ? 150 : 184),
-                                  IM_COL32(0, 0, 0, deploymentPreview ? 176 : 208));
+    draw->AddRectFilledMultiColor({px, py}, {portraitRect.maxX, py + panelH},
+                                  IM_COL32(0, 0, 0, 20), IM_COL32(0, 0, 0, 0),
+                                  IM_COL32(0, 0, 0, 0),
+                                  IM_COL32(0, 0, 0, deploymentPreview ? 136 : 168));
 
     const float iconSize = 80.0F * scale;
     const float iconX = px + 24.0F * scale;
@@ -420,7 +395,7 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
     }
     if (levelImage && levelImage->GetTextureId() != 0) {
         DrawIconImage(draw, levelImage, {nameX + 94.0F * scale, nameY + 42.0F * scale},
-                      216.0F * scale, 122.0F * scale, 245);
+                      151.0F * scale, 85.0F * scale, 245);
     } else {
         AddStrongText(draw, {nameX, nameY}, 34.0F * scale, IM_COL32(248, 248, 248, 255), t.name.c_str());
         AddTextAt(draw, {nameX, nameY + 44.0F * scale}, 20.0F * scale, IM_COL32(236, 240, 246, 238), "LV");
@@ -449,10 +424,39 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
                         IM_COL32(2, 3, 5, 156), 8.0F * scale);
     draw->AddRect({rangeX, rangeY}, {rangeX + rangeBox, rangeY + rangeBox},
                   IM_COL32(255, 255, 255, 22), 8.0F * scale, 0, 1.0F * scale);
-    draw->AddRectFilled({rangeX + 40.0F * scale, rangeY + 34.0F * scale},
-                        {rangeX + 58.0F * scale, rangeY + 50.0F * scale}, IM_COL32(255, 255, 255, 255));
-    draw->AddRect({rangeX + 58.0F * scale, rangeY + 34.0F * scale},
-                  {rangeX + 75.0F * scale, rangeY + 50.0F * scale}, IM_COL32(255, 136, 35, 255), 0.0F, 0, 2.0F);
+    auto drawRangePreview = [&]() {
+        if (t.id == "Kroos") {
+            constexpr int cols = 4;
+            constexpr int rows = 3;
+            const float gap = 5.0F * scale;
+            const float cell = std::min((rangeBox - 28.0F * scale - gap * (cols - 1)) / cols,
+                                        (rangeBox - 54.0F * scale - gap * (rows - 1)) / rows);
+            const float gridW = cell * cols + gap * (cols - 1);
+            const float gx = rangeX + (rangeBox - gridW) * 0.5F;
+            const float gy = rangeY + 15.0F * scale;
+            for (int row = 0; row < rows; ++row) {
+                for (int col = 0; col < cols; ++col) {
+                    const float x0 = gx + static_cast<float>(col) * (cell + gap);
+                    const float y0 = gy + static_cast<float>(row) * (cell + gap);
+                    const bool origin = col == 0 && row == 1;
+                    draw->AddRectFilled({x0, y0}, {x0 + cell, y0 + cell},
+                                        origin ? IM_COL32(255, 255, 255, 246)
+                                               : IM_COL32(168, 172, 174, 150),
+                                        1.0F * scale);
+                    draw->AddRect({x0, y0}, {x0 + cell, y0 + cell},
+                                  IM_COL32(235, 238, 238, origin ? 210 : 82),
+                                  1.0F * scale, 0, 1.7F * scale);
+                }
+            }
+            return;
+        }
+
+        draw->AddRectFilled({rangeX + 40.0F * scale, rangeY + 34.0F * scale},
+                            {rangeX + 58.0F * scale, rangeY + 50.0F * scale}, IM_COL32(255, 255, 255, 255));
+        draw->AddRect({rangeX + 58.0F * scale, rangeY + 34.0F * scale},
+                      {rangeX + 75.0F * scale, rangeY + 50.0F * scale}, IM_COL32(255, 136, 35, 255), 0.0F, 0, 2.0F);
+    };
+    drawRangePreview();
     AddCenteredText(draw, {rangeX + rangeBox * 0.5F, rangeY + rangeBox - 24.0F * scale},
                     22.0F * scale, IM_COL32(255, 255, 255, 240), u8"攻擊範圍");
 
@@ -524,6 +528,12 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
                 u8"擊殺敵人後獲得2點部署費用，撤退時返還該次部署費用"
             };
         }
+        if (t.id == "Kroos") {
+            return std::pair<std::string, std::string>{
+                u8"速射手",
+                u8"優先攻擊空中單位"
+            };
+        }
         return std::pair<std::string, std::string>{
             u8"執旗手",
             u8"技能發動期間阻擋數變為0，但使身前一名幹員阻擋數+1"
@@ -534,6 +544,11 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
             return std::vector<std::pair<std::string, std::string>>{
                 {u8"精密填彈", u8"每次攻擊有28%（+3%）的機率攻擊力提升至130%，且額外攻擊一個目標"},
                 {u8"軍事傳統", u8"編入隊伍時所有【先鋒】幹員的初始技力+8（+2），自身部署時額外獲得4點技力"}
+            };
+        }
+        if (t.id == "Kroos") {
+            return std::vector<std::pair<std::string, std::string>>{
+                {u8"要害瞄準·初級", u8"攻擊時，20%機率當次攻擊力提升至160%（+10%）"}
             };
         }
         return std::vector<std::pair<std::string, std::string>>{
@@ -592,8 +607,6 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
         }
     }
 
-    draw->AddRect({panel.minX, panel.minY}, {panel.maxX, panel.maxY}, IM_COL32(255, 255, 255, 24));
-
     static std::shared_ptr<Util::Image> settingsButtonIcon = LoadHudIcon("Setting.png");
     if (settingsButtonIcon && settingsButtonIcon->GetTextureId() != 0) {
         DrawButtonImage(draw, settingsButtonIcon, ui.settingsButton, 0.0F, {0.0F, 0.0F}, {1.0F, 1.0F});
@@ -602,15 +615,6 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
         DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * scale,
                      IM_COL32(242, 246, 252, 255), 2.6F * scale);
     }
-    DrawTopUiButton(draw, ui.mapToggleButton, 3.0F * scale, m_App.m_ShowMapModel);
-    const ImVec2 mapCenter = RectCenter(ui.mapToggleButton);
-    const ImU32 mapLabelColor = m_App.m_ShowMapModel
-        ? IM_COL32(255, 234, 180, 255)
-        : IM_COL32(204, 214, 228, 210);
-    AddCenteredText(draw, {mapCenter.x, mapCenter.y - 8.0F * scale},
-                    18.0F * scale, mapLabelColor, "MAP");
-    AddCenteredText(draw, {mapCenter.x, mapCenter.y + 12.0F * scale},
-                    15.0F * scale, mapLabelColor, m_App.m_ShowMapModel ? "ON" : "OFF");
 }
 
 // ── Compact right-side deployment info (DP + deployable count) ───────────────
@@ -861,18 +865,6 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
     } else {
         DrawTopUiButton(draw, ui.settingsButton, iconRounding, false);
         DrawGearIcon(draw, RectCenter(ui.settingsButton), 17.0F * ui.scale, IM_COL32(242, 246, 252, 255), 2.6F * ui.scale);
-    }
-
-    {
-        DrawTopUiButton(draw, ui.mapToggleButton, 3.0F * ui.scale, m_App.m_ShowMapModel);
-        const ImVec2 mapCenter = RectCenter(ui.mapToggleButton);
-        const ImU32 labelColor = m_App.m_ShowMapModel
-            ? IM_COL32(255, 234, 180, 255)
-            : IM_COL32(204, 214, 228, 210);
-        AddCenteredText(draw, {mapCenter.x, mapCenter.y - 8.0F * ui.scale},
-                        18.0F * ui.scale, labelColor, "MAP");
-        AddCenteredText(draw, {mapCenter.x, mapCenter.y + 12.0F * ui.scale},
-                        15.0F * ui.scale, labelColor, m_App.m_ShowMapModel ? "ON" : "OFF");
     }
 
     // Top-right speed and pause controls

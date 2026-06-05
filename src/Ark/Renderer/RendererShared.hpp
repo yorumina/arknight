@@ -26,7 +26,8 @@ inline constexpr int BAGPIPE_MAX_CHARGES = Ark::GameConst::BAGPIPE_MAX_CHARGES;
 inline constexpr float BAGPIPE_SKILL_DURATION_MS = Ark::GameConst::BAGPIPE_SKILL_DURATION_MS;
 inline constexpr float OPERATOR_VISUAL_SCALE = 1.716F;
 inline constexpr float ENEMY_VISUAL_SCALE = 1.872F;
-inline constexpr float OPERATION_1_1_ENTITY_Y_OFFSET_PX = -10.0F;
+inline constexpr float ENTITY_Y_OFFSET_PX = -10.0F;
+inline constexpr float OPERATION_1_1_ENTITY_EXTRA_Y_OFFSET_PX = -10.0F;
 inline constexpr float PRE_STAGE_TOTAL_MS = 2000.0F;
 inline constexpr float PRE_STAGE_FADE_MS = 500.0F;
 inline constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
@@ -56,8 +57,10 @@ inline float EnemyVisualScaleForStage(const std::string& stageFile) {
 }
 
 inline float EntityYOffsetForStage(const std::string& stageFile) {
-    if (IsOperationStage(stageFile, "Operation 1-1")) return OPERATION_1_1_ENTITY_Y_OFFSET_PX;
-    return 0.0F;
+    if (IsOperationStage(stageFile, "Operation 1-1")) {
+        return ENTITY_Y_OFFSET_PX + OPERATION_1_1_ENTITY_EXTRA_Y_OFFSET_PX;
+    }
+    return ENTITY_Y_OFFSET_PX;
 }
 
 inline constexpr float OP_BAR_HEIGHT = 116.0F;
@@ -82,7 +85,6 @@ struct UiRect {
 struct BattleUiLayout {
     float scale = 1.0F;
     UiRect settingsButton;
-    UiRect mapToggleButton;
     UiRect speedButton;
     UiRect pauseButton;
     UiRect quitPanel;
@@ -106,14 +108,6 @@ inline BattleUiLayout ComputeBattleUiLayout(float screenW, float screenH) {
         top,
         margin + topButtonWidth * settingsScale,
         top + buttonHeight * settingsScale
-    };
-    const float utilityButtonW = 110.0F * layout.scale;
-    const float utilityButtonH = 52.0F * layout.scale;
-    layout.mapToggleButton = {
-        layout.settingsButton.maxX + gap,
-        top + (buttonHeight * settingsScale - utilityButtonH) * 0.5F,
-        layout.settingsButton.maxX + gap + utilityButtonW,
-        top + (buttonHeight * settingsScale + utilityButtonH) * 0.5F
     };
     layout.pauseButton = {
         screenW - margin - topButtonWidth,

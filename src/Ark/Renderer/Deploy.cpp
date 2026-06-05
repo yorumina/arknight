@@ -11,6 +11,77 @@
 using namespace Ark;
 using namespace Ark::RendererConst;
 
+namespace {
+ImVec2 Add(const ImVec2& a, const ImVec2& b) {
+    return {a.x + b.x, a.y + b.y};
+}
+
+ImVec2 Sub(const ImVec2& a, const ImVec2& b) {
+    return {a.x - b.x, a.y - b.y};
+}
+
+ImVec2 Mul(const ImVec2& v, float scalar) {
+    return {v.x * scalar, v.y * scalar};
+}
+
+float Cross(const ImVec2& a, const ImVec2& b) {
+    return a.x * b.y - a.y * b.x;
+}
+
+float SignedArea(const std::array<ImVec2, 4>& polygon) {
+    float area = 0.0F;
+    for (std::size_t i = 0; i < polygon.size(); ++i) {
+        const ImVec2& a = polygon[i];
+        const ImVec2& b = polygon[(i + 1) % polygon.size()];
+        area += a.x * b.y - b.x * a.y;
+    }
+    return area * 0.5F;
+}
+
+bool IsInsideEdge(const ImVec2& point, const ImVec2& a, const ImVec2& b, bool clipIsCcw) {
+    const float side = Cross(Sub(b, a), Sub(point, a));
+    return clipIsCcw ? side >= -0.25F : side <= 0.25F;
+}
+
+ImVec2 LineIntersection(const ImVec2& p0, const ImVec2& p1, const ImVec2& e0, const ImVec2& e1) {
+    const ImVec2 r = Sub(p1, p0);
+    const ImVec2 s = Sub(e1, e0);
+    const float denom = Cross(r, s);
+    if (std::abs(denom) < 0.0001F) return p1;
+    const float t = Cross(Sub(e0, p0), s) / denom;
+    return Add(p0, Mul(r, t));
+}
+
+std::vector<ImVec2> ClipPolygonToQuad(std::vector<ImVec2> subject,
+                                      const std::array<ImVec2, 4>& clip) {
+    const bool clipIsCcw = SignedArea(clip) >= 0.0F;
+    for (std::size_t edge = 0; edge < clip.size(); ++edge) {
+        const ImVec2 e0 = clip[edge];
+        const ImVec2 e1 = clip[(edge + 1) % clip.size()];
+        const std::vector<ImVec2> input = subject;
+        subject.clear();
+        if (input.empty()) break;
+
+        ImVec2 previous = input.back();
+        bool previousInside = IsInsideEdge(previous, e0, e1, clipIsCcw);
+        for (const ImVec2& current : input) {
+            const bool currentInside = IsInsideEdge(current, e0, e1, clipIsCcw);
+            if (currentInside) {
+                if (!previousInside) {
+                    subject.push_back(LineIntersection(previous, current, e0, e1));
+                }
+                subject.push_back(current);
+            } else if (previousInside) {
+                subject.push_back(LineIntersection(previous, current, e0, e1));
+            }
+            previous = current;
+            previousInside = currentInside;
+        }
+    }
+    return subject;
+}
+} // namespace
+
 void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout, bool drawUnderlay) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
     const float operatorScale = OperatorVisualScaleForStage(m_App.m_CurrentStageFile);
@@ -33,12 +104,26 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
         const float minY = std::min({q[0].y, q[1].y, q[2].y, q[3].y});
         const float maxY = std::max({q[0].y, q[1].y, q[2].y, q[3].y});
         const float h = std::max(1.0F, maxY - minY);
-        draw->PushClipRect({minX, minY}, {maxX, maxY}, true);
+        const float stripeThickness = 14.0F;
         for (float x = minX - h; x < maxX + h; x += 42.0F) {
-            draw->AddLine({x, maxY}, {x + h, minY}, IM_COL32(255, 184, 38, 154), 14.0F);
+            const ImVec2 p0{x, maxY};
+            const ImVec2 p1{x + h, minY};
+            const ImVec2 dir = Sub(p1, p0);
+            const float len = std::max(1.0F, std::sqrt(dir.x * dir.x + dir.y * dir.y));
+            const ImVec2 normal{-dir.y / len * stripeThickness * 0.5F,
+                                dir.x / len * stripeThickness * 0.5F};
+            auto clipped = ClipPolygonToQuad({
+                Add(p0, normal),
+                Add(p1, normal),
+                Sub(p1, normal),
+                Sub(p0, normal),
+            }, q);
+            if (clipped.size() >= 3) {
+                draw->AddConvexPolyFilled(clipped.data(), static_cast<int>(clipped.size()),
+                                          IM_COL32(255, 184, 38, 96));
+            }
         }
-        draw->PopClipRect();
-        draw->AddQuad(q[0], q[1], q[2], q[3], IM_COL32(255, 178, 45, 190), 1.6F);
+        draw->AddQuad(q[0], q[1], q[2], q[3], IM_COL32(255, 178, 45, 132), 1.6F);
     };
 
     auto operatorSpriteCenter = [&](int typeIndex, const glm::ivec2& cell) {
@@ -179,13 +264,13 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
             for (int x = 0; x < m_App.m_StageWidth; ++x) {
                 const glm::ivec2 cell{x, y};
                 if (!canDeployTo(activeCardType, cell)) continue;
-                drawCellTint(cell, IM_COL32(62, 210, 126, 70), IM_COL32(86, 245, 160, 118));
+                drawCellTint(cell, IM_COL32(62, 210, 126, 42), IM_COL32(86, 245, 160, 78));
             }
         }
     }
 
     if (drawUnderlay && hoverDeployable) {
-        drawCellTint(*effectiveHoverCell, IM_COL32(238, 139, 28, 126), IM_COL32(255, 178, 45, 210), 1.8F);
+        drawCellTint(*effectiveHoverCell, IM_COL32(238, 139, 28, 82), IM_COL32(255, 178, 45, 154), 1.8F);
     }
 
     if (!drawUnderlay && m_App.m_DraggingFromBar && m_App.m_DragOperatorType >= 0 && !m_App.m_WaitingForDirection) {
