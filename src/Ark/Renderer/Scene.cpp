@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 using namespace Ark;
 using namespace Ark::RendererConst;
@@ -34,14 +35,17 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
 
         DrawStageBackground();
         if (m_App.m_ShowMapModel) DrawGrid();
-        DrawDeployPreview(m_App.ToCell(cursor), layout, true);
+        const auto hoverCell = m_App.ToCell(cursor);
+        DrawDeployPreview(hoverCell, layout, true);
         DrawEnemies(layout);
         DrawOperators(layout, false);
-        DrawHighgroundTopLayer();
-        DrawMarkerTopLayer();
+        if (m_App.m_ShowMapModel) {
+            DrawHighgroundTopLayer();
+            DrawMarkerTopLayer();
+        }
         DrawOperators(layout, true);
         DrawBeams();
-        DrawDeployPreview(m_App.ToCell(cursor), layout, false);
+        DrawDeployPreview(hoverCell, layout, false);
         DrawOperatorBar(W, H);
         DrawDeploymentInfo(W, H);
 
@@ -170,7 +174,15 @@ void Ark::AppRenderer::DrawImageCover(const std::string& imagePath, float alpha,
     }
 
     if (m_App.m_StageBackground == nullptr && !imagePath.empty()) {
-        m_App.m_StageBackground = std::make_shared<Util::Image>(imagePath);
+        const auto key = std::filesystem::path(imagePath).lexically_normal().string();
+        auto it = m_App.m_StaticImageCache.find(key);
+        if (it != m_App.m_StaticImageCache.end()) {
+            m_App.m_StageBackground = it->second;
+        } else {
+            auto image = std::make_shared<Util::Image>(key);
+            m_App.m_StaticImageCache.emplace(key, image);
+            m_App.m_StageBackground = std::move(image);
+        }
     }
 
     if (m_App.m_StageBackground != nullptr && m_App.m_StageBackground->GetTextureId() != 0) {

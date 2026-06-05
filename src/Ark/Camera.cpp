@@ -80,6 +80,18 @@ glm::vec2 QuadPoint(const std::array<glm::vec2, 4>& corners, float u, float v) {
     return top + (bottom - top) * v;
 }
 
+glm::vec2 QuadPoint(const std::array<ImVec2, 4>& corners, float u, float v) {
+    const glm::vec2 top{
+        corners[0].x + (corners[1].x - corners[0].x) * u,
+        corners[0].y + (corners[1].y - corners[0].y) * u,
+    };
+    const glm::vec2 bottom{
+        corners[3].x + (corners[2].x - corners[3].x) * u,
+        corners[3].y + (corners[2].y - corners[3].y) * u,
+    };
+    return top + (bottom - top) * v;
+}
+
 glm::vec2 BoardArtFallbackPoint(const BoardArtTransform& art, int width, int height, const glm::vec2& boardPos) {
     const auto corners = ScaledBoardArtCorners(art);
     const float u = std::clamp(boardPos.x / static_cast<float>(std::max(1, width)), 0.0F, 1.0F);
@@ -109,6 +121,54 @@ glm::vec2 BoardArtPoint(const BoardArtTransform& art, int width, int height, con
     }
     return BoardArtFallbackPoint(art, width, height, boardPos);
 }
+}
+
+void App::RebuildBoardArtScreenCache() {
+    m_BoardArtCellMappedCache.clear();
+    m_BoardArtCellQuadCache.clear();
+    if (!UsesBoardArtTransform()) return;
+
+    m_BoardArtCellMappedCache.assign(static_cast<std::size_t>(m_StageHeight),
+                                     std::vector<bool>(static_cast<std::size_t>(m_StageWidth), false));
+    m_BoardArtCellQuadCache.assign(static_cast<std::size_t>(m_StageHeight),
+                                   std::vector<std::array<ImVec2, 4>>(static_cast<std::size_t>(m_StageWidth)));
+
+    auto tileAt = [&](int x, int y) {
+        if (y < 0 || x < 0 ||
+            static_cast<std::size_t>(y) >= m_TileMap.size() ||
+            static_cast<std::size_t>(x) >= m_TileMap[static_cast<std::size_t>(y)].size()) {
+            return TileType::EMPTY;
+        }
+        return m_TileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)];
+    };
+
+    for (int row = 0; row < m_StageHeight; ++row) {
+        for (int col = 0; col < m_StageWidth; ++col) {
+            if (tileAt(col, row) == TileType::EMPTY) continue;
+
+            std::optional<std::array<glm::vec2, 4>> corners;
+            if (m_BoardArtTransform.cells.empty()) {
+                corners = std::array<glm::vec2, 4>{
+                    BoardArtPoint(m_BoardArtTransform, m_StageWidth, m_StageHeight, {static_cast<float>(col), static_cast<float>(row)}),
+                    BoardArtPoint(m_BoardArtTransform, m_StageWidth, m_StageHeight, {static_cast<float>(col + 1), static_cast<float>(row)}),
+                    BoardArtPoint(m_BoardArtTransform, m_StageWidth, m_StageHeight, {static_cast<float>(col + 1), static_cast<float>(row + 1)}),
+                    BoardArtPoint(m_BoardArtTransform, m_StageWidth, m_StageHeight, {static_cast<float>(col), static_cast<float>(row + 1)}),
+                };
+            } else {
+                corners = ScaledBoardArtCellCorners(m_BoardArtTransform, {col, row});
+            }
+            if (!corners) continue;
+
+            auto& cached = m_BoardArtCellQuadCache[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)];
+            m_BoardArtCellMappedCache[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)] = true;
+            cached = {
+                ImVec2{(*corners)[0].x, (*corners)[0].y},
+                ImVec2{(*corners)[1].x, (*corners)[1].y},
+                ImVec2{(*corners)[2].x, (*corners)[2].y},
+                ImVec2{(*corners)[3].x, (*corners)[3].y},
+            };
+        }
+    }
 }
 
 void App::ResetCameraToStageDefaults() {
@@ -242,6 +302,28 @@ BoardLayout App::GetBoardLayout() const {
 
 glm::vec2 App::ToPtsdPosition(const glm::vec2& boardPos) const {
     if (UsesBoardArtTransform()) {
+        if (!m_BoardArtCellMappedCache.empty() && !m_BoardArtCellQuadCache.empty()) {
+            int x = static_cast<int>(std::floor(boardPos.x));
+            int y = static_cast<int>(std::floor(boardPos.y));
+            float u = boardPos.x - static_cast<float>(x);
+            float v = boardPos.y - static_cast<float>(y);
+            if (x >= m_StageWidth) {
+                x = m_StageWidth - 1;
+                u = 1.0F;
+            }
+            if (y >= m_StageHeight) {
+                y = m_StageHeight - 1;
+                v = 1.0F;
+            }
+            if (x >= 0 && y >= 0 &&
+                static_cast<std::size_t>(y) < m_BoardArtCellMappedCache.size() &&
+                static_cast<std::size_t>(x) < m_BoardArtCellMappedCache[static_cast<std::size_t>(y)].size() &&
+                m_BoardArtCellMappedCache[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)]) {
+                return QuadPoint(m_BoardArtCellQuadCache[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)],
+                                 std::clamp(u, 0.0F, 1.0F),
+                                 std::clamp(v, 0.0F, 1.0F));
+            }
+        }
         return BoardArtPoint(m_BoardArtTransform, m_StageWidth, m_StageHeight, boardPos);
     }
 
@@ -259,7 +341,11 @@ std::optional<glm::ivec2> App::ToCell(const glm::vec2& p) const {
         for (int row = 0; row < m_StageHeight; ++row) {
             for (int col = 0; col < m_StageWidth; ++col) {
                 if (!IsBoardArtCellMapped({col, row})) continue;
-                const auto q = GetCellQuad({col, row});
+                const auto q = (!m_BoardArtCellQuadCache.empty() &&
+                                static_cast<std::size_t>(row) < m_BoardArtCellQuadCache.size() &&
+                                static_cast<std::size_t>(col) < m_BoardArtCellQuadCache[static_cast<std::size_t>(row)].size())
+                    ? m_BoardArtCellQuadCache[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)]
+                    : GetCellQuad({col, row});
                 const std::array<glm::vec2, 4> quad{
                     glm::vec2{q[0].x, q[0].y},
                     glm::vec2{q[1].x, q[1].y},
@@ -334,6 +420,17 @@ bool App::UsesBoardArtTransform() const {
 
 bool App::IsBoardArtCellMapped(const glm::ivec2& cell) const {
     if (!UsesBoardArtTransform()) return false;
+    if (cell.x < 0 || cell.y < 0 ||
+        static_cast<std::size_t>(cell.y) >= m_TileMap.size() ||
+        static_cast<std::size_t>(cell.x) >= m_TileMap[static_cast<std::size_t>(cell.y)].size() ||
+        m_TileMap[static_cast<std::size_t>(cell.y)][static_cast<std::size_t>(cell.x)] == TileType::EMPTY) {
+        return false;
+    }
+    if (!m_BoardArtCellMappedCache.empty() &&
+        static_cast<std::size_t>(cell.y) < m_BoardArtCellMappedCache.size() &&
+        static_cast<std::size_t>(cell.x) < m_BoardArtCellMappedCache[static_cast<std::size_t>(cell.y)].size()) {
+        return m_BoardArtCellMappedCache[static_cast<std::size_t>(cell.y)][static_cast<std::size_t>(cell.x)];
+    }
     if (m_BoardArtTransform.cells.empty()) return true;
     if (cell.x < 0 || cell.y < 0 ||
         static_cast<std::size_t>(cell.y) >= m_BoardArtTransform.cells.size() ||
@@ -347,6 +444,13 @@ bool App::IsBoardArtCellMapped(const glm::ivec2& cell) const {
 
 std::array<ImVec2, 4> App::GetCellQuad(const glm::ivec2& cell) const {
     if (UsesBoardArtTransform()) {
+        if (!m_BoardArtCellQuadCache.empty() &&
+            cell.x >= 0 && cell.y >= 0 &&
+            static_cast<std::size_t>(cell.y) < m_BoardArtCellQuadCache.size() &&
+            static_cast<std::size_t>(cell.x) < m_BoardArtCellQuadCache[static_cast<std::size_t>(cell.y)].size() &&
+            IsBoardArtCellMapped(cell)) {
+            return m_BoardArtCellQuadCache[static_cast<std::size_t>(cell.y)][static_cast<std::size_t>(cell.x)];
+        }
         if (const auto corners = ScaledBoardArtCellCorners(m_BoardArtTransform, cell)) {
             return {
                 ImVec2{(*corners)[0].x, (*corners)[0].y},

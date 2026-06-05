@@ -13,6 +13,8 @@ using namespace Ark::RendererConst;
 
 void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverCell, const BoardLayout& layout, bool drawUnderlay) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const float operatorScale = OperatorVisualScaleForStage(m_App.m_CurrentStageFile);
+    const float stageYOffset = EntityYOffsetForStage(m_App.m_CurrentStageFile);
 
     auto cellQuad = [&](const glm::ivec2& cell) {
         return m_App.GetCellQuad(cell);
@@ -49,6 +51,7 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
             }
         }
         center.y -= yOff + layout.cellSize * 0.18F;
+        center.y += stageYOffset;
         return center;
     };
 
@@ -64,6 +67,18 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
         return isReadyToDeploy(typeIndex) &&
                m_App.IsDeployableCellForOperatorType(typeIndex, cell) &&
                !m_App.IsCellOccupied(cell);
+    };
+
+    auto isDrawableRangeCell = [&](const glm::ivec2& cell) {
+        if (cell.x < 0 || cell.x >= m_App.m_StageWidth ||
+            cell.y < 0 || cell.y >= m_App.m_StageHeight) {
+            return false;
+        }
+        if (m_App.m_TileMap[static_cast<std::size_t>(cell.y)][static_cast<std::size_t>(cell.x)] ==
+            TileType::EMPTY) {
+            return false;
+        }
+        return !m_App.UsesBoardArtTransform() || m_App.IsBoardArtCellMapped(cell);
     };
 
     auto rangeCells = [&](int typeIndex, const glm::ivec2& origin, glm::ivec2 dir) {
@@ -86,10 +101,7 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
                 }
                 if (!inRange) continue;
                 const glm::ivec2 cell = origin + rel;
-                if (cell.x < 0 || cell.x >= m_App.m_StageWidth ||
-                    cell.y < 0 || cell.y >= m_App.m_StageHeight) {
-                    continue;
-                }
+                if (!isDrawableRangeCell(cell)) continue;
                 cells.push_back(cell);
             }
         }
@@ -140,7 +152,7 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
     auto drawPreviewSprite = [&](int typeIndex, const ImVec2& center, glm::ivec2 dir, bool forceFlip, int alpha) {
         const GLuint tex = previewTexture(typeIndex, dir, forceFlip);
         if (tex == 0) return;
-        const float imgS = layout.cellSize * 0.8F * OPERATOR_VISUAL_SCALE;
+        const float imgS = layout.cellSize * 0.8F * operatorScale;
         draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)),
                        {center.x - imgS, center.y - imgS},
                        {center.x + imgS, center.y + imgS},

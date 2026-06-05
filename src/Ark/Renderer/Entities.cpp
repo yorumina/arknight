@@ -25,13 +25,23 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
     m_App.m_OperatorSkillImages.resize(m_App.m_OperatorTemplates.size());
     m_App.m_OperatorFeatureImages.clear();
     m_App.m_OperatorFeatureImages.resize(m_App.m_OperatorTemplates.size());
+
+    auto loadCachedImage = [&](const std::filesystem::path& path) -> std::shared_ptr<Util::Image> {
+        if (path.empty() || !std::filesystem::exists(path)) return {};
+        const auto key = path.lexically_normal().string();
+        auto it = m_App.m_StaticImageCache.find(key);
+        if (it != m_App.m_StaticImageCache.end()) return it->second;
+
+        auto image = std::make_shared<Util::Image>(key);
+        m_App.m_StaticImageCache.emplace(key, image);
+        return image;
+    };
+
     const auto operatorDir = Ark::ResolveOperatorDir();
     m_App.m_VanguardIcon.reset();
     if (!operatorDir.empty()) {
         const auto vanguardIcon = operatorDir / "vanguard.png";
-        if (std::filesystem::exists(vanguardIcon)) {
-            m_App.m_VanguardIcon = std::make_shared<Util::Image>(vanguardIcon.string());
-        }
+        m_App.m_VanguardIcon = loadCachedImage(vanguardIcon);
     }
     for (std::size_t i = 0; i < m_App.m_OperatorTemplates.size(); ++i) {
         const auto& op = m_App.m_OperatorTemplates[i];
@@ -40,23 +50,23 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
             const auto photoDir = operatorDir / op.id / "photo";
             const auto preferredPortrait = photoDir / (op.id + "_pic.png");
             const auto preferredCard = photoDir / (op.id + ".png");
-            auto loadFirstExisting = [](const std::vector<std::filesystem::path>& candidates) {
+            auto loadFirstExisting = [&](const std::vector<std::filesystem::path>& candidates) {
                 for (const auto& path : candidates) {
                     if (std::filesystem::exists(path)) {
-                        return std::make_shared<Util::Image>(path.string());
+                        return loadCachedImage(path);
                     }
                 }
                 return std::shared_ptr<Util::Image>{};
             };
 
             if (std::filesystem::exists(preferredPortrait)) {
-                m_App.m_OperatorPortraits[i] = std::make_shared<Util::Image>(preferredPortrait.string());
+                m_App.m_OperatorPortraits[i] = loadCachedImage(preferredPortrait);
             } else if (std::filesystem::exists(preferredCard)) {
-                m_App.m_OperatorPortraits[i] = std::make_shared<Util::Image>(preferredCard.string());
+                m_App.m_OperatorPortraits[i] = loadCachedImage(preferredCard);
             }
 
             if (std::filesystem::exists(preferredCard)) {
-                m_App.m_OperatorCards[i] = std::make_shared<Util::Image>(preferredCard.string());
+                m_App.m_OperatorCards[i] = loadCachedImage(preferredCard);
             } else if (std::filesystem::exists(photoDir) && std::filesystem::is_directory(photoDir)) {
                 std::vector<std::filesystem::path> cards;
                 for (const auto& entry : std::filesystem::directory_iterator(photoDir)) {
@@ -66,7 +76,7 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
                 }
                 if (!cards.empty()) {
                     std::sort(cards.begin(), cards.end());
-                    m_App.m_OperatorCards[i] = std::make_shared<Util::Image>(cards.front().string());
+                    m_App.m_OperatorCards[i] = loadCachedImage(cards.front());
                 }
             }
 
@@ -112,7 +122,7 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
                 }
                 if (!frames.empty()) {
                     std::sort(frames.begin(), frames.end());
-                    m_App.m_OperatorThumbnails[i] = std::make_shared<Util::Image>(frames[0]);
+                    m_App.m_OperatorThumbnails[i] = loadCachedImage(frames[0]);
                 }
                 break;
             }
@@ -122,16 +132,24 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
 
 void Ark::AppRenderer::DrawBeams() {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const float stageYOffset = EntityYOffsetForStage(m_App.m_CurrentStageFile);
     for (const auto& beam : m_App.m_Beams) {
         const float alpha = std::clamp(beam.ttlMs / BEAM_DURATION_MS, 0.0F, 1.0F);
-        draw->AddLine(m_App.ToScreenPosition(m_App.ToPtsdPosition(beam.from)),
-                      m_App.ToScreenPosition(m_App.ToPtsdPosition(beam.to)),
+        ImVec2 from = m_App.ToScreenPosition(m_App.ToPtsdPosition(beam.from));
+        ImVec2 to = m_App.ToScreenPosition(m_App.ToPtsdPosition(beam.to));
+        from.y += stageYOffset;
+        to.y += stageYOffset;
+        draw->AddLine(from,
+                      to,
                       IM_COL32(255, 239, 120, static_cast<int>(255.0F * alpha)), 2.5F);
     }
 }
 
 void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgroundOnly) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const float operatorScale = OperatorVisualScaleForStage(m_App.m_CurrentStageFile);
+    const float placeholderScale = operatorScale / OPERATOR_VISUAL_SCALE;
+    const float stageYOffset = EntityYOffsetForStage(m_App.m_CurrentStageFile);
 
     for (const auto& op : m_App.m_Operators) {
         if (!m_App.IsValidOperatorTypeIndex(op.typeIndex)) continue;
@@ -141,16 +159,19 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         float yOff  = (isHigh && !m_App.UsesBoardArtTransform()) ? layout.cellSize * 0.22F : 0.0F;
         const float operatorVisualLift = layout.cellSize * 0.18F;
 
-        auto center0 = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(op.cell)));
+        const glm::vec2 boardCenter = m_App.ToBoardCenter(op.cell);
+        auto center0 = m_App.ToScreenPosition(m_App.ToPtsdPosition(boardCenter));
+        center0.y += stageYOffset;
         ImVec2 center = {center0.x, center0.y - yOff - operatorVisualLift};
 
         // Body quad
         auto q = [&](glm::vec2 off) {
-            ImVec2 v = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(op.cell) + off));
+            ImVec2 v = m_App.ToScreenPosition(m_App.ToPtsdPosition(boardCenter + off));
+            v.y += stageYOffset;
             v.y -= yOff + operatorVisualLift;
             return v;
         };
-        float hs = 0.30F;
+        float hs = 0.30F * placeholderScale;
         ImVec2 p1 = q({-hs,  hs});
         ImVec2 p2 = q({ hs,  hs});
         ImVec2 p3 = q({ hs, -hs});
@@ -179,7 +200,7 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         }
 
         if (tex != 0) {
-            float imgS = layout.cellSize * 0.8F * OPERATOR_VISUAL_SCALE;
+            float imgS = layout.cellSize * 0.8F * operatorScale;
             // No runtime UV flip needed — pre-generated front_flip/ handles LEFT/DOWN
             draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)), 
                            {center.x - imgS, center.y - imgS}, 
@@ -198,7 +219,8 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         // Direction indicator (red bar): now only shown for selected operator.
         if (op.id == m_App.m_SelectedOperatorId) {
             glm::vec2 dirOff = glm::vec2(op.direction.x, op.direction.y) * 0.5F;
-            ImVec2 dirPt = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(op.cell) + dirOff));
+            ImVec2 dirPt = m_App.ToScreenPosition(m_App.ToPtsdPosition(boardCenter + dirOff));
+            dirPt.y += stageYOffset;
             dirPt.y -= yOff + operatorVisualLift;
             draw->AddLine(center, dirPt, IM_COL32(255, 50, 50, 255), 3.5F);
         }
@@ -257,12 +279,15 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
 
 void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const float enemyScale = EnemyVisualScaleForStage(m_App.m_CurrentStageFile);
+    const float stageYOffset = EntityYOffsetForStage(m_App.m_CurrentStageFile);
     for (const auto& e : m_App.m_Enemies) {
         if (!e.alive && e.deathAnimationFinished) continue;
         auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
         c.y -= layout.cellSize * 0.18F;
-        const float r = layout.cellSize * 0.20F * ENEMY_VISUAL_SCALE;
-        const float imgR = layout.cellSize * 0.8F * ENEMY_VISUAL_SCALE;
+        c.y += stageYOffset;
+        const float r = layout.cellSize * 0.20F * enemyScale;
+        const float imgR = layout.cellSize * 0.8F * enemyScale;
 
         GLuint tex = 0;
         if (e.typeIndex >= 0 && e.typeIndex < static_cast<int>(m_App.m_EnemyAnims.size())) {
@@ -291,7 +316,8 @@ void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
         if (!e.alive) continue;
         auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
         c.y -= layout.cellSize * 0.18F;
-        const float r = layout.cellSize * 0.20F * ENEMY_VISUAL_SCALE;
+        c.y += stageYOffset;
+        const float r = layout.cellSize * 0.20F * enemyScale;
         const float hpR    = e.maxHp > 0 ? std::clamp(e.hp/e.maxHp, 0.0F, 1.0F) : 0.0F;
         const float barHW  = layout.cellSize * 0.24F;
         const float barTop = c.y - r - 9.0F;

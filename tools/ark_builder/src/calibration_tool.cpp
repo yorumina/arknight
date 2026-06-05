@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -78,8 +79,15 @@ auto TileAt(const StageModel& stage, int x, int y) -> std::string {
     return "empty";
 }
 
+auto NormalizedTileAt(const StageModel& stage, int x, int y) -> std::string {
+    std::string tile = TileAt(stage, x, y);
+    std::transform(tile.begin(), tile.end(), tile.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return tile;
+}
+
 auto IsMappableTile(const StageModel& stage, int x, int y) -> bool {
-    return TileAt(stage, x, y) != "unusablehighground";
+    return NormalizedTileAt(stage, x, y) != "empty";
 }
 
 auto Lerp(const Vec2& a, const Vec2& b, float t) -> Vec2 {
@@ -91,11 +99,23 @@ auto QuadPoint(const std::array<Vec2, 4>& q, float u, float v) -> Vec2 {
 }
 
 auto BaseBoardQuad(const StageModel& stage) -> std::array<Vec2, 4> {
-    const auto& art = stage.doc["board_art"];
-    const auto topLeft = PointFromJson(art, "top_left").value_or(Vec2{0.0F, 0.0F});
-    const auto topRight = PointFromJson(art, "top_right").value_or(Vec2{stage.referenceSize.x, 0.0F});
-    const auto bottomRight = PointFromJson(art, "bottom_right").value_or(stage.referenceSize);
-    const auto bottomLeft = PointFromJson(art, "bottom_left").value_or(Vec2{0.0F, stage.referenceSize.y});
+    const json* art = nullptr;
+    if (stage.doc.contains("board_art") && stage.doc["board_art"].is_object()) {
+        art = &stage.doc["board_art"];
+    }
+
+    const auto topLeft = art != nullptr
+        ? PointFromJson(*art, "top_left").value_or(Vec2{0.0F, 0.0F})
+        : Vec2{0.0F, 0.0F};
+    const auto topRight = art != nullptr
+        ? PointFromJson(*art, "top_right").value_or(Vec2{stage.referenceSize.x, 0.0F})
+        : Vec2{stage.referenceSize.x, 0.0F};
+    const auto bottomRight = art != nullptr
+        ? PointFromJson(*art, "bottom_right").value_or(stage.referenceSize)
+        : stage.referenceSize;
+    const auto bottomLeft = art != nullptr
+        ? PointFromJson(*art, "bottom_left").value_or(Vec2{0.0F, stage.referenceSize.y})
+        : Vec2{0.0F, stage.referenceSize.y};
     return {topLeft, topRight, bottomRight, bottomLeft};
 }
 
@@ -200,6 +220,24 @@ void SetCellCorner(StageModel& stage, int x, int y, Corner corner, const Vec2& p
         index = static_cast<int>(cells.size()) - 1;
     }
     cells[static_cast<std::size_t>(index)][CornerKey(corner)] = PointToJson(point);
+}
+
+void PruneUnmappableCellOverrides(StageModel& stage) {
+    if (!stage.doc.contains("board_art") || !stage.doc["board_art"].is_object() ||
+        !stage.doc["board_art"].contains("cells") || !stage.doc["board_art"]["cells"].is_array()) {
+        return;
+    }
+
+    json kept = json::array();
+    for (const auto& cell : stage.doc["board_art"]["cells"]) {
+        if (!cell.is_object()) continue;
+        const int x = cell.value("x", -1);
+        const int y = cell.value("y", -1);
+        if (x < 0 || y < 0 || x >= stage.width || y >= stage.height) continue;
+        if (!IsMappableTile(stage, x, y)) continue;
+        kept.push_back(cell);
+    }
+    stage.doc["board_art"]["cells"] = std::move(kept);
 }
 
 auto VertexForCorner(int x, int y, Corner corner) -> glm::ivec2 {
@@ -502,7 +540,7 @@ void RunCalibrate(const std::vector<std::string>& args) {
         selectedY = std::clamp(selectedY, 0, std::max(0, stage.height - 1));
         ImGui::Text("Tile: %s", TileAt(stage, selectedX, selectedY).c_str());
         if (!IsMappableTile(stage, selectedX, selectedY)) {
-            ImGui::TextColored({1.0F, 0.42F, 0.18F, 1.0F}, "unusablehighground is intentionally not mapped.");
+            ImGui::TextColored({1.0F, 0.42F, 0.18F, 1.0F}, "empty tiles are intentionally not mapped.");
         }
 
         const char* cornerLabels[] = {"Left Top", "Right Top", "Left Bottom", "Right Bottom"};
@@ -512,6 +550,7 @@ void RunCalibrate(const std::vector<std::string>& args) {
         }
 
         if (ImGui::Button("Save")) {
+            PruneUnmappableCellOverrides(stage);
             SaveJson(stage.path, stage.doc);
             dirty = false;
             status = "Saved " + stage.path.string();

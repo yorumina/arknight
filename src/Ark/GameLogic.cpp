@@ -119,7 +119,6 @@ void App::ResetDemo() {
 }
 
 void App::LoadOperatorAnimations() {
-    Util::Animation::ClearDecodedMediaCache();
     m_OperatorAnims.clear();
     const auto clipPacks = Ark::LoadOperatorAnimationClips(m_OperatorTemplates);
     m_OperatorAnims.resize(clipPacks.size());
@@ -258,6 +257,7 @@ bool App::LoadStageFromJsonModule() {
     m_StageOverlayLoadedPath.clear();
     m_StageBackground.reset();
     m_TileImageCache.clear();
+    RebuildBoardArtScreenCache();
     return true;
 }
 
@@ -267,6 +267,7 @@ void App::BuildFallbackStage() {
     m_StageLoadSource = "embedded fallback";
     m_HasBoardLayoutOverride = false;
     m_BoardArtTransform = {};
+    RebuildBoardArtScreenCache();
     m_StageBackgroundPath.clear();
     m_StageBackgroundAlpha = 1.0F;
     m_StageBackground.reset();

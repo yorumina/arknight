@@ -3,6 +3,7 @@
 #include "Ark/GameConstants.hpp"
 
 #include <algorithm>
+#include <string>
 
 namespace Ark::RendererConst {
 inline constexpr ImU32 COLOR_GRID_WHITE_MAIN = IM_COL32(255, 255, 255, 205);
@@ -23,8 +24,9 @@ inline constexpr float BEAM_DURATION_MS = Ark::GameConst::BEAM_DURATION_MS;
 inline constexpr float BAGPIPE_SP_PER_SKILL = Ark::GameConst::BAGPIPE_SP_PER_SKILL;
 inline constexpr int BAGPIPE_MAX_CHARGES = Ark::GameConst::BAGPIPE_MAX_CHARGES;
 inline constexpr float BAGPIPE_SKILL_DURATION_MS = Ark::GameConst::BAGPIPE_SKILL_DURATION_MS;
-inline constexpr float OPERATOR_VISUAL_SCALE = 1.1F;
-inline constexpr float ENEMY_VISUAL_SCALE = 1.2F;
+inline constexpr float OPERATOR_VISUAL_SCALE = 1.716F;
+inline constexpr float ENEMY_VISUAL_SCALE = 1.872F;
+inline constexpr float OPERATION_1_1_ENTITY_Y_OFFSET_PX = -10.0F;
 inline constexpr float PRE_STAGE_TOTAL_MS = 2000.0F;
 inline constexpr float PRE_STAGE_FADE_MS = 500.0F;
 inline constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
@@ -36,6 +38,27 @@ inline constexpr float MISSION_COMPLETE_HOLD_MS = Ark::GameConst::MISSION_COMPLE
 inline constexpr float MISSION_COMPLETE_TOTAL_MS = Ark::GameConst::MISSION_COMPLETE_TOTAL_MS;
 inline constexpr float QUIT_PANEL_ASPECT = 2611.0F / 671.0F;
 inline constexpr float QUIT_PANEL_BUTTON_HEIGHT_RATIO = 120.0F / 671.0F;
+
+inline bool IsOperationStage(const std::string& stageFile, const char* operationName) {
+    return stageFile.find(operationName) != std::string::npos;
+}
+
+inline float OperatorVisualScaleForStage(const std::string& stageFile) {
+    if (IsOperationStage(stageFile, "Operation 1-1")) return OPERATOR_VISUAL_SCALE * 1.20F;
+    if (IsOperationStage(stageFile, "Operation 1-2")) return OPERATOR_VISUAL_SCALE * 0.70F;
+    return OPERATOR_VISUAL_SCALE;
+}
+
+inline float EnemyVisualScaleForStage(const std::string& stageFile) {
+    if (IsOperationStage(stageFile, "Operation 1-1")) return ENEMY_VISUAL_SCALE * 1.30F;
+    if (IsOperationStage(stageFile, "Operation 1-2")) return ENEMY_VISUAL_SCALE * 0.70F;
+    return ENEMY_VISUAL_SCALE;
+}
+
+inline float EntityYOffsetForStage(const std::string& stageFile) {
+    if (IsOperationStage(stageFile, "Operation 1-1")) return OPERATION_1_1_ENTITY_Y_OFFSET_PX;
+    return 0.0F;
+}
 
 inline constexpr float OP_BAR_HEIGHT = 116.0F;
 inline constexpr float OP_CARD_WIDTH = 106.0F;

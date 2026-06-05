@@ -85,6 +85,7 @@ private:
 
     std::optional<glm::ivec2> ToCell(const glm::vec2& ptsdPos) const;
     std::optional<glm::ivec2> ResolveDeploymentCell(int typeIndex, const glm::vec2& ptsdPos) const;
+    void RebuildBoardArtScreenCache();
     glm::vec2  ToBoardCenter(const glm::ivec2& cell) const;
     glm::vec2  ToPtsdPosition(const glm::vec2& boardPos) const;
     ImVec2     ToScreenPosition(const glm::vec2& ptsdPos) const;
@@ -111,6 +112,8 @@ private:
     bool m_HasBoardLayoutOverride = false;
     Ark::BoardLayout m_BoardLayoutOverride{};
     Ark::BoardArtTransform m_BoardArtTransform{};
+    std::vector<std::vector<bool>> m_BoardArtCellMappedCache;
+    std::vector<std::vector<std::array<ImVec2, 4>>> m_BoardArtCellQuadCache;
     std::string m_StageBackgroundPath;
     float m_StageBackgroundAlpha = 1.0F;
     std::shared_ptr<Util::Image> m_StageBackground;
@@ -132,7 +135,7 @@ private:
     bool  m_ShowQuitConfirm = false;
     bool  m_PauseBeforeQuitConfirm = false;
     float m_GameSpeedMultiplier = 1.0F; // 1x or 2x
-    bool  m_ShowMapModel = true;
+    bool  m_ShowMapModel = false;
     bool  m_CheatMode = false;
     float m_ClearTimerMs = 0.0F;
     bool  m_PreStageWaiting = true;
@@ -224,6 +227,7 @@ private:
     std::vector<std::shared_ptr<Util::Image>> m_OperatorSkillImages;
     std::vector<std::shared_ptr<Util::Image>> m_OperatorFeatureImages;
     std::shared_ptr<Util::Image> m_VanguardIcon;
+    std::map<std::string, std::shared_ptr<Util::Image>> m_StaticImageCache;
     std::shared_ptr<Ark::AppRenderer> m_Renderer;
 };
 

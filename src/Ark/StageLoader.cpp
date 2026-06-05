@@ -322,6 +322,7 @@ StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
             data.boardLayoutOverride.topLeftY = boardLayout.value("top_left_y", data.boardLayoutOverride.topLeftY);
             data.hasBoardLayoutOverride = data.boardLayoutOverride.cellSize > 0.0F;
         }
+        bool seedBoardArtCellsFromCorners = false;
         if (stage.contains("board_art") && stage["board_art"].is_object()) {
             const auto& boardArt = stage["board_art"];
             auto readPoint = [&](const char* key) -> std::optional<glm::vec2> {
@@ -350,10 +351,24 @@ StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
             const auto topRight = readPoint("top_right");
             const auto bottomRight = readPoint("bottom_right");
             const auto bottomLeft = readPoint("bottom_left");
+            const auto referenceSize = readReferenceSize();
+            const bool hasCellOverrides = boardArt.contains("cells") && boardArt["cells"].is_array();
             if (topLeft && topRight && bottomRight && bottomLeft) {
                 data.boardArt.enabled = true;
                 data.boardArt.corners = {*topLeft, *topRight, *bottomRight, *bottomLeft};
-                data.boardArt.referenceSize = readReferenceSize();
+                data.boardArt.referenceSize = referenceSize;
+                seedBoardArtCellsFromCorners = true;
+            } else if (hasCellOverrides && referenceSize.x > 0.0F && referenceSize.y > 0.0F) {
+                data.boardArt.enabled = true;
+                data.boardArt.corners = {
+                    glm::vec2{0.0F, 0.0F},
+                    glm::vec2{referenceSize.x, 0.0F},
+                    glm::vec2{referenceSize.x, referenceSize.y},
+                    glm::vec2{0.0F, referenceSize.y}
+                };
+                data.boardArt.referenceSize = referenceSize;
+            } else if (hasCellOverrides) {
+                result.errors.push_back("board_art cells require reference_size when top-level corners are omitted");
             } else {
                 result.errors.push_back("board_art requires top_left, top_right, bottom_right, and bottom_left point arrays");
             }
@@ -429,20 +444,22 @@ StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
             };
             data.boardArt.cells.assign(static_cast<std::size_t>(H),
                                        std::vector<BoardArtCell>(static_cast<std::size_t>(W)));
-            for (int y = 0; y < H; ++y) {
-                for (int x = 0; x < W; ++x) {
-                    if (data.tileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] ==
-                        TileType::UNUSABLE_HIGHGROUND) {
-                        continue;
+            if (seedBoardArtCellsFromCorners) {
+                for (int y = 0; y < H; ++y) {
+                    for (int x = 0; x < W; ++x) {
+                        if (data.tileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] ==
+                            TileType::EMPTY) {
+                            continue;
+                        }
+                        auto& cell = data.boardArt.cells[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)];
+                        cell.enabled = true;
+                        cell.corners = {
+                            boardArtPoint(static_cast<float>(x), static_cast<float>(y)),
+                            boardArtPoint(static_cast<float>(x + 1), static_cast<float>(y)),
+                            boardArtPoint(static_cast<float>(x + 1), static_cast<float>(y + 1)),
+                            boardArtPoint(static_cast<float>(x), static_cast<float>(y + 1))
+                        };
                     }
-                    auto& cell = data.boardArt.cells[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)];
-                    cell.enabled = true;
-                    cell.corners = {
-                        boardArtPoint(static_cast<float>(x), static_cast<float>(y)),
-                        boardArtPoint(static_cast<float>(x + 1), static_cast<float>(y)),
-                        boardArtPoint(static_cast<float>(x + 1), static_cast<float>(y + 1)),
-                        boardArtPoint(static_cast<float>(x), static_cast<float>(y + 1))
-                    };
                 }
             }
 
@@ -464,7 +481,7 @@ StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
                     const int y = overrideCell.value("y", -1);
                     if (x < 0 || x >= W || y < 0 || y >= H) continue;
                     if (data.tileMap[static_cast<std::size_t>(y)][static_cast<std::size_t>(x)] ==
-                        TileType::UNUSABLE_HIGHGROUND) {
+                        TileType::EMPTY) {
                         continue;
                     }
                     const auto topLeft = readPoint(overrideCell, "top_left");

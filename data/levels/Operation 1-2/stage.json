@@ -1,110 +1,819 @@
 {
-  "name": "Operation 1-2",
-  "width": 10,
-  "height": 5,
   "background": {
-    "image": "Operation 1-2.png",
-    "alpha": 0.82
+    "alpha": 0.82,
+    "image": "Operation 1-2.png"
+  },
+  "board_art": {
+    "cells": [
+      {
+        "bottom_left": [
+          324.26666259765625,
+          848.914794921875
+        ],
+        "bottom_right": [
+          525.2740478515625,
+          848.914794921875
+        ],
+        "top_left": [
+          364.0888977050781,
+          664.9740600585938
+        ],
+        "top_right": [
+          551.8222045898438,
+          664.9740600585938
+        ],
+        "x": 1,
+        "y": 4
+      },
+      {
+        "bottom_left": [
+          121.36296081542969,
+          848.914794921875
+        ],
+        "bottom_right": [
+          324.26666259765625,
+          848.914794921875
+        ],
+        "top_left": [
+          168.77037048339844,
+          664.9740600585938
+        ],
+        "top_right": [
+          364.0888977050781,
+          664.9740600585938
+        ],
+        "x": 0,
+        "y": 4
+      },
+      {
+        "bottom_left": [
+          364.0888977050781,
+          664.9740600585938
+        ],
+        "bottom_right": [
+          551.8222045898438,
+          664.9740600585938
+        ],
+        "top_left": [
+          405.8074035644531,
+          499.9963073730469
+        ],
+        "top_right": [
+          580.2666625976563,
+          498.1000061035156
+        ],
+        "x": 1,
+        "y": 3
+      },
+      {
+        "bottom_left": [
+          525.2740478515625,
+          848.914794921875
+        ],
+        "bottom_right": [
+          724.3851928710938,
+          850.8110961914063
+        ],
+        "top_left": [
+          551.8222045898438,
+          664.9740600585938
+        ],
+        "top_right": [
+          737.6592407226563,
+          664.9740600585938
+        ],
+        "x": 2,
+        "y": 4
+      },
+      {
+        "bottom_left": [
+          551.8222045898438,
+          664.9740600585938
+        ],
+        "bottom_right": [
+          737.6592407226563,
+          664.9740600585938
+        ],
+        "top_left": [
+          580.2666625976563,
+          498.1000061035156
+        ],
+        "top_right": [
+          754.7259521484375,
+          498.1000061035156
+        ],
+        "x": 2,
+        "y": 3
+      },
+      {
+        "bottom_left": [
+          724.3851928710938,
+          850.8110961914063
+        ],
+        "bottom_right": [
+          925.392578125,
+          850.8110961914063
+        ],
+        "top_left": [
+          737.6592407226563,
+          664.9740600585938
+        ],
+        "top_right": [
+          929.1851806640625,
+          664.9740600585938
+        ],
+        "x": 3,
+        "y": 4
+      },
+      {
+        "bottom_left": [
+          737.6592407226563,
+          664.9740600585938
+        ],
+        "bottom_right": [
+          929.1851806640625,
+          664.9740600585938
+        ],
+        "top_left": [
+          754.7259521484375,
+          498.1000061035156
+        ],
+        "top_right": [
+          934.8740844726563,
+          498.1000061035156
+        ],
+        "x": 3,
+        "y": 3
+      },
+      {
+        "bottom_left": [
+          925.392578125,
+          850.8110961914063
+        ],
+        "bottom_right": [
+          1124.503662109375,
+          850.8110961914063
+        ],
+        "top_left": [
+          929.1851806640625,
+          664.9740600585938
+        ],
+        "top_right": [
+          1116.9185791015625,
+          664.9740600585938
+        ],
+        "x": 4,
+        "y": 4
+      },
+      {
+        "bottom_left": [
+          929.1851806640625,
+          664.9740600585938
+        ],
+        "bottom_right": [
+          1116.9185791015625,
+          664.9740600585938
+        ],
+        "top_left": [
+          934.8740844726563,
+          498.1000061035156
+        ],
+        "top_right": [
+          1113.1259765625,
+          499.9963073730469
+        ],
+        "x": 4,
+        "y": 3
+      },
+      {
+        "bottom_left": [
+          580.2666625976563,
+          498.1000061035156
+        ],
+        "bottom_right": [
+          754.7259521484375,
+          498.1000061035156
+        ],
+        "top_left": [
+          601.1259155273438,
+          353.9814758300781
+        ],
+        "top_right": [
+          769.8963012695313,
+          352.0851745605469
+        ],
+        "x": 2,
+        "y": 2
+      },
+      {
+        "bottom_left": [
+          405.8074035644531,
+          499.9963073730469
+        ],
+        "bottom_right": [
+          580.2666625976563,
+          498.1000061035156
+        ],
+        "top_left": [
+          438.04443359375,
+          353.9814758300781
+        ],
+        "top_right": [
+          601.1259155273438,
+          353.9814758300781
+        ],
+        "x": 1,
+        "y": 2
+      },
+      {
+        "bottom_left": [
+          438.04443359375,
+          353.9814758300781
+        ],
+        "bottom_right": [
+          601.1259155273438,
+          353.9814758300781
+        ],
+        "top_left": [
+          462.6962890625,
+          221.24073791503906
+        ],
+        "top_right": [
+          618.1925659179688,
+          221.24073791503906
+        ],
+        "x": 1,
+        "y": 1
+      },
+      {
+        "bottom_left": [
+          601.1259155273438,
+          353.9814758300781
+        ],
+        "bottom_right": [
+          769.8963012695313,
+          352.0851745605469
+        ],
+        "top_left": [
+          618.1925659179688,
+          221.24073791503906
+        ],
+        "top_right": [
+          781.2740478515625,
+          223.1370391845703
+        ],
+        "x": 2,
+        "y": 1
+      },
+      {
+        "bottom_left": [
+          769.8963012695313,
+          352.0851745605469
+        ],
+        "bottom_right": [
+          940.56298828125,
+          352.0851745605469
+        ],
+        "top_left": [
+          781.2740478515625,
+          223.1370391845703
+        ],
+        "top_right": [
+          938.6666870117188,
+          221.24073791503906
+        ],
+        "x": 3,
+        "y": 1
+      },
+      {
+        "bottom_left": [
+          754.7259521484375,
+          498.1000061035156
+        ],
+        "bottom_right": [
+          934.8740844726563,
+          498.1000061035156
+        ],
+        "top_left": [
+          769.8963012695313,
+          352.0851745605469
+        ],
+        "top_right": [
+          940.56298828125,
+          352.0851745605469
+        ],
+        "x": 3,
+        "y": 2
+      },
+      {
+        "bottom_left": [
+          934.8740844726563,
+          498.1000061035156
+        ],
+        "bottom_right": [
+          1113.1259765625,
+          499.9963073730469
+        ],
+        "top_left": [
+          940.56298828125,
+          352.0851745605469
+        ],
+        "top_right": [
+          1107.43701171875,
+          352.0851745605469
+        ],
+        "x": 4,
+        "y": 2
+      },
+      {
+        "bottom_left": [
+          940.56298828125,
+          352.0851745605469
+        ],
+        "bottom_right": [
+          1107.43701171875,
+          352.0851745605469
+        ],
+        "top_left": [
+          938.6666870117188,
+          221.24073791503906
+        ],
+        "top_right": [
+          1101.7481689453125,
+          221.24073791503906
+        ],
+        "x": 4,
+        "y": 1
+      },
+      {
+        "bottom_left": [
+          1107.43701171875,
+          352.0851745605469
+        ],
+        "bottom_right": [
+          1278.103759765625,
+          352.0851745605469
+        ],
+        "top_left": [
+          1101.7481689453125,
+          221.24073791503906
+        ],
+        "top_right": [
+          1264.82958984375,
+          221.24073791503906
+        ],
+        "x": 5,
+        "y": 1
+      },
+      {
+        "bottom_left": [
+          1101.7481689453125,
+          221.24073791503906
+        ],
+        "bottom_right": [
+          1264.82958984375,
+          221.24073791503906
+        ],
+        "top_left": [
+          1097.95556640625,
+          99.87777709960938
+        ],
+        "top_right": [
+          1253.451904296875,
+          99.87777709960938
+        ],
+        "x": 5,
+        "y": 0
+      },
+      {
+        "bottom_left": [
+          1113.1259765625,
+          499.9963073730469
+        ],
+        "bottom_right": [
+          1289.4814453125,
+          501.892578125
+        ],
+        "top_left": [
+          1107.43701171875,
+          352.0851745605469
+        ],
+        "top_right": [
+          1278.103759765625,
+          352.0851745605469
+        ],
+        "x": 5,
+        "y": 2
+      },
+      {
+        "bottom_left": [
+          1278.103759765625,
+          352.0851745605469
+        ],
+        "bottom_right": [
+          1444.977783203125,
+          353.9814758300781
+        ],
+        "top_left": [
+          1264.82958984375,
+          221.24073791503906
+        ],
+        "top_right": [
+          1429.807373046875,
+          223.1370391845703
+        ],
+        "x": 6,
+        "y": 1
+      },
+      {
+        "bottom_left": [
+          1264.82958984375,
+          221.24073791503906
+        ],
+        "bottom_right": [
+          1429.807373046875,
+          223.1370391845703
+        ],
+        "top_left": [
+          1253.451904296875,
+          99.87777709960938
+        ],
+        "top_right": [
+          1408.9481201171875,
+          99.87777709960938
+        ],
+        "x": 6,
+        "y": 0
+      },
+      {
+        "bottom_left": [
+          1289.4814453125,
+          501.892578125
+        ],
+        "bottom_right": [
+          1463.9407958984375,
+          499.9963073730469
+        ],
+        "top_left": [
+          1278.103759765625,
+          352.0851745605469
+        ],
+        "top_right": [
+          1444.977783203125,
+          353.9814758300781
+        ],
+        "x": 6,
+        "y": 2
+      },
+      {
+        "bottom_left": [
+          1444.977783203125,
+          353.9814758300781
+        ],
+        "bottom_right": [
+          1611.851806640625,
+          353.9814758300781
+        ],
+        "top_left": [
+          1429.807373046875,
+          223.1370391845703
+        ],
+        "top_right": [
+          1583.4073486328125,
+          221.24073791503906
+        ],
+        "x": 7,
+        "y": 1
+      },
+      {
+        "bottom_left": [
+          1429.807373046875,
+          223.1370391845703
+        ],
+        "bottom_right": [
+          1583.4073486328125,
+          221.24073791503906
+        ],
+        "top_left": [
+          1408.9481201171875,
+          99.87777709960938
+        ],
+        "top_right": [
+          1554.9630126953125,
+          99.87777709960938
+        ],
+        "x": 7,
+        "y": 0
+      },
+      {
+        "bottom_left": [
+          1463.9407958984375,
+          499.9963073730469
+        ],
+        "bottom_right": [
+          1642.192626953125,
+          499.9963073730469
+        ],
+        "top_left": [
+          1444.977783203125,
+          353.9814758300781
+        ],
+        "top_right": [
+          1611.851806640625,
+          353.9814758300781
+        ],
+        "x": 7,
+        "y": 2
+      },
+      {
+        "bottom_left": [
+          1583.4073486328125,
+          221.24073791503906
+        ],
+        "bottom_right": [
+          1767.34814453125,
+          221.24073791503906
+        ],
+        "top_left": [
+          1554.9630126953125,
+          99.87777709960938
+        ],
+        "top_right": [
+          1729.4222412109375,
+          99.87777709960938
+        ],
+        "x": 8,
+        "y": 0
+      }
+    ],
+    "reference_size": [
+      2048.0,
+      945.0
+    ]
   },
   "camera": {
+    "max_zoom": 1.8,
+    "min_zoom": 0.75,
+    "pan_x": -35.0,
+    "pan_y": 0.0,
     "projection_scale_x": 1.25,
     "projection_scale_y": 1.0,
     "projection_skew_x": 0.0,
-    "zoom": 0.92,
-    "min_zoom": 0.75,
-    "max_zoom": 1.8,
-    "pan_x": -35.0,
-    "pan_y": 0.0
-  },
-  "tiles": [
-    ["unusablehighground", 
-     "unusablehighground", 
-     "unusablehighground", 
-     "unusablehighground", 
-     "unusablehighground", 
-     "ground", 
-     "ground", 
-     "ground", 
-     "goal"],
-    ["unusablehighground", 
-     "ground", 
-     "ground", 
-     "ground", 
-     "spawn", 
-     "road", 
-     "highground", 
-     "ground", 
-     "unusablehighground"],
-    ["unusablehighground", 
-     "ground", 
-     "highground", 
-     "highground", 
-     "road", 
-     "spawn", 
-     "ground", 
-     "ground", 
-     "unusablehighground"],
-    ["unusablehighground", 
-     "ground", 
-     "highground", 
-     "highground", 
-     "ground", 
-     "unusablehighground", 
-     "unusablehighground", 
-     "unusablehighground", 
-     "unusablehighground"],
-    ["goal", 
-     "ground", 
-     "ground", 
-     "ground", 
-     "road", 
-     "unusablehighground", 
-     "unusablehighground", 
-     "unusablehighground", 
-     "unusablehighground"]
-  ],
-  "routes": {
-    "left_main": [
-      {"x": 0, "y": 3, "wait": 0.0},
-      {"x": 1, "y": 3, "wait": 0.0},
-      {"x": 1, "y": 2, "wait": 0.0},
-      {"x": 2, "y": 2, "wait": 0.0},
-      {"x": 3, "y": 2, "wait": 0.0},
-      {"x": 4, "y": 2, "wait": 0.0},
-      {"x": 5, "y": 2, "wait": 0.0},
-      {"x": 6, "y": 2, "wait": 0.0},
-      {"x": 7, "y": 2, "wait": 0.0},
-      {"x": 8, "y": 2, "wait": 0.0},
-      {"x": 8, "y": 1, "wait": 0.0},
-      {"x": 9, "y": 1, "wait": 0.0}
-    ],
-    "top_drop": [
-      {"x": 4, "y": 1, "wait": 0.0},
-      {"x": 4, "y": 2, "wait": 0.0},
-      {"x": 5, "y": 2, "wait": 0.0},
-      {"x": 5, "y": 3, "wait": 0.0},
-      {"x": 5, "y": 4, "wait": 0.0}
-    ],
-    "right_gate": [
-      {"x": 6, "y": 2, "wait": 0.0},
-      {"x": 7, "y": 2, "wait": 0.0},
-      {"x": 8, "y": 2, "wait": 0.0},
-      {"x": 8, "y": 1, "wait": 0.0},
-      {"x": 9, "y": 1, "wait": 0.0}
-    ]
+    "zoom": 0.92
   },
   "enemies": {
-    "01": {"hp": 900.0, "speed": 1.9, "damage": 220.0, "attackIntervalMs": 1500.0, "canAttackOperator": true},
-    "02": {"hp": 1850.0, "speed": 1.75, "damage": 400.0, "attackIntervalMs": 1500.0, "canAttackOperator": true},
-    "17": {"hp": 1800.0, "speed": 1.05, "damage": 350.0, "attackIntervalMs": 2200.0, "canAttackOperator": true},
-    "A9": {"hp": 1600.0, "speed": 1.0, "def": 50.0, "damage": 180.0, "attackIntervalMs": 2700.0, "attackRange": 1.75, "isRanged": true, "canAttackOperator": true},
-    "B2": {"hp": 1150.0, "speed": 1.0, "damage": 250.0, "attackIntervalMs": 2000.0, "canAttackOperator": true}
+    "01": {
+      "attackIntervalMs": 1500.0,
+      "canAttackOperator": true,
+      "damage": 220.0,
+      "hp": 900.0,
+      "speed": 1.9
+    },
+    "02": {
+      "attackIntervalMs": 1500.0,
+      "canAttackOperator": true,
+      "damage": 400.0,
+      "hp": 1850.0,
+      "speed": 1.75
+    },
+    "17": {
+      "attackIntervalMs": 2200.0,
+      "canAttackOperator": true,
+      "damage": 350.0,
+      "hp": 1800.0,
+      "speed": 1.05
+    },
+    "A9": {
+      "attackIntervalMs": 2700.0,
+      "attackRange": 1.75,
+      "canAttackOperator": true,
+      "damage": 180.0,
+      "def": 50.0,
+      "hp": 1600.0,
+      "isRanged": true,
+      "speed": 1.0
+    },
+    "B2": {
+      "attackIntervalMs": 2000.0,
+      "canAttackOperator": true,
+      "damage": 250.0,
+      "hp": 1150.0,
+      "speed": 1.0
+    }
   },
+  "height": 5,
+  "name": "Operation 1-2",
+  "routes": {
+    "left_main": [
+      {
+        "wait": 0.0,
+        "x": 0,
+        "y": 3
+      },
+      {
+        "wait": 0.0,
+        "x": 1,
+        "y": 3
+      },
+      {
+        "wait": 0.0,
+        "x": 1,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 2,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 3,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 4,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 5,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 6,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 7,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 8,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 8,
+        "y": 1
+      },
+      {
+        "wait": 0.0,
+        "x": 8,
+        "y": 0
+      }
+    ],
+    "right_gate": [
+      {
+        "wait": 0.0,
+        "x": 6,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 7,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 8,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 8,
+        "y": 1
+      },
+      {
+        "wait": 0.0,
+        "x": 8,
+        "y": 0
+      }
+    ],
+    "top_drop": [
+      {
+        "wait": 0.0,
+        "x": 4,
+        "y": 1
+      },
+      {
+        "wait": 0.0,
+        "x": 4,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 5,
+        "y": 2
+      },
+      {
+        "wait": 0.0,
+        "x": 5,
+        "y": 3
+      },
+      {
+        "wait": 0.0,
+        "x": 5,
+        "y": 4
+      }
+    ]
+  },
+  "tiles": [
+    [
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "ground",
+      "ground",
+      "ground",
+      "goal"
+    ],
+    [
+      "unusablehighground",
+      "ground",
+      "ground",
+      "ground",
+      "spawn",
+      "road",
+      "highground",
+      "ground",
+      "unusablehighground"
+    ],
+    [
+      "unusablehighground",
+      "ground",
+      "highground",
+      "highground",
+      "road",
+      "spawn",
+      "ground",
+      "ground",
+      "unusablehighground"
+    ],
+    [
+      "unusablehighground",
+      "ground",
+      "highground",
+      "highground",
+      "ground",
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground"
+    ],
+    [
+      "goal",
+      "ground",
+      "ground",
+      "ground",
+      "road",
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground",
+      "unusablehighground"
+    ]
+  ],
   "waves": [
-    {"enemy": "01", "route": "left_main", "count": 5, "start": 2.0, "interval": 2.6},
-    {"enemy": "B2", "route": "top_drop", "count": 4, "start": 6.0, "interval": 3.0},
-    {"enemy": "17", "route": "right_gate", "count": 4, "start": 12.0, "interval": 3.2},
-    {"enemy": "A9", "route": "top_drop", "count": 3, "start": 20.0, "interval": 5.0},
-    {"enemy": "02", "route": "left_main", "count": 4, "start": 26.0, "interval": 3.0}
-  ]
+    {
+      "count": 5,
+      "enemy": "01",
+      "interval": 2.6,
+      "route": "left_main",
+      "start": 2.0
+    },
+    {
+      "count": 4,
+      "enemy": "B2",
+      "interval": 3.0,
+      "route": "top_drop",
+      "start": 6.0
+    },
+    {
+      "count": 4,
+      "enemy": "17",
+      "interval": 3.2,
+      "route": "right_gate",
+      "start": 12.0
+    },
+    {
+      "count": 3,
+      "enemy": "A9",
+      "interval": 5.0,
+      "route": "top_drop",
+      "start": 20.0
+    },
+    {
+      "count": 4,
+      "enemy": "02",
+      "interval": 3.0,
+      "route": "left_main",
+      "start": 26.0
+    }
+  ],
+  "width": 9
 }

@@ -400,26 +400,16 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
                                   IM_COL32(0, 0, 0, deploymentPreview ? 150 : 184),
                                   IM_COL32(0, 0, 0, deploymentPreview ? 176 : 208));
 
-    GLuint cardTex = 0;
-    if (static_cast<std::size_t>(typeIndex) < m_App.m_OperatorCards.size() &&
-        m_App.m_OperatorCards[static_cast<std::size_t>(typeIndex)]) {
-        cardTex = m_App.m_OperatorCards[static_cast<std::size_t>(typeIndex)]->GetTextureId();
-    }
     const float iconSize = 80.0F * scale;
     const float iconX = px + 24.0F * scale;
     const float iconY = py + 120.0F * scale;
     draw->AddRectFilled({iconX - 5.0F * scale, iconY - 5.0F * scale},
                         {iconX + iconSize + 5.0F * scale, iconY + iconSize + 5.0F * scale},
                         IM_COL32(8, 10, 12, 185));
-    if (cardTex != 0) {
-        draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(cardTex)),
-                       {iconX, iconY}, {iconX + iconSize, iconY + iconSize},
-                       {0.0F, 0.0F}, {1.0F, 1.0F}, IM_COL32(255, 255, 255, 235));
-    }
-    if (t.isVanguard && m_App.m_VanguardIcon && m_App.m_VanguardIcon->GetTextureId() != 0) {
+    if (m_App.m_VanguardIcon && m_App.m_VanguardIcon->GetTextureId() != 0) {
         DrawIconImage(draw, m_App.m_VanguardIcon,
-                      {iconX + iconSize + 40.0F * scale, iconY + iconSize * 0.55F},
-                      48.0F * scale, 48.0F * scale, 225);
+                      {iconX + iconSize * 0.5F, iconY + iconSize * 0.5F},
+                      iconSize, iconSize, 235);
     }
 
     const float nameX = px + 24.0F * scale;

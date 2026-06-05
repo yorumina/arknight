@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <string>
 
 #include "Ark/GameConstants.hpp"
@@ -99,6 +100,14 @@ void App::Loading() {
     // Phase 1: do heavy initialization while the loading art stays fully visible.
     if (m_LoadingPhase == 1) {
         drawLoading(1.0F);
+        auto warmStaticImage = [&](const std::string& imagePath) {
+            if (imagePath.empty()) return;
+            const auto key = std::filesystem::path(imagePath).lexically_normal().string();
+            if (m_StaticImageCache.find(key) != m_StaticImageCache.end()) return;
+            m_StaticImageCache.emplace(key, std::make_shared<Util::Image>(key));
+        };
+        warmStaticImage(m_StageBackgroundPath);
+        warmStaticImage(m_StageFinishPath);
         LoadOperatorAnimations();
         LoadEnemyAnimations();
         if (m_Renderer) {
