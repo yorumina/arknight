@@ -9,14 +9,22 @@ set(SDL2IMAGE_WEBP OFF CACHE BOOL "" FORCE)
 set(SDL2IMAGE_AVIF OFF CACHE BOOL "" FORCE)
 set(SDL2IMAGE_TIF OFF CACHE BOOL "" FORCE)
 
-# Use system freetype instead of vendored (empty git submodule)
-set(SDL2TTF_VENDORED OFF CACHE BOOL "" FORCE)
+if (MSVC)
+    # On Windows, vendor Freetype from SDL2_ttf's external/ directory
+    set(SDL2TTF_VENDORED ON CACHE BOOL "" FORCE)
+    add_compile_options(/utf-8)
+else()
+    # On Linux/macOS, use system freetype
+    set(SDL2TTF_VENDORED OFF CACHE BOOL "" FORCE)
+endif()
 
 # Add the PTSD submodule
 add_subdirectory(PTSD)
 
 # Ensure executable sees the correct dependencies and includes.
-find_package(SDL2 REQUIRED)
+if (NOT MSVC)
+    find_package(SDL2 REQUIRED)
+endif()
 
 set(ARKNIGHT_SRC
     src/App.cpp
@@ -50,9 +58,11 @@ target_include_directories(Arknight PRIVATE
     include
     include/Ark
 )
-target_compile_options(Arknight PRIVATE
-    -Wall -Wextra -pedantic
-)
+if (MSVC)
+    target_compile_options(Arknight PRIVATE /W4)
+else()
+    target_compile_options(Arknight PRIVATE -Wall -Wextra -pedantic)
+endif()
 
 # Link PTSD and other required libraries
 target_link_libraries(Arknight
@@ -80,6 +90,8 @@ target_include_directories(ArknightBuilder SYSTEM PRIVATE
 target_include_directories(ArknightBuilder PRIVATE
     include
 )
-target_compile_options(ArknightBuilder PRIVATE
-    -Wall -Wextra -pedantic
-)
+if (MSVC)
+    target_compile_options(ArknightBuilder PRIVATE /W4)
+else()
+    target_compile_options(ArknightBuilder PRIVATE -Wall -Wextra -pedantic)
+endif()

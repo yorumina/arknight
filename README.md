@@ -14,6 +14,8 @@ English | [Traditional Chinese](README_zh-tw.md)
 
 ## Build
 
+### Linux/macOS
+
 Clone with submodules:
 
 ```bash
@@ -34,6 +36,20 @@ Build the stage builder CLI:
 cmake --build build --target ArknightBuilder
 ```
 
+### Windows
+
+To compile on Windows, you must ensure the build environment is properly set up. Note that CMake and MSVC may crash if configured directly in folder paths containing Chinese characters or spaces (like OneDrive's `文件`). We provide helper scripts to bypass this.
+
+1. **Install FFmpeg**: Make sure `ffmpeg` is installed and in your environment `PATH`.
+2. **Download Submodules**: In PowerShell, run the download script to fetch the required `freetype` and `harfbuzz` dependencies:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File PTSD/lib/sdl2_ttf/external/Get-GitModules.ps1
+   ```
+3. **Build**: Run the Windows build batch script, which synchronizes files to a temporary `C:\ArkBuild` path, compiles there, and copies the `Arknight.exe` binary back to `.\build\Arknight.exe`:
+   ```cmd
+   .\build_win.bat
+   ```
+
 ## Run
 
 Linux/macOS:
@@ -46,6 +62,11 @@ Windows:
 
 ```powershell
 .\build\Arknight.exe
+```
+
+Or run with animation preloading enabled (`ARKNIGHT_ANIMATION_PRELOAD=1`):
+```cmd
+.\run_preload.bat
 ```
 
 ## Controls

@@ -18,6 +18,11 @@
 #include <unordered_set>
 #include <utility>
 
+#ifdef _MSC_VER
+#define popen _popen
+#define pclose _pclose
+#endif
+
 namespace {
 constexpr int VIDEO_MAX_DIMENSION = 256;
 constexpr std::size_t DEFAULT_VIDEO_CACHE_LIMIT_MIB = 768U;
@@ -111,6 +116,15 @@ void PruneVideoCache(const std::string &protectedPath) {
 }
 
 std::string ShellQuote(const std::string &value) {
+#ifdef _WIN32
+    std::string quoted = "\"";
+    for (char c : value) {
+        if (c == '"') quoted += "\"\"";
+        else quoted += c;
+    }
+    quoted += "\"";
+    return quoted;
+#else
     std::string quoted = "'";
     for (char c : value) {
         if (c == '\'') quoted += "'\\''";
@@ -118,6 +132,7 @@ std::string ShellQuote(const std::string &value) {
     }
     quoted += "'";
     return quoted;
+#endif
 }
 
 std::string ToLower(std::string value) {
@@ -484,7 +499,7 @@ bool ReadDecodedFfmpegFrames(const std::string &command,
                              int frameWidth,
                              int frameHeight,
                              std::vector<SurfacePtr> &surfaces) {
-    FILE *pipe = popen(command.c_str(), "r");
+    FILE *pipe = popen(command.c_str(), "rb");
     if (pipe == nullptr) return false;
 
     std::vector<unsigned char> frameBuffer(frameSizeBytes);
@@ -701,6 +716,30 @@ void Animation::EnsureVideoFrameLoaded() const {
 }
 
 bool Animation::LoadFfmpegFrames(const std::string &mediaPath) {
+#ifdef _WIN32
+    static bool pathUpdated = []() {
+        const char* path = std::getenv("PATH");
+        std::string newPath = path ? path : "";
+        bool updated = false;
+        if (newPath.find("C:\\Program Files\\ffmpeg\\bin") == std::string::npos) {
+            newPath += ";C:\\Program Files\\ffmpeg\\bin";
+            updated = true;
+        }
+        const char* userProfile = std::getenv("USERPROFILE");
+        if (userProfile) {
+            std::string scoopShims = std::string(userProfile) + "\\scoop\\shims";
+            if (newPath.find(scoopShims) == std::string::npos) {
+                newPath += ";" + scoopShims;
+                updated = true;
+            }
+        }
+        if (updated) {
+            _putenv_s("PATH", newPath.c_str());
+        }
+        return true;
+    }();
+#endif
+
     // Cache decoded frames across Animation instances sharing the same media,
     // keeping warm-up work in memory unless an explicit cache budget is configured.
     auto &videoCache = GetVideoCache();

@@ -1,5 +1,7 @@
 find_package(OpenGL REQUIRED)
-find_package(Freetype REQUIRED)
+if (NOT MSVC)
+    find_package(Freetype REQUIRED)
+endif()
 
 cmake_policy(SET CMP0135 NEW)
 
@@ -89,7 +91,11 @@ set(SDL2IMAGE_INSTALL OFF)
 set(SDL2IMAGE_VENDORED ON)
 
 set(SDL2TTF_INSTALL OFF)
-set(SDL2TTF_VENDORED OFF)
+if (MSVC)
+    set(SDL2TTF_VENDORED ON)
+else()
+    set(SDL2TTF_VENDORED OFF)
+endif()
 
 set(SDL2MIXER_INSTALL OFF)
 set(SDL2MIXER_VENDORED ON)
@@ -149,9 +155,15 @@ target_include_directories(ImGui PUBLIC
     ${IMGUI_INCLUDE_DIR}
 )
 target_compile_definitions(ImGui PRIVATE IMGUI_ENABLE_FREETYPE)
-target_link_libraries(ImGui PUBLIC
-    Freetype::Freetype
-)
+if (MSVC)
+    # When SDL2TTF_VENDORED is ON, SDL2_ttf builds freetype as a target
+    target_link_libraries(ImGui PUBLIC freetype)
+    target_include_directories(ImGui PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/sdl2_ttf/external/freetype/include
+    )
+else()
+    target_link_libraries(ImGui PUBLIC Freetype::Freetype)
+endif()
 
 
 set(DEPENDENCY_LINK_LIBRARIES

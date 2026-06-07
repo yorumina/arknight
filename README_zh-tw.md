@@ -14,6 +14,8 @@
 
 ## 建置
 
+### Linux/macOS
+
 下載專案與 submodule：
 
 ```bash
@@ -34,6 +36,20 @@ cmake --build build --target Arknight
 cmake --build build --target ArknightBuilder
 ```
 
+### Windows
+
+在 Windows 上編譯時，您必須確保建置環境正確設定。請注意，如果直接在含有中文或空格的路徑（例如 OneDrive 的 `文件` 目錄）中進行 CMake/MSVC 設定，編譯器與建置工具可能會崩潰。我們提供了輔助腳本來避開此限制。
+
+1. **安裝 FFmpeg**：確保 `ffmpeg` 已安裝並加入至系統環境變數 `PATH`。
+2. **下載相依 Submodule**：在 PowerShell 中執行下載腳本，下載必要的 `freetype` 和 `harfbuzz` 依賴庫：
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File PTSD/lib/sdl2_ttf/external/Get-GitModules.ps1
+   ```
+3. **編譯**：執行 Windows 編譯腳本，它會自動將專案檔案同步到臨時的 `C:\ArkBuild`（純 ASCII 路徑）並在該處完成編譯，最後將產生的 `Arknight.exe` 檔案複製回工作區的 `.\build\Arknight.exe`：
+   ```cmd
+   .\build_win.bat
+   ```
+
 ## 執行
 
 Linux/macOS：
@@ -46,6 +62,11 @@ Windows：
 
 ```powershell
 .\build\Arknight.exe
+```
+
+或者使用預載快取模式執行（`ARKNIGHT_ANIMATION_PRELOAD=1`）：
+```cmd
+.\run_preload.bat
 ```
 
 ## 操作方式
