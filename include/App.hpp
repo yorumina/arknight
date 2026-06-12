@@ -137,6 +137,7 @@ private:
     float m_GameSpeedMultiplier = 1.0F; // 1x or 2x
     bool  m_ShowMapModel = false;
     bool  m_CheatMode = false;
+    float m_GameOverTimerMs = 0.0F;
     float m_ClearTimerMs = 0.0F;
     bool  m_PreStageWaiting = true;
     float m_PreStageTimerMs = 0.0F;
@@ -207,8 +208,12 @@ private:
     struct EnemyAnimPack : Ark::EnemyAnimationClips {
         std::shared_ptr<Util::Animation> sharedIdleInstance;
         std::shared_ptr<Util::Animation> sharedMoveInstance;
+        std::shared_ptr<Util::Animation> sharedIdleFlipInstance;
+        std::shared_ptr<Util::Animation> sharedMoveFlipInstance;
         unsigned long sharedIdleUpdateSerial = 0;
         unsigned long sharedMoveUpdateSerial = 0;
+        unsigned long sharedIdleFlipUpdateSerial = 0;
+        unsigned long sharedMoveFlipUpdateSerial = 0;
         std::map<int, std::shared_ptr<Util::Animation>> attackInstances;
         std::map<int, std::shared_ptr<Util::Animation>> dieInstances;
         std::map<int, std::shared_ptr<Util::Animation>> activeInstances;
@@ -227,6 +232,7 @@ private:
     std::vector<std::shared_ptr<Util::Image>> m_OperatorSkillImages;
     std::vector<std::shared_ptr<Util::Image>> m_OperatorFeatureImages;
     std::shared_ptr<Util::Image> m_VanguardIcon;
+    std::shared_ptr<Util::Image> m_SniperIcon;
     std::map<std::string, std::shared_ptr<Util::Image>> m_StaticImageCache;
     std::shared_ptr<Ark::AppRenderer> m_Renderer;
 };

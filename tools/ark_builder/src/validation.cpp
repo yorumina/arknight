@@ -10,6 +10,18 @@
 
 namespace ark_builder {
 
+auto IsKnownRouteDirection(const std::string& value) -> bool {
+    return value == "normal" || value == "default" ||
+           value == "flip" || value == "flipped";
+}
+
+auto FindRouteDirectionField(const json& node) -> const char* {
+    for (const char* key : {"direction", "model", "facing"}) {
+        if (node.contains(key)) return key;
+    }
+    return nullptr;
+}
+
 void ValidateRootSchema(const json& stage, std::vector<std::string>& errors) {
     if (!stage.is_object()) {
         errors.push_back("stage root must be a JSON object");
@@ -181,6 +193,26 @@ void ValidateRoutes(const json& stage, std::vector<std::string>& errors) {
                                  std::to_string(index) +
                                  " must include numeric wait");
                 continue;
+            }
+            const char* directionField = FindRouteDirectionField(node);
+            if (index == 0 && directionField == nullptr) {
+                errors.push_back("route '" + routeId +
+                                 "' first node must include direction: normal or flip");
+            }
+            if (directionField != nullptr) {
+                const auto& direction = node[directionField];
+                if (direction.is_string()) {
+                    const auto value = direction.get<std::string>();
+                    if (!IsKnownRouteDirection(value)) {
+                        errors.push_back("route '" + routeId + "' node " +
+                                         std::to_string(index) + " has invalid " +
+                                         directionField + ": " + value);
+                    }
+                } else if (!direction.is_boolean()) {
+                    errors.push_back("route '" + routeId + "' node " +
+                                     std::to_string(index) + " has non-string " +
+                                     directionField);
+                }
             }
 
             const int x = node["x"].get<int>();

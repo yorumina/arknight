@@ -73,6 +73,7 @@ void App::ResetDemo() {
     m_ShowQuitConfirm = false;
     m_PauseBeforeQuitConfirm = false;
     m_GameSpeedMultiplier = 1.0F;
+    m_GameOverTimerMs = 0.0F;
     m_ClearTimerMs= 0.0F;
     m_PreStageWaiting = true;
     m_PreStageTimerMs = 0.0F;
@@ -213,6 +214,10 @@ void App::PreloadEnemyAnimationClips() {
         warmClip(pack.move);
         warmClip(pack.attack);
         warmClip(pack.die);
+        warmClip(pack.idleFlip);
+        warmClip(pack.moveFlip);
+        warmClip(pack.attackFlip);
+        warmClip(pack.dieFlip);
     }
 }
 
@@ -306,7 +311,11 @@ void App::BuildFallbackStage() {
         if (i == 0) tile = TileType::SPAWN;
         else if (i + 1 == routeCells.size()) tile = TileType::GOAL;
         else tile = TileType::ROAD;
-        route.nodes.push_back(RouteNode{ToBoardCenter(c), (i == 4) ? 0.8F : 0.0F});
+        route.nodes.push_back(RouteNode{
+            ToBoardCenter(c),
+            (i == 4) ? 0.8F : 0.0F,
+            i == 0 ? EnemySpriteDirection::NORMAL : EnemySpriteDirection::INHERIT
+        });
     }
     m_Routes.push_back(std::move(route));
 
@@ -382,6 +391,9 @@ void App::UpdateGame(float dtMs) {
     }
 
     if (m_GameOver || m_MissionClear) {
+        if (m_GameOver) {
+            m_GameOverTimerMs += dtMs;
+        }
         if (m_MissionClear) {
             m_ClearTimerMs += dtMs;
 

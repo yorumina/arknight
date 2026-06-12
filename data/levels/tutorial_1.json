@@ -16,7 +16,7 @@
   ],
   "routes": {
     "main": [
-      {"x": 0, "y": 4, "wait": 0.0},
+      {"x": 0, "y": 4, "wait": 0.0, "direction": "normal"},
       {"x": 1, "y": 4, "wait": 0.0},
       {"x": 2, "y": 4, "wait": 0.0},
       {"x": 3, "y": 4, "wait": 0.0},

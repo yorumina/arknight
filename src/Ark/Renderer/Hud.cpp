@@ -381,8 +381,9 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
     draw->AddRectFilled({iconX - 5.0F * scale, iconY - 5.0F * scale},
                         {iconX + iconSize + 5.0F * scale, iconY + iconSize + 5.0F * scale},
                         IM_COL32(8, 10, 12, 185));
-    if (m_App.m_VanguardIcon && m_App.m_VanguardIcon->GetTextureId() != 0) {
-        DrawIconImage(draw, m_App.m_VanguardIcon,
+    const auto& classIcon = t.className == "sniper" ? m_App.m_SniperIcon : m_App.m_VanguardIcon;
+    if (classIcon && classIcon->GetTextureId() != 0) {
+        DrawIconImage(draw, classIcon,
                       {iconX + iconSize * 0.5F, iconY + iconSize * 0.5F},
                       iconSize, iconSize, 235);
     }
@@ -394,8 +395,8 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
         levelImage = m_App.m_OperatorLevelImages[static_cast<std::size_t>(typeIndex)];
     }
     if (levelImage && levelImage->GetTextureId() != 0) {
-        DrawIconImage(draw, levelImage, {nameX + 94.0F * scale, nameY + 42.0F * scale},
-                      151.0F * scale, 85.0F * scale, 245);
+        DrawIconImage(draw, levelImage, {nameX + 94.0F * scale - 20.0F, nameY + 42.0F * scale},
+                      151.0F * scale * 1.20F, 85.0F * scale * 1.20F, 245);
     } else {
         AddStrongText(draw, {nameX, nameY}, 34.0F * scale, IM_COL32(248, 248, 248, 255), t.name.c_str());
         AddTextAt(draw, {nameX, nameY + 44.0F * scale}, 20.0F * scale, IM_COL32(236, 240, 246, 238), "LV");
@@ -407,10 +408,11 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
     float statY = nameY + 112.0F * scale;
     const ImU32 labelCol = IM_COL32(208, 214, 224, 220);
     const ImU32 statCol = IM_COL32(238, 243, 250, 245);
+    const float statFontSize = 22.0F * scale * 1.20F;
     auto drawStat = [&](const char* label, const std::string& value) {
-        AddTextAt(draw, {statX, statY}, 22.0F * scale, labelCol, label);
-        AddTextAt(draw, {statX + 58.0F * scale, statY}, 22.0F * scale, statCol, value.c_str());
-        statY += 26.0F * scale;
+        AddStrongText(draw, {statX, statY}, statFontSize, labelCol, label);
+        AddStrongText(draw, {statX + 70.0F * scale, statY}, statFontSize, statCol, value.c_str());
+        statY += 31.0F * scale;
     };
     drawStat(u8"攻擊", std::to_string(toInt(t.damage)));
     drawStat(u8"防禦", std::to_string(toInt(opOnField ? opOnField->def : t.def)));
@@ -428,24 +430,25 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
         if (t.id == "Kroos") {
             constexpr int cols = 4;
             constexpr int rows = 3;
-            const float gap = 5.0F * scale;
-            const float cell = std::min((rangeBox - 28.0F * scale - gap * (cols - 1)) / cols,
-                                        (rangeBox - 54.0F * scale - gap * (rows - 1)) / rows);
+            const float gap = 4.0F * scale;
+            const float cell = std::min((rangeBox - 26.0F * scale - gap * (cols - 1)) / cols,
+                                        (rangeBox - 50.0F * scale - gap * (rows - 1)) / rows);
             const float gridW = cell * cols + gap * (cols - 1);
             const float gx = rangeX + (rangeBox - gridW) * 0.5F;
-            const float gy = rangeY + 15.0F * scale;
+            const float gy = rangeY + 13.0F * scale;
+            const ImU32 fill = IM_COL32(214, 107, 28, 48);
+            const ImU32 line = IM_COL32(236, 120, 30, 238);
+            const ImU32 selfFill = IM_COL32(255, 255, 255, 255);
+            const ImU32 selfLine = IM_COL32(255, 255, 255, 255);
             for (int row = 0; row < rows; ++row) {
                 for (int col = 0; col < cols; ++col) {
                     const float x0 = gx + static_cast<float>(col) * (cell + gap);
                     const float y0 = gy + static_cast<float>(row) * (cell + gap);
-                    const bool origin = col == 0 && row == 1;
+                    const bool isSelfCell = row == 1 && col == 0;
                     draw->AddRectFilled({x0, y0}, {x0 + cell, y0 + cell},
-                                        origin ? IM_COL32(255, 255, 255, 246)
-                                               : IM_COL32(168, 172, 174, 150),
-                                        1.0F * scale);
+                                        isSelfCell ? selfFill : fill, 1.0F * scale);
                     draw->AddRect({x0, y0}, {x0 + cell, y0 + cell},
-                                  IM_COL32(235, 238, 238, origin ? 210 : 82),
-                                  1.0F * scale, 0, 1.7F * scale);
+                                  isSelfCell ? selfLine : line, 1.0F * scale, 0, 2.0F * scale);
                 }
             }
             return;
@@ -460,18 +463,22 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
     AddCenteredText(draw, {rangeX + rangeBox * 0.5F, rangeY + rangeBox - 24.0F * scale},
                     22.0F * scale, IM_COL32(255, 255, 255, 240), u8"攻擊範圍");
 
-    const int curHp = opOnField ? toInt(opOnField->hp) : toInt(t.hp);
-    const int maxHp = toInt(t.hp);
+    const float maxHpValue = std::max(0.0F, opOnField ? opOnField->maxHp : t.hp);
+    const float curHpValue = std::clamp(opOnField ? opOnField->hp : t.hp, 0.0F, maxHpValue);
+    const float hpRatio = maxHpValue > 0.0F ? std::clamp(curHpValue / maxHpValue, 0.0F, 1.0F) : 0.0F;
+    const int curHp = toInt(curHpValue);
+    const int maxHp = toInt(maxHpValue);
     const float hpY = py + portraitH - 28.0F * scale;
     const float hpLabelW = 58.0F * scale;
-    draw->AddRectFilled({px, hpY}, {px + panelW, hpY + 9.0F * scale}, IM_COL32(17, 24, 32, 240));
-    draw->AddRectFilled({px, hpY}, {px + panelW * 0.90F, hpY + 9.0F * scale}, IM_COL32(18, 181, 255, 255));
-    draw->AddRectFilled({px + panelW * 0.80F, hpY + 9.0F * scale},
-                        {px + panelW + 38.0F * scale, hpY + 42.0F * scale}, IM_COL32(28, 138, 218, 220));
-    AddTextAt(draw, {px + panelW * 0.80F + 8.0F * scale, hpY + 12.0F * scale},
+    const float hpBarH = 9.0F * scale * OPERATOR_STATUS_BAR_SCALE;
+    draw->AddRectFilled({px, hpY}, {px + panelW, hpY + hpBarH}, IM_COL32(17, 24, 32, 240));
+    draw->AddRectFilled({px, hpY}, {px + panelW * hpRatio, hpY + hpBarH}, IM_COL32(18, 181, 255, 255));
+    draw->AddRectFilled({px + panelW * 0.80F, hpY + hpBarH},
+                        {px + panelW + 38.0F * scale, hpY + hpBarH + 33.0F * scale}, IM_COL32(28, 138, 218, 220));
+    AddTextAt(draw, {px + panelW * 0.80F + 8.0F * scale, hpY + hpBarH + 3.0F * scale},
               20.0F * scale, IM_COL32(255, 255, 255, 238), u8"生命");
     const std::string hpStr = std::to_string(curHp) + "/" + std::to_string(maxHp);
-    AddTextAt(draw, {px + panelW * 0.80F + hpLabelW, hpY + 9.0F * scale},
+    AddTextAt(draw, {px + panelW * 0.80F + hpLabelW, hpY + hpBarH},
               26.0F * scale, IM_COL32(255, 255, 255, 255), hpStr.c_str());
 
     const float bodyTop = py + portraitH;
@@ -572,7 +579,9 @@ void Ark::AppRenderer::DrawOperatorDetails(int typeIndex, const Ark::Operator* o
         AddStrongText(draw, {textX, contentY - 2.0F * scale}, 25.0F * scale,
                       IM_COL32(255, 255, 255, 246), skillName.c_str());
         float tagX = textX;
-        drawTag(tagX, contentY + 36.0F * scale, u8"自動回復", IM_COL32(138, 194, 66, 236));
+        drawTag(tagX, contentY + 36.0F * scale,
+                t.id == "Kroos" ? u8"攻擊回復" : u8"自動回復",
+                IM_COL32(138, 194, 66, 236));
         drawTag(tagX, contentY + 36.0F * scale, t.id == "Myrtle" ? u8"手動觸發" : u8"自動觸發",
                 IM_COL32(126, 128, 132, 230));
         if (t.id == "Myrtle") {
@@ -1000,13 +1009,4 @@ void Ark::AppRenderer::DrawHUD(float screenW) {
         }
     }
 
-    if (m_App.m_GameOver) {
-        draw->AddRectFilled({0,0},{SW,SH}, IM_COL32(0,0,0,145));
-        const std::string t = "MISSION FAILED";
-        auto ts = ImGui::CalcTextSize(t.c_str());
-        draw->AddText({SW*0.5F-ts.x*0.5F, SH*0.5F-ts.y}, IM_COL32(255,120,120,255), t.c_str());
-        const std::string h = "Press R to restart";
-        auto hs = ImGui::CalcTextSize(h.c_str());
-        draw->AddText({SW*0.5F-hs.x*0.5F, SH*0.5F+12}, COLOR_TEXT_MAIN, h.c_str());
-    }
 }

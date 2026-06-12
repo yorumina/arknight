@@ -9,9 +9,14 @@ namespace Ark {
 // ── Tile / Deploy ───────────────────────────────────────────
 enum class TileType { EMPTY = 0, ROAD, GROUND, HIGHGROUND, UNUSABLE_HIGHGROUND, SPAWN, GOAL };
 enum class DeployType { GROUND_ONLY = 0, HIGHGROUND_ONLY };
+enum class EnemySpriteDirection { INHERIT = 0, NORMAL, FLIP };
 
 // ── Stage data ───────────────────────────────────────────────
-struct RouteNode { glm::vec2 boardPos{0,0}; float waitSec = 0; };
+struct RouteNode {
+    glm::vec2 boardPos{0,0};
+    float waitSec = 0;
+    EnemySpriteDirection spriteDirection = EnemySpriteDirection::INHERIT;
+};
 struct Route { std::string id; std::vector<RouteNode> nodes; };
 
 // ── Enemy ────────────────────────────────────────────────────
@@ -45,6 +50,8 @@ struct Enemy {
     bool canAttackOperator = true;
     ImU32 color = IM_COL32(220, 87, 92, 255);
     bool alive = true;
+    bool useFlipAnimation = false;
+    bool animationFlip = false;
     bool deathAnimationFinished = false;
     float deathElapsedMs = 0.0F;
 
@@ -89,6 +96,30 @@ struct Operator {
     enum class AnimState { START, DEFAULT, ATTACK, SKILL, DIE };
     AnimState animState = AnimState::START;
 };
+
+inline bool IsKroosOperator(const OperatorTemplate& opType) {
+    return opType.id == "Kroos" || opType.name == "Kroos" || opType.name == "克洛絲";
+}
+
+inline bool OperatorAttackRangeContains(const OperatorTemplate& opType,
+                                        const glm::ivec2& rel,
+                                        glm::ivec2 direction) {
+    if (direction.x == 0 && direction.y == 0) direction = {1, 0};
+    if (opType.deployType == DeployType::GROUND_ONLY) {
+        return (rel.x == 0 && rel.y == 0) || rel == direction;
+    }
+
+    const int fw = rel.x * direction.x + rel.y * direction.y;
+    const int pp = rel.x * direction.y - rel.y * direction.x;
+    const int lateral = pp < 0 ? -pp : pp;
+
+    if (IsKroosOperator(opType)) {
+        return (rel.x == 0 && rel.y == 0) ||
+               (fw == 0 && lateral == 1) ||
+               (fw >= 1 && fw <= 3 && lateral <= 1);
+    }
+    return (rel.x == 0 && rel.y == 0) || (fw >= 1 && fw <= 4 && lateral <= 1);
+}
 
 // ── Misc ──────────────────────────────────────────────────────
 struct WavePlan { int waveIndex=0; int enemyTypeIndex=0; int routeIndex=0; float spawnTimeSec=0; };

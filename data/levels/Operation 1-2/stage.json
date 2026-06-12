@@ -666,7 +666,7 @@
       "attackIntervalMs": 1500.0,
       "canAttackOperator": true,
       "damage": 220.0,
-      "hp": 900.0,
+      "hp": 320.0,
       "speed": 1.9
     },
     "02": {
@@ -682,6 +682,13 @@
       "damage": 350.0,
       "hp": 1800.0,
       "speed": 1.05
+    },
+    "21": {
+      "attackIntervalMs": 2800.0,
+      "canAttackOperator": false,
+      "damage": 500.0,
+      "hp": 5000.0,
+      "speed": 0.8
     },
     "A9": {
       "attackIntervalMs": 2700.0,
@@ -701,34 +708,23 @@
       "speed": 1.0
     }
   },
+  "finish": {
+    "alpha": 1.0,
+    "image": "Finish_Operation 1-2.png"
+  },
   "height": 5,
+  "loading": {
+    "alpha": 1.0,
+    "image": "Loading_Operation 1-2.png"
+  },
   "name": "Operation 1-2",
   "routes": {
     "left_main": [
       {
+        "direction": "flip",
         "wait": 0.0,
-        "x": 0,
-        "y": 3
-      },
-      {
-        "wait": 0.0,
-        "x": 1,
-        "y": 3
-      },
-      {
-        "wait": 0.0,
-        "x": 1,
-        "y": 2
-      },
-      {
-        "wait": 0.0,
-        "x": 2,
-        "y": 2
-      },
-      {
-        "wait": 0.0,
-        "x": 3,
-        "y": 2
+        "x": 4,
+        "y": 1
       },
       {
         "wait": 0.0,
@@ -737,55 +733,56 @@
       },
       {
         "wait": 0.0,
+        "x": 4,
+        "y": 3
+      },
+      {
+        "wait": 0.0,
+        "x": 4,
+        "y": 4
+      },
+      {
+        "wait": 0.0,
+        "x": 3,
+        "y": 4
+      },
+      {
+        "wait": 0.0,
+        "x": 2,
+        "y": 4
+      },
+      {
+        "wait": 0.0,
+        "x": 0,
+        "y": 4
+      }
+    ],
+    "right_main": [
+      {
+        "direction": "flip",
+        "wait": 0.0,
         "x": 5,
         "y": 2
       },
       {
         "wait": 0.0,
-        "x": 6,
-        "y": 2
-      },
-      {
-        "wait": 0.0,
-        "x": 7,
-        "y": 2
-      },
-      {
-        "wait": 0.0,
-        "x": 8,
-        "y": 2
-      },
-      {
-        "wait": 0.0,
-        "x": 8,
+        "x": 5,
         "y": 1
       },
       {
         "wait": 0.0,
-        "x": 8,
+        "x": 5,
         "y": 0
-      }
-    ],
-    "right_gate": [
+      },
       {
         "wait": 0.0,
         "x": 6,
-        "y": 2
+        "y": 0
       },
       {
         "wait": 0.0,
         "x": 7,
-        "y": 2
-      },
-      {
-        "wait": 0.0,
-        "x": 8,
-        "y": 2
-      },
-      {
-        "wait": 0.0,
-        "x": 8,
-        "y": 1
+        "y": 0
       },
       {
         "wait": 0.0,
@@ -795,6 +792,7 @@
     ],
     "top_drop": [
       {
+        "direction": "normal",
         "wait": 0.0,
         "x": 4,
         "y": 1
@@ -880,39 +878,60 @@
   ],
   "waves": [
     {
-      "count": 5,
+      "count": 4,
       "enemy": "01",
-      "interval": 2.6,
+      "interval": 2.5,
       "route": "left_main",
-      "start": 2.0
+      "start": 3.0
+    },
+    {
+      "count": 2,
+      "enemy": "02",
+      "interval": 0.5,
+      "route": "left_main",
+      "start": 16.0
+    },
+    {
+      "count": 3,
+      "enemy": "02",
+      "interval": 0.5,
+      "route": "left_main",
+      "start": 25.0
+    },
+    {
+      "count": 7,
+      "enemy": "21",
+      "interval": 1.0,
+      "route": "left_main",
+      "start": 30.0
     },
     {
       "count": 4,
       "enemy": "B2",
       "interval": 3.0,
-      "route": "top_drop",
-      "start": 6.0
+      "route": "right_main",
+      "start": 40.0
     },
     {
       "count": 4,
-      "enemy": "17",
-      "interval": 3.2,
-      "route": "right_gate",
-      "start": 12.0
-    },
-    {
-      "count": 3,
       "enemy": "A9",
-      "interval": 5.0,
-      "route": "top_drop",
-      "start": 20.0
+      "interval": 3.2,
+      "route": "left_main",
+      "start": 40.0
     },
     {
-      "count": 4,
-      "enemy": "02",
-      "interval": 3.0,
+      "count": 100,
+      "enemy": "01",
+      "interval": 0.8,
       "route": "left_main",
-      "start": 26.0
+      "start": 60.0
+    },
+    {
+      "count": 100,
+      "enemy": "01",
+      "interval":0.8,
+      "route": "right_main",
+      "start": 60.0
     }
   ],
   "width": 9

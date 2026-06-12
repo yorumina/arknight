@@ -39,6 +39,11 @@ struct EnemyAnimationClips {
     AnimationClip move;
     AnimationClip attack;
     AnimationClip die;
+
+    AnimationClip idleFlip;
+    AnimationClip moveFlip;
+    AnimationClip attackFlip;
+    AnimationClip dieFlip;
 };
 
 std::vector<OperatorAnimationClips> LoadOperatorAnimationClips(

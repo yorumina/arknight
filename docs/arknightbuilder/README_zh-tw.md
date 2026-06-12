@@ -4,6 +4,15 @@
 
 `ArknightBuilder` 是 `Arknight Linux` 的命令列關卡製作工具。它可以建立與修改關卡 JSON、驗證路線/出生波次/敵人資料，也能在不啟動完整遊戲的情況下做簡單關卡模擬。
 
+## 功能進度
+
+目前規劃的 Builder 功能皆已完成。
+
+- [x] 關卡建立與地形繪製
+- [x] 支援等待時間與模型方向標記的路線編輯
+- [x] 敵人與出生波次編輯
+- [x] 關卡驗證、模擬、檢視與座標校準
+
 ## 建置
 
 請在專案根目錄執行：
@@ -40,7 +49,7 @@ cmake --build build --target ArknightBuilder
 ```bash
 ArknightBuilder new <file> --name <name> --width <w> --height <h>
 ArknightBuilder paint <file> <x> <y> <tile> [--rect-width <w>] [--rect-height <h>]
-ArknightBuilder route-set <file> <route-id> <x,y[:wait]>...
+ArknightBuilder route-set <file> <route-id> <x,y[:wait[:direction]]>...
 ArknightBuilder enemy-set <file> <enemy-id> --hp <value> --speed <value>
 ArknightBuilder spawn-add <file> --enemy <enemy-id> --route <route-id> --count <n> --start <sec> --interval <sec>
 ArknightBuilder validate <file>
@@ -67,7 +76,7 @@ ArknightBuilder calibrate [file]
 ./build/ArknightBuilder paint stage_01.json 0 4 spawn
 ./build/ArknightBuilder paint stage_01.json 15 4 goal
 ./build/ArknightBuilder paint stage_01.json 1 4 road --rect-width 14 --rect-height 1
-./build/ArknightBuilder route-set stage_01.json main 0,4 1,4 2,4 3,4 4,4:1.0 5,4 6,4 7,4 8,4 9,4 10,4 11,4 12,4 13,4 14,4 15,4
+./build/ArknightBuilder route-set stage_01.json main 0,4:0:normal 1,4 2,4 3,4 4,4:1.0 5,4 6,4 7,4 8,4 9,4 10,4 11,4 12,4 13,4 14,4 15,4
 ./build/ArknightBuilder enemy-set stage_01.json slug --hp 100 --speed 1.2
 ./build/ArknightBuilder spawn-add stage_01.json --enemy slug --route main --count 8 --start 0 --interval 1.5
 ./build/ArknightBuilder validate stage_01.json
@@ -86,7 +95,7 @@ ArknightBuilder calibrate [file]
 ## 地形類型
 
 - `empty`：未使用格
-- `road`：敵人路線格
+- `road`：敵人路線格，我方幹員不可部署
 - `ground`：地面幹員部署格
 - `highground`：高台幹員部署格
 - `unusablehighground`：不可部署的高台格
@@ -95,12 +104,14 @@ ArknightBuilder calibrate [file]
 
 ## 路線格式
 
-路線點使用 `x,y` 座標。若要讓敵人在某一點等待，可以在該點後面加上 `:wait`。
+路線點使用 `x,y` 座標。若要讓敵人在某一點等待，可以在該點後面加上 `:wait`。若要指定敵人在該點使用正常或左右翻轉模型，可以再加上 `:direction`。
+
+第一個路線點必須指定 `normal` 或 `flip`。後續路線點若沒有指定方向，就會沿用目前方向；若重新指定，則會覆蓋後續方向。
 
 範例：
 
 ```bash
-./build/ArknightBuilder route-set stage_01.json main 0,4 1,4 2,4:1.0 3,4
+./build/ArknightBuilder route-set stage_01.json main 0,4:0:normal 1,4 2,4:1.0:flip 3,4
 ```
 
 ## 驗證

@@ -31,7 +31,7 @@ bool IsMyrtle(const OperatorTemplate& opType) {
 }
 
 bool IsSniper(const OperatorTemplate& opType) {
-    return opType.name == "Sniper" || opType.id == "Sniper";
+    return opType.className == "sniper" || opType.name == "Sniper" || opType.id == "Sniper";
 }
 } // namespace
 
@@ -186,6 +186,7 @@ void App::UpdateOperators(float dtMs) {
 
         const bool isBagpipe = IsBagpipe(opType);
         const bool isMyrtle = IsMyrtle(opType);
+        const bool isKroos = IsKroosOperator(opType);
 
         // Myrtle talent: all vanguards regen 33 HP/s
         if (myrtleOnField && opType.isVanguard)
@@ -204,7 +205,7 @@ void App::UpdateOperators(float dtMs) {
         } else if (opType.maxSp > 0) {
             if (isBagpipe) {
                 op.sp = std::min(BAGPIPE_MAX_SP, op.sp + 1.0F * dtSec);
-            } else {
+            } else if (!isKroos) {
                 op.sp = std::min(opType.maxSp, op.sp + 1.0F * dtSec);
             }
         }
@@ -248,15 +249,7 @@ void App::UpdateOperators(float dtMs) {
             glm::ivec2 eCel{ static_cast<int>(std::floor(e.boardPos.x)),
                              static_cast<int>(std::floor(e.boardPos.y)) };
             glm::ivec2 rel = eCel - op.cell;
-            bool inRange = false;
-
-            if (opType.deployType == DeployType::GROUND_ONLY) {
-                inRange = (rel.x == 0 && rel.y == 0) || (rel == op.direction);
-            } else {
-                int fw = rel.x * op.direction.x + rel.y * op.direction.y;
-                int pp = rel.x * op.direction.y - rel.y * op.direction.x;
-                inRange = (fw >= 1 && fw <= 4 && std::abs(pp) <= 1) || (rel.x == 0 && rel.y == 0);
-            }
+            const bool inRange = OperatorAttackRangeContains(opType, rel, op.direction);
 
             if (inRange) {
                 const auto d = e.boardPos - opPos;
@@ -284,6 +277,14 @@ void App::UpdateOperators(float dtMs) {
 
         if (op.cooldownMs > 0.0F || validTargets.empty()) continue;
 
+        const bool kroosSkillAttack =
+            isKroos && !op.skillActive && opType.maxSp > 0.0F && op.sp >= opType.maxSp;
+        if (kroosSkillAttack) {
+            op.skillActive = true;
+            op.skillTimerMs = std::max(1.0F, opType.skillDuration);
+            op.sp = 0.0F;
+        }
+
         for (auto& target : validTargets) {
             target.remainToGoal = computeRemainToGoal(m_Enemies[static_cast<std::size_t>(target.idx)]);
         }
@@ -294,6 +295,7 @@ void App::UpdateOperators(float dtMs) {
 
         float dmgMult = 1.0F;
         int maxTargets = 1;
+        int hitsPerTarget = 1;
 
         if (isBagpipe) {
             bool talentTrigger = (rand() % 100) < 31;
@@ -306,25 +308,41 @@ void App::UpdateOperators(float dtMs) {
                 maxTargets += 1;
             }
         }
+        if (kroosSkillAttack) {
+            dmgMult = 1.40F;
+            hitsPerTarget = 2;
+        }
+
+        auto awardDefeat = [&](Enemy& tgt) {
+            MarkEnemyDefeated(tgt);
+            ++m_KillCount;
+            if (isBagpipe) {
+                m_DP = std::min(m_MaxDP, m_DP + 2.0F);
+            } else if (!IsSniper(opType)) {
+                m_DP = std::min(m_MaxDP, m_DP + KILL_REWARD_DP);
+            }
+        };
 
         int hitCount = 0;
         for (const auto& t : validTargets) {
             if (hitCount >= maxTargets) break;
             auto& tgt = m_Enemies[static_cast<std::size_t>(t.idx)];
-            float finalDmg = opType.damage * dmgMult * (m_CheatMode ? 10.0F : 1.0F);
-            tgt.hp -= std::max(1.0F, finalDmg - tgt.def);
-            m_Beams.push_back(AttackBeam{opPos, tgt.boardPos, BEAM_DURATION_MS});
-            
-            if (tgt.hp <= 0.0F) {
-                MarkEnemyDefeated(tgt);
-                ++m_KillCount;
-                if (isBagpipe) {
-                    m_DP = std::min(m_MaxDP, m_DP + 2.0F);
-                } else if (!IsSniper(opType)) {
-                    m_DP = std::min(m_MaxDP, m_DP + KILL_REWARD_DP);
+            for (int hit = 0; hit < hitsPerTarget; ++hit) {
+                if (!tgt.alive) break;
+                float finalDmg = opType.damage * dmgMult * (m_CheatMode ? 10.0F : 1.0F);
+                tgt.hp -= std::max(1.0F, finalDmg - tgt.def);
+                m_Beams.push_back(AttackBeam{opPos, tgt.boardPos, BEAM_DURATION_MS});
+
+                if (tgt.hp <= 0.0F) {
+                    awardDefeat(tgt);
+                    break;
                 }
             }
             hitCount++;
+        }
+
+        if (isKroos && !op.skillActive && opType.maxSp > 0.0F) {
+            op.sp = std::min(opType.maxSp, op.sp + 1.0F);
         }
         
         op.cooldownMs = opType.attackIntervalMs;
@@ -349,7 +367,7 @@ void App::HandleSkillActivation(const glm::ivec2& cell) {
         if (op.hp <= 0.0F) continue;
         if (!IsValidOperatorTypeIndex(op.typeIndex)) continue;
         const auto& opType = m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
-        if (IsBagpipe(opType)) return; // Bagpipe skill is auto-triggered
+        if (IsBagpipe(opType) || IsKroosOperator(opType)) return;
         if (opType.maxSp > 0 && op.sp >= opType.maxSp && !op.skillActive) {
             op.skillActive  = true;
             op.skillTimerMs = opType.skillDuration;
@@ -377,7 +395,7 @@ bool App::IsDeployableCellForOperatorType(int typeIndex, const glm::ivec2& cell)
 }
 
 bool App::IsDeployableTile(TileType tile, DeployType dt) const {
-    if (dt == DeployType::GROUND_ONLY) return tile == TileType::GROUND || tile == TileType::ROAD;
+    if (dt == DeployType::GROUND_ONLY) return tile == TileType::GROUND;
     return tile == TileType::HIGHGROUND;
 }
 

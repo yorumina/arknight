@@ -4,6 +4,15 @@ English | [Traditional Chinese](README_zh-tw.md)
 
 `ArknightBuilder` is the command-line stage authoring tool for `Arknight Linux`. It creates and edits stage JSON, validates routes/spawns/enemies, and runs simple stage simulations without launching the full game.
 
+## Feature Status
+
+All planned builder features are complete.
+
+- [x] Stage creation and tile painting
+- [x] Route editing with wait times and sprite direction markers
+- [x] Enemy and spawn wave editing
+- [x] Stage validation, simulation, inspection, and coordinate calibration
+
 ## Build
 
 From the repository root:
@@ -40,7 +49,7 @@ Examples:
 ```bash
 ArknightBuilder new <file> --name <name> --width <w> --height <h>
 ArknightBuilder paint <file> <x> <y> <tile> [--rect-width <w>] [--rect-height <h>]
-ArknightBuilder route-set <file> <route-id> <x,y[:wait]>...
+ArknightBuilder route-set <file> <route-id> <x,y[:wait[:direction]]>...
 ArknightBuilder enemy-set <file> <enemy-id> --hp <value> --speed <value>
 ArknightBuilder spawn-add <file> --enemy <enemy-id> --route <route-id> --count <n> --start <sec> --interval <sec>
 ArknightBuilder validate <file>
@@ -67,7 +76,7 @@ Create a small linear stage:
 ./build/ArknightBuilder paint stage_01.json 0 4 spawn
 ./build/ArknightBuilder paint stage_01.json 15 4 goal
 ./build/ArknightBuilder paint stage_01.json 1 4 road --rect-width 14 --rect-height 1
-./build/ArknightBuilder route-set stage_01.json main 0,4 1,4 2,4 3,4 4,4:1.0 5,4 6,4 7,4 8,4 9,4 10,4 11,4 12,4 13,4 14,4 15,4
+./build/ArknightBuilder route-set stage_01.json main 0,4:0:normal 1,4 2,4 3,4 4,4:1.0 5,4 6,4 7,4 8,4 9,4 10,4 11,4 12,4 13,4 14,4 15,4
 ./build/ArknightBuilder enemy-set stage_01.json slug --hp 100 --speed 1.2
 ./build/ArknightBuilder spawn-add stage_01.json --enemy slug --route main --count 8 --start 0 --interval 1.5
 ./build/ArknightBuilder validate stage_01.json
@@ -86,7 +95,7 @@ Use `calibrate` when a stage background image should become the visual map while
 ## Tile Types
 
 - `empty`: unused tile
-- `road`: enemy path tile
+- `road`: enemy path tile; operators cannot deploy here
 - `ground`: ground operator deployment tile
 - `highground`: highground operator deployment tile
 - `unusablehighground`: blocked highground tile
@@ -95,12 +104,14 @@ Use `calibrate` when a stage background image should become the visual map while
 
 ## Route Format
 
-Route points use `x,y` coordinates. Add `:wait` after a point to make enemies pause at that point.
+Route points use `x,y` coordinates. Add `:wait` after a point to make enemies pause at that point. Add `:direction` after `wait` to choose the enemy sprite direction at that node.
+
+The first route node must specify `normal` or `flip`. Later nodes inherit the current direction unless they specify a new direction.
 
 Example:
 
 ```bash
-./build/ArknightBuilder route-set stage_01.json main 0,4 1,4 2,4:1.0 3,4
+./build/ArknightBuilder route-set stage_01.json main 0,4:0:normal 1,4 2,4:1.0:flip 3,4
 ```
 
 ## Validation

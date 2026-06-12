@@ -128,13 +128,12 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
 
     auto operatorSpriteCenter = [&](int typeIndex, const glm::ivec2& cell) {
         ImVec2 center = m_App.ToScreenPosition(m_App.ToPtsdPosition(m_App.ToBoardCenter(cell)));
-        float yOff = 0.0F;
+        bool isHigh = false;
         if (typeIndex >= 0 && typeIndex < static_cast<int>(m_App.m_OperatorTemplates.size())) {
             const auto& opType = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(typeIndex));
-            if (opType.deployType == DeployType::HIGHGROUND_ONLY && !m_App.UsesBoardArtTransform()) {
-                yOff = layout.cellSize * 0.22F;
-            }
+            isHigh = opType.deployType == DeployType::HIGHGROUND_ONLY;
         }
+        const float yOff = OperatorSpriteLiftPx(layout.cellSize, m_App.UsesBoardArtTransform(), isHigh);
         center.y -= yOff + layout.cellSize * 0.18F;
         center.y += stageYOffset;
         return center;
@@ -174,16 +173,7 @@ void Ark::AppRenderer::DrawDeployPreview(const std::optional<glm::ivec2>& hoverC
         for (int dx = -5; dx <= 5; ++dx) {
             for (int dy = -5; dy <= 5; ++dy) {
                 const glm::ivec2 rel{dx, dy};
-                bool inRange = false;
-                if (rel.x == 0 && rel.y == 0) {
-                    inRange = true;
-                } else if (st.deployType == DeployType::GROUND_ONLY) {
-                    inRange = rel == dir;
-                } else {
-                    const int fw = rel.x * dir.x + rel.y * dir.y;
-                    const int pp = rel.x * dir.y - rel.y * dir.x;
-                    inRange = fw >= 1 && fw <= 4 && std::abs(pp) <= 1;
-                }
+                const bool inRange = OperatorAttackRangeContains(st, rel, dir);
                 if (!inRange) continue;
                 const glm::ivec2 cell = origin + rel;
                 if (!isDrawableRangeCell(cell)) continue;

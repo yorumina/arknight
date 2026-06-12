@@ -82,6 +82,16 @@ Or run with animation preloading enabled (`ARKNIGHT_ANIMATION_PRELOAD=1`):
 - Top-right pause button: pause or resume
 - Top-left `MAP` button: toggle the visible map model/grid overlay
 
+## Feature Status
+
+All planned prototype features are complete.
+
+- [x] Stage loading, loading screens, finish screens, and failure overlay
+- [x] Operator deployment, direction selection, stats UI, skills, redeploy cooldowns, HP/SP bars, and attack ranges
+- [x] Enemy waves, route movement, route direction flipping, combat, death animations, and enemy counters
+- [x] ArknightBuilder stage creation, painting, route editing, validation, simulation, and calibration
+- [x] JSON-driven stage, operator, enemy, animation, and UI asset loading
+
 ## Data Layout
 
 Game data lives under `data/`:
@@ -146,6 +156,12 @@ Generate flipped WebM front-facing operator assets:
 
 ```bash
 ./tools/generate_flipped_front.sh
+```
+
+Generate flipped APNG enemy animation assets:
+
+```bash
+./tools/generate_flipped_enemies.sh
 ```
 
 APNG assets can be flipped manually with FFmpeg:

@@ -4,7 +4,7 @@
     "class": "sniper",
     "cost": 9,
     "hp": 1060.0,
-    "damage": 446.0,
+    "damage": 1000.0,
     "def": 126.0,
     "attackIntervalMs": 1000.0,
     "blockCount": 1,

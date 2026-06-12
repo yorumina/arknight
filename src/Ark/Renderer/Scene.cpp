@@ -4,11 +4,69 @@
 #include "config.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 
 using namespace Ark;
 using namespace Ark::RendererConst;
+
+namespace {
+std::string ResolveLevelPicPath(const std::string& filename) {
+    const std::array<std::filesystem::path, 6> bases{
+        "data/levels_pic",
+        "../data/levels_pic",
+        "../../data/levels_pic",
+        "../../../data/levels_pic",
+        ".",
+        "..",
+    };
+    for (const auto& base : bases) {
+        const auto path = base / filename;
+        if (std::filesystem::exists(path)) return path.lexically_normal().string();
+    }
+    return {};
+}
+
+std::shared_ptr<Util::Image> LoadOverlayImage(const std::string& imagePath) {
+    if (imagePath.empty()) return nullptr;
+    static std::map<std::string, std::shared_ptr<Util::Image>> cache;
+    const auto key = std::filesystem::path(imagePath).lexically_normal().string();
+    if (auto it = cache.find(key); it != cache.end()) {
+        return it->second;
+    }
+    auto image = std::make_shared<Util::Image>(key);
+    cache.emplace(key, image);
+    return image;
+}
+
+void DrawForegroundImageCover(const std::string& imagePath, float alpha) {
+    auto image = LoadOverlayImage(imagePath);
+    if (!image || image->GetTextureId() == 0) return;
+
+    const float screenW = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
+    const float screenH = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
+    const glm::vec2 imageSize = image->GetSize();
+    if (imageSize.x <= 0.0F || imageSize.y <= 0.0F) return;
+
+    const float scale = std::max(screenW / imageSize.x, screenH / imageSize.y);
+    const float drawW = imageSize.x * scale;
+    const float drawH = imageSize.y * scale;
+    const float x = (screenW - drawW) * 0.5F;
+    const float y = (screenH - drawH) * 0.5F;
+    const int imageAlpha = static_cast<int>(std::clamp(alpha, 0.0F, 1.0F) * 255.0F);
+
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    draw->AddImage(
+        reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+        {x, y},
+        {x + drawW, y + drawH},
+        {0.0F, 0.0F},
+        {1.0F, 1.0F},
+        IM_COL32(255, 255, 255, imageAlpha)
+    );
+}
+} // namespace
 
 void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
     const float W = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
@@ -81,6 +139,14 @@ void Ark::AppRenderer::DrawScene(const glm::vec2& cursor) {
             }
             DrawImageCover(m_App.m_StageFinishPath, m_App.m_StageFinishAlpha * alpha, false);
         }
+        return;
+    }
+
+    if (m_App.m_GameOver) {
+        static const std::string levelFailPath = ResolveLevelPicPath("level_fail.png");
+        const float alpha = std::clamp(m_App.m_GameOverTimerMs / LEVEL_FAIL_FADE_IN_MS, 0.0F, 1.0F);
+        drawGameplayFrame();
+        DrawForegroundImageCover(levelFailPath, alpha);
         return;
     }
 

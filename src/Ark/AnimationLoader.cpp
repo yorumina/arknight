@@ -32,6 +32,20 @@ bool SameStem(const std::filesystem::path& lhs, const std::filesystem::path& rhs
     return ToLower(lhs.stem().string()) == ToLower(rhs.stem().string());
 }
 
+bool EndsWith(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::string StripFlipSuffix(std::string animName) {
+    if (EndsWith(animName, "_flip")) {
+        animName.erase(animName.size() - 5);
+    } else if (EndsWith(animName, "_flipped")) {
+        animName.erase(animName.size() - 8);
+    }
+    return animName;
+}
+
 AnimationClip MakeClip(const std::filesystem::path& mediaPath, bool loop) {
     AnimationClip clip;
     clip.mediaPath = mediaPath.string();
@@ -145,26 +159,34 @@ std::vector<EnemyAnimationClips> LoadEnemyAnimationClips(
         auto& pack = packs[i];
 
         auto classifyAndAssign = [&](const std::filesystem::path& mediaPath) {
-            const std::string animName = ToLower(mediaPath.stem().string());
+            const std::string rawAnimName = ToLower(mediaPath.stem().string());
+            const bool isFlip = EndsWith(rawAnimName, "_flip") || EndsWith(rawAnimName, "_flipped");
+            if (isFlip) return;
+            const std::string animName = StripFlipSuffix(rawAnimName);
             const bool isExactIdle = animName == enemyCodeLower + "_idle" || animName == "idle";
             const bool isExactMove = animName == enemyCodeLower + "_move" || animName == "move";
             const bool isExactAttack = animName == enemyCodeLower + "_attack" || animName == "attack";
             const bool isExactDie = animName == enemyCodeLower + "_die" || animName == "die";
 
+            AnimationClip& idleTarget = pack.idle;
+            AnimationClip& moveTarget = pack.move;
+            AnimationClip& attackTarget = pack.attack;
+            AnimationClip& dieTarget = pack.die;
+
             if (animName.find("die") != std::string::npos) {
-                AssignClip(pack.die, MakeClip(mediaPath, false), isExactDie);
+                AssignClip(dieTarget, MakeClip(mediaPath, false), isExactDie);
             } else if (animName.find("attack") != std::string::npos) {
                 const bool isMainAttack = isExactAttack ||
                     (animName.find("begin") == std::string::npos &&
                      animName.find("end") == std::string::npos);
-                AssignClip(pack.attack, MakeClip(mediaPath, false), isMainAttack);
+                AssignClip(attackTarget, MakeClip(mediaPath, false), isMainAttack);
             } else if (animName.find("idle") != std::string::npos ||
                        animName.find("default") != std::string::npos) {
-                AssignClip(pack.idle, MakeClip(mediaPath, true), isExactIdle);
+                AssignClip(idleTarget, MakeClip(mediaPath, true), isExactIdle);
             } else if (animName.find("move") != std::string::npos) {
                 const bool isMainMove = isExactMove ||
                     animName.find("loop") != std::string::npos;
-                AssignClip(pack.move, MakeClip(mediaPath, true), isMainMove);
+                AssignClip(moveTarget, MakeClip(mediaPath, true), isMainMove);
             }
         };
 

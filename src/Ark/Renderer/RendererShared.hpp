@@ -26,10 +26,15 @@ inline constexpr int BAGPIPE_MAX_CHARGES = Ark::GameConst::BAGPIPE_MAX_CHARGES;
 inline constexpr float BAGPIPE_SKILL_DURATION_MS = Ark::GameConst::BAGPIPE_SKILL_DURATION_MS;
 inline constexpr float OPERATOR_VISUAL_SCALE = 1.716F;
 inline constexpr float ENEMY_VISUAL_SCALE = 1.872F;
+inline constexpr float OPERATOR_STATUS_BAR_SCALE = 1.20F;
+inline constexpr float OPERATOR_EXTRA_LIFT_PX = 10.0F;
+inline constexpr float HIGHGROUND_OPERATOR_EXTRA_LIFT_PX = 20.0F;
+inline constexpr float ENEMY_EXTRA_LIFT_PX = 20.0F;
 inline constexpr float ENTITY_Y_OFFSET_PX = -10.0F;
 inline constexpr float OPERATION_1_1_ENTITY_EXTRA_Y_OFFSET_PX = -10.0F;
 inline constexpr float PRE_STAGE_TOTAL_MS = 2000.0F;
 inline constexpr float PRE_STAGE_FADE_MS = 500.0F;
+inline constexpr float LEVEL_FAIL_FADE_IN_MS = 180.0F;
 inline constexpr float FINISH_FADE_TO_BLACK_MS = 700.0F;
 inline constexpr float FINISH_BLACKOUT_MS = 1000.0F;
 inline constexpr float FINISH_FADE_IN_MS = Ark::GameConst::MISSION_RESULT_FADE_IN_MS;
@@ -61,6 +66,12 @@ inline float EntityYOffsetForStage(const std::string& stageFile) {
         return ENTITY_Y_OFFSET_PX + OPERATION_1_1_ENTITY_EXTRA_Y_OFFSET_PX;
     }
     return ENTITY_Y_OFFSET_PX;
+}
+
+inline float OperatorSpriteLiftPx(float cellSize, bool usesBoardArtTransform, bool isHighground) {
+    const float highgroundSurfaceLift = (isHighground && !usesBoardArtTransform) ? cellSize * 0.22F : 0.0F;
+    return highgroundSurfaceLift + OPERATOR_EXTRA_LIFT_PX +
+           (isHighground ? HIGHGROUND_OPERATOR_EXTRA_LIFT_PX : 0.0F);
 }
 
 inline constexpr float OP_BAR_HEIGHT = 116.0F;

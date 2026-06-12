@@ -937,6 +937,7 @@
   "routes": {
     "main": [
       {
+        "direction": "normal",
         "wait": 0.0,
         "x": 0,
         "y": 3
@@ -984,6 +985,7 @@
     ],
     "sec": [
       {
+        "direction": "normal",
         "wait": 0.0,
         "x": 4,
         "y": 0

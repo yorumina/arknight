@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 
 #include "cli_utils.hpp"
 #include "enemy_catalog.hpp"
@@ -20,13 +21,19 @@ struct ParsedRouteNode {
     int x{};
     int y{};
     double wait{};
+    std::optional<std::string> direction;
 };
+
+auto IsKnownRouteDirection(const std::string& value) -> bool {
+    return value == "normal" || value == "default" ||
+           value == "flip" || value == "flipped";
+}
 
 auto ParseRouteNodeToken(const std::string& token) -> ParsedRouteNode {
     const auto commaPos = token.find(',');
     if (commaPos == std::string::npos) {
         throw CliError("invalid route node token: " + token +
-                       " (expected x,y[:wait])");
+                       " (expected x,y[:wait[:direction]])");
     }
 
     const std::string xPart = token.substr(0, commaPos);
@@ -35,9 +42,19 @@ auto ParseRouteNodeToken(const std::string& token) -> ParsedRouteNode {
 
     std::string yPart = rest;
     std::string waitPart = "0";
+    std::optional<std::string> directionPart;
     if (colonPos != std::string::npos) {
         yPart = rest.substr(0, colonPos);
-        waitPart = rest.substr(colonPos + 1);
+        std::string suffix = rest.substr(colonPos + 1);
+        const auto directionPos = suffix.find(':');
+        if (directionPos != std::string::npos) {
+            waitPart = suffix.substr(0, directionPos);
+            directionPart = suffix.substr(directionPos + 1);
+        } else if (IsKnownRouteDirection(suffix)) {
+            directionPart = suffix;
+        } else {
+            waitPart = suffix;
+        }
     }
 
     ParsedRouteNode node{};
@@ -46,6 +63,12 @@ auto ParseRouteNodeToken(const std::string& token) -> ParsedRouteNode {
     node.wait = ParseDouble(waitPart, "route node wait");
     if (node.wait < 0.0) {
         throw CliError("route node wait must be >= 0");
+    }
+    if (directionPart.has_value()) {
+        if (!IsKnownRouteDirection(*directionPart)) {
+            throw CliError("route node direction must be normal or flip");
+        }
+        node.direction = *directionPart;
     }
     return node;
 }
@@ -133,7 +156,7 @@ void RunPaint(const std::vector<std::string>& args) {
 
 void RunRouteSet(const std::vector<std::string>& args) {
     if (args.size() < 5) {
-        throw CliError("route-set requires <file> <route-id> <x,y[:wait]>...");
+        throw CliError("route-set requires <file> <route-id> <x,y[:wait[:direction]]>...");
     }
 
     const std::filesystem::path file = ResolveLevelFilePath(args[1]);
@@ -145,8 +168,11 @@ void RunRouteSet(const std::vector<std::string>& args) {
     json route = json::array();
     for (size_t i = 3; i < args.size(); ++i) {
         const auto parsed = ParseRouteNodeToken(args[i]);
-        route.push_back(
-            {{"x", parsed.x}, {"y", parsed.y}, {"wait", parsed.wait}});
+        json node = {{"x", parsed.x}, {"y", parsed.y}, {"wait", parsed.wait}};
+        if (parsed.direction.has_value()) {
+            node["direction"] = *parsed.direction;
+        }
+        route.push_back(std::move(node));
     }
 
     auto stage = LoadJson(file);

@@ -73,7 +73,7 @@ auto Usage() -> std::string {
 Commands:
   new <file> --name <name> --width <w> --height <h>
   paint <file> <x> <y> <tile> [--rect-width <w>] [--rect-height <h>]
-  route-set <file> <route-id> <x,y[:wait]>...
+  route-set <file> <route-id> <x,y[:wait[:direction]]>...
   enemy-set <file> <enemy-id> --hp <value> --speed <value>
   spawn-add <file> --enemy <enemy-id> --route <route-id> --count <n> --start <sec> --interval <sec>
   validate <file>

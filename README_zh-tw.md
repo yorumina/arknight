@@ -82,6 +82,16 @@ Windows：
 - 右上角暫停按鈕：暫停或繼續
 - 左上角 `MAP` 按鈕：開啟或關閉可見的地圖模型/格線疊層(開發用工具)
 
+## 功能進度
+
+目前規劃的原型功能皆已完成。
+
+- [x] 關卡載入、載入畫面、完成畫面與失敗疊圖
+- [x] 幹員部署、方向選擇、資訊 UI、技能、再部署冷卻、血條/技能條與攻擊範圍
+- [x] 敵人波次、路線移動、路線方向翻轉、戰鬥、死亡動畫與敵人計數器
+- [x] ArknightBuilder 關卡建立、地形繪製、路線編輯、驗證、模擬與校準
+- [x] JSON 驅動的關卡、幹員、敵人、動畫與 UI 素材載入
+
 ## 資料目錄
 
 遊戲資料位於 `data/`：
@@ -146,6 +156,12 @@ ARKNIGHT_ANIMATION_PRELOAD=1 ./build/Arknight
 
 ```bash
 ./tools/generate_flipped_front.sh
+```
+
+產生左右翻轉的敵人 APNG 動畫素材：
+
+```bash
+./tools/generate_flipped_enemies.sh
 ```
 
 APNG 素材可用 FFmpeg 手動翻轉：

@@ -38,6 +38,37 @@ static const ImU32 PALETTE[6]{
 };
 inline ImU32 PaletteColor(std::size_t i) { return PALETTE[i % 6]; }
 
+std::optional<Ark::EnemySpriteDirection> ParseRouteSpriteDirection(const std::string& value) {
+    if (value == "normal" || value == "default") {
+        return Ark::EnemySpriteDirection::NORMAL;
+    }
+    if (value == "flip" || value == "flipped") {
+        return Ark::EnemySpriteDirection::FLIP;
+    }
+    return std::nullopt;
+}
+
+std::optional<Ark::EnemySpriteDirection> ReadRouteSpriteDirection(const nlohmann::json& node,
+                                                                  std::string& fieldName,
+                                                                  std::string& invalidValue) {
+    for (const char* key : {"direction", "model", "facing"}) {
+        if (!node.contains(key)) continue;
+        fieldName = key;
+        const auto& value = node[key];
+        if (value.is_string()) {
+            invalidValue = value.get<std::string>();
+            return ParseRouteSpriteDirection(invalidValue);
+        }
+        if (value.is_boolean()) {
+            return value.get<bool>() ? Ark::EnemySpriteDirection::FLIP
+                                     : Ark::EnemySpriteDirection::NORMAL;
+        }
+        invalidValue = value.dump();
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 Ark::TileType ParseTile(const std::string& s) {
     if (s == "road")       return Ark::TileType::ROAD;
     if (s == "ground")     return Ark::TileType::GROUND;
@@ -522,7 +553,25 @@ StageLoadResult LoadStageFromJsonDetailed(const std::string& stageFile) {
                                             std::to_string(index) + " is out of bounds");
                     continue;
                 }
-                r.nodes.push_back(RouteNode{boardCenter(nx, ny), nd.value("wait", 0.0F)});
+                std::string directionField;
+                std::string invalidDirection;
+                const bool hasDirectionField =
+                    nd.contains("direction") || nd.contains("model") || nd.contains("facing");
+                auto spriteDirection =
+                    ReadRouteSpriteDirection(nd, directionField, invalidDirection);
+                if (index == 0 && !hasDirectionField) {
+                    result.errors.push_back("route '" + routeId +
+                                            "' first node must include direction: normal or flip");
+                } else if (hasDirectionField && !spriteDirection.has_value()) {
+                    result.errors.push_back("route '" + routeId + "' node " +
+                                            std::to_string(index) + " has invalid " +
+                                            directionField + ": " + invalidDirection);
+                }
+                r.nodes.push_back(RouteNode{
+                    boardCenter(nx, ny),
+                    nd.value("wait", 0.0F),
+                    spriteDirection.value_or(EnemySpriteDirection::INHERIT)
+                });
             }
             if (r.nodes.size() >= 2) {
                 data.routes.push_back(std::move(r));

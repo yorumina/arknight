@@ -39,9 +39,12 @@ void Ark::AppRenderer::LoadOperatorThumbnails() {
 
     const auto operatorDir = Ark::ResolveOperatorDir();
     m_App.m_VanguardIcon.reset();
+    m_App.m_SniperIcon.reset();
     if (!operatorDir.empty()) {
         const auto vanguardIcon = operatorDir / "vanguard.png";
+        const auto sniperIcon = operatorDir / "sniper.png";
         m_App.m_VanguardIcon = loadCachedImage(vanguardIcon);
+        m_App.m_SniperIcon = loadCachedImage(sniperIcon);
     }
     for (std::size_t i = 0; i < m_App.m_OperatorTemplates.size(); ++i) {
         const auto& op = m_App.m_OperatorTemplates[i];
@@ -156,7 +159,7 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         const auto& opType = m_App.m_OperatorTemplates.at(static_cast<std::size_t>(op.typeIndex));
         bool isHigh = (opType.deployType == DeployType::HIGHGROUND_ONLY);
         if (isHigh != drawHighgroundOnly) continue;
-        float yOff  = (isHigh && !m_App.UsesBoardArtTransform()) ? layout.cellSize * 0.22F : 0.0F;
+        float yOff  = OperatorSpriteLiftPx(layout.cellSize, m_App.UsesBoardArtTransform(), isHigh);
         const float operatorVisualLift = layout.cellSize * 0.18F;
 
         const glm::vec2 boardCenter = m_App.ToBoardCenter(op.cell);
@@ -226,7 +229,10 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         }
 
         // HP bar
-        const float barW = layout.cellSize * 0.52F;
+        const float barW = layout.cellSize * 0.52F * OPERATOR_STATUS_BAR_SCALE;
+        const float hpBarH = 5.0F * OPERATOR_STATUS_BAR_SCALE;
+        const float spBarH = 4.0F * OPERATOR_STATUS_BAR_SCALE;
+        const float barGap = 6.0F * OPERATOR_STATUS_BAR_SCALE;
         const float barX = center0.x - barW * 0.5F;
         float barY = center0.y - layout.cellSize * 0.38F - yOff;
         const float hpNow = std::clamp(op.hp, 0.0F, op.maxHp);
@@ -234,13 +240,14 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
         ImU32 hpCol = IM_COL32(162,220,255,255);
         if (hpR < 0.30F) hpCol = IM_COL32(255, 120, 120, 255);
         else if (hpR < 0.60F) hpCol = IM_COL32(255, 196, 132, 255);
-        draw->AddRectFilled({barX,      barY}, {barX+barW, barY+5.0F}, IM_COL32(35,40,48,255));
-        draw->AddRectFilled({barX,      barY}, {barX+barW*hpR, barY+5.0F}, hpCol);
+        draw->AddRectFilled({barX,      barY}, {barX+barW, barY+hpBarH}, IM_COL32(35,40,48,255));
+        draw->AddRectFilled({barX,      barY}, {barX+barW*hpR, barY+hpBarH}, hpCol);
 
         // SP bar
         if (opType.maxSp > 0) {
-            barY += 6.0F;
+            barY += barGap;
             const bool isBagpipe = (opType.name == "Bagpipe" || opType.name == "風笛");
+            const float skillDuration = std::max(1.0F, opType.skillDuration);
             float spR = 0.0F;
             bool skillReady = false;
 
@@ -254,17 +261,17 @@ void Ark::AppRenderer::DrawOperators(const BoardLayout& layout, bool drawHighgro
             } else {
                 skillReady = (op.sp >= opType.maxSp);
                 spR = op.skillActive
-                    ? std::clamp(op.skillTimerMs / opType.skillDuration, 0.0F, 1.0F)
+                    ? std::clamp(op.skillTimerMs / skillDuration, 0.0F, 1.0F)
                     : std::clamp(op.sp / opType.maxSp, 0.0F, 1.0F);
             }
 
             ImU32 spCol = op.skillActive ? IM_COL32(255,165,0,255)
                         : (skillReady ? IM_COL32(255,215,0,255) : IM_COL32(100,150,255,255));
-            draw->AddRectFilled({barX,barY},{barX+barW, barY+4.0F}, IM_COL32(35,40,48,255));
-            draw->AddRectFilled({barX,barY},{barX+barW*spR, barY+4.0F}, spCol);
+            draw->AddRectFilled({barX,barY},{barX+barW, barY+spBarH}, IM_COL32(35,40,48,255));
+            draw->AddRectFilled({barX,barY},{barX+barW*spR, barY+spBarH}, spCol);
             if (skillReady && !op.skillActive) {
                 // Pulsing border
-                draw->AddRect({barX-1,barY-1},{barX+barW+1,barY+5.0F}, IM_COL32(255,215,0,180), 0, 0, 1.5F);
+                draw->AddRect({barX-1,barY-1},{barX+barW+1,barY+spBarH+1.0F}, IM_COL32(255,215,0,180), 0, 0, 1.5F);
             }
 
             if (isBagpipe) {
@@ -285,6 +292,7 @@ void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
         if (!e.alive && e.deathAnimationFinished) continue;
         auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
         c.y -= layout.cellSize * 0.18F;
+        c.y -= ENEMY_EXTRA_LIFT_PX;
         c.y += stageYOffset;
         const float r = layout.cellSize * 0.20F * enemyScale;
         const float imgR = layout.cellSize * 0.8F * enemyScale;
@@ -299,13 +307,21 @@ void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
         }
 
         if (tex != 0) {
+            const ImVec2 uv0 = e.useFlipAnimation ? ImVec2{1.0F, 0.0F} : ImVec2{0.0F, 0.0F};
+            const ImVec2 uv1 = e.useFlipAnimation ? ImVec2{0.0F, 1.0F} : ImVec2{1.0F, 1.0F};
             draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(tex)),
                            {c.x - imgR, c.y - imgR},
-                           {c.x + imgR, c.y + imgR});
+                           {c.x + imgR, c.y + imgR},
+                           uv0,
+                           uv1);
         } else if (e.alive && m_App.m_ModelEnemy && m_App.m_ModelEnemy->GetTextureId() != 0) {
+            const ImVec2 uv0 = e.useFlipAnimation ? ImVec2{1.0F, 0.0F} : ImVec2{0.0F, 0.0F};
+            const ImVec2 uv1 = e.useFlipAnimation ? ImVec2{0.0F, 1.0F} : ImVec2{1.0F, 1.0F};
             draw->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_App.m_ModelEnemy->GetTextureId())),
                            {c.x - imgR, c.y - imgR},
-                           {c.x + imgR, c.y + imgR});
+                           {c.x + imgR, c.y + imgR},
+                           uv0,
+                           uv1);
         } else {
             draw->AddCircleFilled(c, r, e.color, 28);
             draw->AddCircle(c, r, IM_COL32(255,255,255,100), 28, 1.0F);
@@ -316,6 +332,7 @@ void Ark::AppRenderer::DrawEnemies(const BoardLayout& layout) {
         if (!e.alive) continue;
         auto c = m_App.ToScreenPosition(m_App.ToPtsdPosition(e.boardPos));
         c.y -= layout.cellSize * 0.18F;
+        c.y -= ENEMY_EXTRA_LIFT_PX;
         c.y += stageYOffset;
         const float r = layout.cellSize * 0.20F * enemyScale;
         const float hpR    = e.maxHp > 0 ? std::clamp(e.hp/e.maxHp, 0.0F, 1.0F) : 0.0F;

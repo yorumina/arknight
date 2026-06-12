@@ -21,6 +21,14 @@ float ComputeEnemyToOperatorDamage(float rawDamage, float targetDef) {
     const float floorByPercent = rawDamage * 0.10F;
     return std::max(5.0F, std::max(floorByPercent, reduced));
 }
+
+void ApplyRouteSpriteDirection(Enemy& enemy, EnemySpriteDirection direction) {
+    if (direction == EnemySpriteDirection::NORMAL) {
+        enemy.useFlipAnimation = false;
+    } else if (direction == EnemySpriteDirection::FLIP) {
+        enemy.useFlipAnimation = true;
+    }
+}
 } // namespace
 
 void App::MarkEnemyDefeated(Enemy& enemy) {
@@ -38,7 +46,15 @@ void App::MarkEnemyDefeated(Enemy& enemy) {
     }
 
     auto& pack = m_EnemyAnims[static_cast<std::size_t>(enemy.typeIndex)];
-    if (pack.die.Empty()) {
+    AnimationClip* dieClip = nullptr;
+    if (enemy.useFlipAnimation && !pack.dieFlip.Empty()) {
+        dieClip = &pack.dieFlip;
+    } else if (!pack.die.Empty()) {
+        dieClip = &pack.die;
+    } else if (!pack.dieFlip.Empty()) {
+        dieClip = &pack.dieFlip;
+    }
+    if (dieClip == nullptr) {
         pack.activeInstances.erase(enemy.id);
         pack.dieInstances.erase(enemy.id);
         enemy.deathAnimationFinished = true;
@@ -48,12 +64,13 @@ void App::MarkEnemyDefeated(Enemy& enemy) {
     auto& anim = pack.dieInstances[enemy.id];
     if (!anim) {
         anim = std::make_shared<Util::Animation>(
-            pack.die.mediaPath, true, pack.die.loop, false);
+            dieClip->mediaPath, true, dieClip->loop, false);
     } else {
         anim->Restart();
     }
+    enemy.animationFlip = dieClip == &pack.dieFlip;
     if (anim->GetFrameCount() == 0) {
-        pack.die.mediaPath.clear();
+        dieClip->mediaPath.clear();
         pack.activeInstances.erase(enemy.id);
         pack.dieInstances.erase(enemy.id);
         enemy.deathAnimationFinished = true;
@@ -71,20 +88,24 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking, fl
 
     auto& pack = m_EnemyAnims[static_cast<std::size_t>(enemy.typeIndex)];
 
+    auto selectDirectionalClip = [&](AnimationClip& normal, AnimationClip& flip) -> AnimationClip* {
+        if (enemy.useFlipAnimation && !flip.Empty()) return &flip;
+        if (!normal.Empty()) return &normal;
+        if (!flip.Empty()) return &flip;
+        return nullptr;
+    };
     auto selectClip = [&](Enemy::AnimState state) -> AnimationClip* {
         switch (state) {
         case Enemy::AnimState::IDLE:
-            if (!pack.idle.Empty()) return &pack.idle;
-            if (!pack.move.Empty()) return &pack.move;
-            return nullptr;
+            if (auto* clip = selectDirectionalClip(pack.idle, pack.idleFlip)) return clip;
+            return selectDirectionalClip(pack.move, pack.moveFlip);
         case Enemy::AnimState::MOVE:
-            if (!pack.move.Empty()) return &pack.move;
-            if (!pack.idle.Empty()) return &pack.idle;
-            return nullptr;
+            if (auto* clip = selectDirectionalClip(pack.move, pack.moveFlip)) return clip;
+            return selectDirectionalClip(pack.idle, pack.idleFlip);
         case Enemy::AnimState::ATTACK:
-            return pack.attack.Empty() ? nullptr : &pack.attack;
+            return selectDirectionalClip(pack.attack, pack.attackFlip);
         case Enemy::AnimState::DIE:
-            return pack.die.Empty() ? nullptr : &pack.die;
+            return selectDirectionalClip(pack.die, pack.dieFlip);
         }
         return nullptr;
     };
@@ -104,6 +125,9 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking, fl
     }
 
     AnimationClip* clip = selectClip(desiredState);
+    const bool usingFlipClip =
+        clip == &pack.idleFlip || clip == &pack.moveFlip ||
+        clip == &pack.attackFlip || clip == &pack.dieFlip;
     if (clip == nullptr) {
         if (!enemy.alive) {
             enemy.deathAnimationFinished = true;
@@ -117,11 +141,11 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking, fl
         desiredState == Enemy::AnimState::MOVE;
     if (useSharedLoop) {
         auto& sharedInstance = desiredState == Enemy::AnimState::IDLE
-            ? pack.sharedIdleInstance
-            : pack.sharedMoveInstance;
+            ? (usingFlipClip ? pack.sharedIdleFlipInstance : pack.sharedIdleInstance)
+            : (usingFlipClip ? pack.sharedMoveFlipInstance : pack.sharedMoveInstance);
         auto& sharedUpdateSerial = desiredState == Enemy::AnimState::IDLE
-            ? pack.sharedIdleUpdateSerial
-            : pack.sharedMoveUpdateSerial;
+            ? (usingFlipClip ? pack.sharedIdleFlipUpdateSerial : pack.sharedIdleUpdateSerial)
+            : (usingFlipClip ? pack.sharedMoveFlipUpdateSerial : pack.sharedMoveUpdateSerial);
 
         if (!sharedInstance) {
             sharedInstance = std::make_shared<Util::Animation>(
@@ -134,6 +158,7 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking, fl
         }
 
         enemy.animState = desiredState;
+        enemy.animationFlip = usingFlipClip;
         pack.activeInstances[enemy.id] = sharedInstance;
         if (sharedUpdateSerial != m_EnemyAnimationUpdateSerial) {
             sharedInstance->Update(deltaTimeMs);
@@ -144,18 +169,20 @@ void App::UpdateEnemyAnimation(Enemy& enemy, bool isMoving, bool isAttacking, fl
 
     const bool shouldRestartAnimation =
         isAttacking && desiredState == Enemy::AnimState::ATTACK;
-    if (enemy.animState != desiredState || !animInst || shouldRestartAnimation) {
+    const bool directionClipChanged = enemy.animationFlip != usingFlipClip;
+    if (enemy.animState != desiredState || !animInst || shouldRestartAnimation || directionClipChanged) {
         enemy.animState = desiredState;
         auto& stateInstances = desiredState == Enemy::AnimState::ATTACK
             ? pack.attackInstances
             : pack.dieInstances;
         auto& cachedAnim = stateInstances[enemy.id];
-        if (!cachedAnim) {
+        if (!cachedAnim || directionClipChanged) {
             cachedAnim = std::make_shared<Util::Animation>(
                 clip->mediaPath, true, clip->loop, false);
         } else {
             cachedAnim->Restart();
         }
+        enemy.animationFlip = usingFlipClip;
         animInst = cachedAnim;
         if (animInst->GetFrameCount() == 0) {
             clip->mediaPath.clear();
@@ -207,6 +234,8 @@ void App::SpawnEnemy(const WavePlan& plan) {
     e.canAttackOperator= tmpl.canAttackOperator;
     e.color            = tmpl.color;
     e.alive            = true;
+    ApplyRouteSpriteDirection(e, route.nodes.front().spriteDirection);
+    e.animationFlip    = e.useFlipAnimation;
     m_Enemies.push_back(e);
 }
 
@@ -354,7 +383,11 @@ void App::UpdateEnemies(float dtSec) {
                 enemy.alive = false;
                 enemy.deathAnimationFinished = true;
                 m_LifePoint = std::max(0, m_LifePoint - 1);
-                if (m_LifePoint <= 0) { m_GameOver = true; m_WaveRunning = false; }
+                if (m_LifePoint <= 0) {
+                    if (!m_GameOver) m_GameOverTimerMs = 0.0F;
+                    m_GameOver = true;
+                    m_WaveRunning = false;
+                }
                 break;
             }
             const auto tgt   = route.nodes[enemy.nodeIndex + 1].boardPos;
@@ -363,6 +396,7 @@ void App::UpdateEnemies(float dtSec) {
             if (dist <= 0.0001F) {
                 enemy.boardPos = tgt;
                 enemy.nodeIndex++;
+                ApplyRouteSpriteDirection(enemy, route.nodes[enemy.nodeIndex].spriteDirection);
                 enemy.waitSec = std::max(0.0F, route.nodes[enemy.nodeIndex].waitSec);
                 continue;
             }
@@ -372,6 +406,7 @@ void App::UpdateEnemies(float dtSec) {
                 enemy.boardPos = tgt;
                 enemy.nodeIndex++;
                 timeLeft -= trvl;
+                ApplyRouteSpriteDirection(enemy, route.nodes[enemy.nodeIndex].spriteDirection);
                 enemy.waitSec = std::max(0.0F, route.nodes[enemy.nodeIndex].waitSec);
             } else {
                 enemy.boardPos += toTgt / dist * (spd * timeLeft);
