@@ -10,6 +10,10 @@
 - [ArknightBuilder 英文手冊](docs/arknightbuilder/README.md)
 - [ArknightBuilder 中文手冊](docs/arknightbuilder/README_zh-tw.md)
 
+## windows 部屬
+
+- 請參閱 [Windows 部署與遊戲操作手冊](ForWindows.md)。
+
 ## 需求
 
 - CMake 3.16+

@@ -10,6 +10,10 @@ English | [Traditional Chinese](README_zh-tw.md)
 - [ArknightBuilder manual](docs/arknightbuilder/README.md)
 - [ArknightBuilder Traditional Chinese manual](docs/arknightbuilder/README_zh-tw.md)
 
+## Windows Deployment
+
+- See the [Windows deployment and gameplay guide](ForWindows.md).
+
 ## Requirements
 
 - CMake 3.16+
