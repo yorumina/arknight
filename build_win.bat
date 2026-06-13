@@ -10,7 +10,37 @@ if %ERRORLEVEL% GEQ 8 (
     exit /b 1
 )
 
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+set "VCVARS="
+for %%P in (
+    "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+    "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
+    "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvarsall.bat"
+    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvarsall.bat"
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat"
+) do (
+    if not defined VCVARS if exist "%%~P" set "VCVARS=%%~P"
+)
+
+if not defined VCVARS if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+    for /f "usebackq tokens=*" %%I in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+        if exist "%%I\VC\Auxiliary\Build\vcvarsall.bat" set "VCVARS=%%I\VC\Auxiliary\Build\vcvarsall.bat"
+    )
+)
+
+if not defined VCVARS (
+    echo Visual Studio 2022 C++ build tools were not found.
+    echo Install "Desktop development with C++", then run this script again.
+    exit /b 1
+)
+
+call "%VCVARS%" x64
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to initialize Visual Studio build environment.
+    exit /b 1
+)
 
 echo.
 echo === Configuring CMake ===
@@ -24,7 +54,15 @@ echo.
 echo === Building Arknight ===
 cmake --build C:\ArkBuild\build --target Arknight --config Debug
 if %ERRORLEVEL% NEQ 0 (
-    echo Build failed!
+    echo Arknight build failed!
+    exit /b 1
+)
+
+echo.
+echo === Building ArknightPreload ===
+cmake --build C:\ArkBuild\build --target ArknightPreload --config Debug
+if %ERRORLEVEL% NEQ 0 (
+    echo ArknightPreload build failed!
     exit /b 1
 )
 
@@ -36,7 +74,13 @@ if %ERRORLEVEL% NEQ 0 (
     echo Failed to copy Arknight.exe to build directory
     exit /b 1
 )
+copy /Y C:\ArkBuild\build\Debug\ArknightPreload.exe "%~dp0build\ArknightPreload.exe"
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to copy ArknightPreload.exe to build directory
+    exit /b 1
+)
 
 echo.
 echo === Build successful! ===
-echo Run: .\build\Arknight.exe
+echo Preload: .\run_preload.bat
+echo Run game: .\build\Arknight.exe

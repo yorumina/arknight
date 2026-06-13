@@ -2,19 +2,23 @@
 
 [English](README.md) | 繁體中文
 
-`Arknight Linux` 是使用 C++17 與 `PTSD` 框架製作的明日方舟風格 2D 塔防原型。專案目前包含格子地圖、敵人波次、幹員部署、DP/LP 系統、幹員與敵人動畫、暫停/倍速控制，以及 JSON 驅動的遊戲資料。
+`Arknight Linux` 是一個以 C++17 與 `PTSD` framework 製作的明日方舟風格 2D 塔防原型。專案包含格子關卡、敵人波次、幹員部署、DP/LP 系統、幹員與敵人動畫、暫停與倍速、JSON 資料驅動，以及關卡製作工具 `ArknightBuilder`。
 
-## 環境需求
+## 文件
+
+- [Windows 部署與遊戲操作手冊](ForWindows.md)
+- [ArknightBuilder 英文手冊](docs/arknightbuilder/README.md)
+- [ArknightBuilder 中文手冊](docs/arknightbuilder/README_zh-tw.md)
+
+## 需求
 
 - CMake 3.16+
 - 支援 C++17 的編譯器：GCC、Clang 或 MSVC
 - Git
-- 可用的 OpenGL 執行環境
-- 建議安裝 FFmpeg，方便處理動畫素材轉換與快取建立流程
+- 可執行 OpenGL 的環境
+- FFmpeg，用於動畫轉檔與快取產生流程
 
 ## 建置
-
-### Linux/macOS
 
 下載專案與 submodule：
 
@@ -23,7 +27,7 @@ git clone --recurse-submodules <your-repo-url>
 cd Arknight_Linux
 ```
 
-設定並建置遊戲：
+建置遊戲：
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -36,72 +40,32 @@ cmake --build build --target Arknight
 cmake --build build --target ArknightBuilder
 ```
 
-### Windows
-
-在 Windows 上編譯時，您必須確保建置環境正確設定。請注意，如果直接在含有中文或空格的路徑（例如 OneDrive 的 `文件` 目錄）中進行 CMake/MSVC 設定，編譯器與建置工具可能會崩潰。我們提供了輔助腳本來避開此限制。
-
-1. **安裝 FFmpeg**：確保 `ffmpeg` 已安裝並加入至系統環境變數 `PATH`。
-2. **下載相依 Submodule**：在 PowerShell 中執行下載腳本，下載必要的 `freetype` 和 `harfbuzz` 依賴庫：
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File PTSD/lib/sdl2_ttf/external/Get-GitModules.ps1
-   ```
-3. **編譯**：執行 Windows 編譯腳本，它會自動將專案檔案同步到臨時的 `C:\ArkBuild`（純 ASCII 路徑）並在該處完成編譯，最後將產生的 `Arknight.exe` 檔案複製回工作區的 `.\build\Arknight.exe`：
-   ```cmd
-   .\build_win.bat
-   ```
-
 ## 執行
-
-Linux/macOS：
 
 ```bash
 ./build/Arknight
 ```
 
-Windows：
+## 功能狀態
 
-```powershell
-.\build\Arknight.exe
-```
+目前原型規劃功能皆已完成。
 
-或者使用預載快取模式執行（`ARKNIGHT_ANIMATION_PRELOAD=1`）：
-```cmd
-.\run_preload.bat
-```
-
-## 操作方式
-
-- `滑鼠左鍵`：點擊 UI、從下方欄位拖曳幹員、確認部署方向
-- `滑鼠右鍵`：取消部署或撤退已部署幹員
-- `SPACE`：等待戰鬥開始時啟動下一波
-- `R`：重新開始目前 Demo
-- `M`：開啟或關閉可見的地圖模型/格線疊層
-- `Z`：開啟或關閉作弊模式，戰鬥時間流速變為 10 倍，幹員攻擊傷害變為 10 倍
-- `ESC`：開啟離開確認或結束遊戲
-- 右上角 `1X` / `2X` 按鈕：切換遊戲速度
-- 右上角暫停按鈕：暫停或繼續
-- 左上角 `MAP` 按鈕：開啟或關閉可見的地圖模型/格線疊層(開發用工具)
-
-## 功能進度
-
-目前規劃的原型功能皆已完成。
-
-- [x] 關卡載入、載入畫面、完成畫面與失敗疊圖
-- [x] 幹員部署、方向選擇、資訊 UI、技能、再部署冷卻、血條/技能條與攻擊範圍
-- [x] 敵人波次、路線移動、路線方向翻轉、戰鬥、死亡動畫與敵人計數器
-- [x] ArknightBuilder 關卡建立、地形繪製、路線編輯、驗證、模擬與校準
-- [x] JSON 驅動的關卡、幹員、敵人、動畫與 UI 素材載入
+- [x] 關卡載入、載入畫面、完成畫面與失敗畫面
+- [x] 幹員部署、方向選擇、數值 UI、技能、再部署冷卻、HP/SP 條與攻擊範圍
+- [x] 敵人波次、路線移動、路線方向翻轉、戰鬥、死亡動畫與敵人計數
+- [x] ArknightBuilder 關卡建立、格子繪製、路線編輯、驗證、模擬與地圖校準
+- [x] JSON 驅動的關卡、幹員、敵人、動畫與 UI 資源載入
 
 ## 資料目錄
 
 遊戲資料位於 `data/`：
 
-- `data/levels`：關卡 JSON 與關卡圖片
+- `data/levels`：關卡 JSON 與關卡專用圖片
 - `data/enemy`：敵人 JSON 與敵人動畫
-- `data/operators`：幹員 JSON 與幹員動畫/圖片素材
+- `data/operators`：幹員 JSON、幹員動畫與圖片
 - `data/levels_pic`：HUD 與關卡 UI 圖片
 
-常見關卡路徑：
+常用關卡路徑：
 
 - `data/levels/test.json`
 - `data/levels/tutorial_1.json`
@@ -110,31 +74,23 @@ Windows：
 
 ## 動畫快取
 
-動畫會依需求解碼，並可透過磁碟快取避免每次啟動遊戲都重新轉換昂貴的動畫素材。
+動畫會在需要時解碼，並可使用磁碟快取避免每次啟動都重新轉換。
 
 常用環境變數：
 
 - `ARKNIGHT_ANIMATION_CACHE_MB=768`：設定記憶體動畫快取上限，單位 MB
-- `ARKNIGHT_ANIMATION_CACHE_MB=0`：取消記憶體快取上限
-- `ARKNIGHT_ANIMATION_DISK_CACHE=0`：關閉磁碟快取
-- `ARKNIGHT_ANIMATION_DISK_CACHE_DIR=/path/to/cache`：指定自訂快取資料夾
-- `ARKNIGHT_ANIMATION_PRELOAD=1`：單次預先建立所有已知動畫快取
-- `ARKNIGHT_ENEMY_ANIMATION_PRELOAD=1`：只預先建立敵人動畫快取
+- `ARKNIGHT_ANIMATION_CACHE_MB=0`：停用記憶體快取上限
+- `ARKNIGHT_ANIMATION_DISK_CACHE=0`：停用磁碟快取
+- `ARKNIGHT_ANIMATION_DISK_CACHE_DIR=/path/to/cache`：指定自訂快取目錄
+- `ARKNIGHT_ANIMATION_PRELOAD=1`：在單次執行中預載動畫快取
+- `ARKNIGHT_ENEMY_ANIMATION_PRELOAD=1`：只預載敵人動畫
 - `ARKNIGHT_GPU_ADAPTER=auto|nvidia|amd|intel`：在建立視窗前提示偏好的 GPU
-
-建議流程：
-
-```bash
-ARKNIGHT_ANIMATION_PRELOAD=1 ./build/Arknight
-```
-
-快取建立完成後，日常啟動請直接正常執行遊戲，啟動速度與記憶體使用會比較穩定。
 
 ## ArknightBuilder
 
-`ArknightBuilder` 是用來建立、修改、驗證與模擬關卡 JSON 的命令列工具。
+`ArknightBuilder` 是關卡製作用 CLI 工具。它可以建立空白關卡、繪製格子、編輯路線、設定敵人與波次、驗證 JSON、模擬敵人時間軸、查看關卡摘要，並用校準工具把地圖圖片對齊邏輯格子。
 
-範例：
+快速範例：
 
 ```bash
 ./build/ArknightBuilder validate tutorial_1.json
@@ -143,28 +99,23 @@ ARKNIGHT_ANIMATION_PRELOAD=1 ./build/Arknight
 ./build/ArknightBuilder calibrate 'Operation 1-1/stage.json'
 ```
 
-關卡檔參數會自動映射到 `data/levels/`，所以 `tutorial_1.json` 會解析成 `data/levels/tutorial_1.json`。
+完整命令、關卡 JSON 規則、路線格式、驗證行為、模擬輸出與校準流程請看 [ArknightBuilder 中文手冊](docs/arknightbuilder/README_zh-tw.md)。
 
-完整 Builder 文件：
+## 資源輔助工具
 
-- [英文](docs/arknightbuilder/README.md)
-- [繁體中文](docs/arknightbuilder/README_zh-tw.md)
-
-## 素材工具
-
-產生左右翻轉的幹員 front WebM 素材：
+產生幹員正面翻轉 WebM 資源：
 
 ```bash
 ./tools/generate_flipped_front.sh
 ```
 
-產生左右翻轉的敵人 APNG 動畫素材：
+產生敵人翻轉 APNG 動畫：
 
 ```bash
 ./tools/generate_flipped_enemies.sh
 ```
 
-APNG 素材可用 FFmpeg 手動翻轉：
+也可以手動使用 FFmpeg 翻轉 APNG：
 
 ```bash
 ffmpeg -hide_banner -loglevel error -y -i input.apng -vf hflip -plays 0 output.apng
@@ -172,8 +123,8 @@ ffmpeg -hide_banner -loglevel error -y -i input.apng -vf hflip -plays 0 output.a
 
 ## 專案結構
 
-- `src/`：遊戲執行邏輯
-- `include/`：公開標頭檔
+- `src/`：遊戲 runtime 實作
+- `include/`：公開 header
 - `tools/ark_builder/`：`ArknightBuilder` 原始碼
-- `PTSD/`：框架與 bundled dependencies
+- `PTSD/`：framework 與 bundled dependencies
 - `docs/`：專案文件

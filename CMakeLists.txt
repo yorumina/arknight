@@ -72,6 +72,30 @@ target_link_libraries(Arknight
 
 target_compile_definitions(Arknight PRIVATE ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/PTSD/assets")
 
+add_executable(ArknightPreload
+    src/preload_main.cpp
+    src/Ark/StageLoader.cpp
+)
+target_link_libraries(ArknightPreload
+    PTSD
+    SDL2::SDL2main
+    nlohmann_json
+)
+target_include_directories(ArknightPreload SYSTEM PRIVATE
+    ${DEPENDENCY_INCLUDE_DIRS}
+    PTSD/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/PTSD/third_party/nlohmann_json/include
+)
+target_include_directories(ArknightPreload PRIVATE
+    include
+    include/Ark
+)
+if (MSVC)
+    target_compile_options(ArknightPreload PRIVATE /W4)
+else()
+    target_compile_options(ArknightPreload PRIVATE -Wall -Wextra -pedantic)
+endif()
+
 # Re-link ArknightBuilder from the main CMakeLists.txt instead of PTSD/CMakeLists.txt
 file(GLOB ARKNIGHT_BUILDER_SRC "tools/ark_builder/src/*.cpp")
 add_executable(ArknightBuilder
