@@ -21,7 +21,6 @@
 
 這個腳本會把專案同步到 `C:\ArkBuild` 這個英文路徑下建置。成功後會產生：
 
-建置時終端機只會顯示簡短英文進度；完整的 robocopy、Visual Studio、CMake 與 MSBuild 輸出會寫到 `build\logs`。同步到 `C:\ArkBuild` 時會略過 `data`、`docs`、Markdown 文件、舊的 `.obj` 測試檔與暫存 build 目錄，避免乾淨環境第一次建置時出現大量不必要的跳過訊息。
 
 ```text
 build\Arknight.exe

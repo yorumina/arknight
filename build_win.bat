@@ -11,6 +11,7 @@ set "ENV_LOG=%LOG_DIR%\build_win_env.log"
 set "CONFIG_LOG=%LOG_DIR%\build_win_configure.log"
 set "BUILD_LOG=%LOG_DIR%\build_win_build.log"
 set "COPY_LOG=%LOG_DIR%\build_win_copy.log"
+set "VSLANG=1033"
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%" >nul 2>&1
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>&1
@@ -62,20 +63,22 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo [3/5] Configuring CMake...
-cmake -S "%STAGING%" -B "%STAGING%\build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Debug > "%CONFIG_LOG%" 2>&1
+cmake -S "%STAGING%" -B "%STAGING%\build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Debug -DOpenGL_GL_PREFERENCE=LEGACY -Wno-deprecated > "%CONFIG_LOG%" 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] CMake configuration failed. See %LOG_DIR_TEXT%\build_win_configure.log.
     exit /b 1
 )
+echo CMake summary:
+findstr /B /C:"-- Selecting" /C:"-- Configuring done" /C:"-- Generating done" /C:"-- Build files have been written" "%CONFIG_LOG%"
 
 echo.
 echo [4/5] Building executables...
-cmake --build "%STAGING%\build" --target Arknight --config Debug > "%BUILD_LOG%" 2>&1
+cmake --build "%STAGING%\build" --target Arknight --config Debug -- /nologo /v:minimal /clp:NoSummary /p:PreferredUILang=en-US /fl "/flp:LogFile=%BUILD_LOG%;Verbosity=normal"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Arknight build failed. See %LOG_DIR_TEXT%\build_win_build.log.
     exit /b 1
 )
-cmake --build "%STAGING%\build" --target ArknightPreload --config Debug >> "%BUILD_LOG%" 2>&1
+cmake --build "%STAGING%\build" --target ArknightPreload --config Debug -- /nologo /v:minimal /clp:NoSummary /p:PreferredUILang=en-US /fl "/flp:LogFile=%BUILD_LOG%;Append;Verbosity=normal"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] ArknightPreload build failed. See %LOG_DIR_TEXT%\build_win_build.log.
     exit /b 1
