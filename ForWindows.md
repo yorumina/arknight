@@ -21,6 +21,8 @@
 
 這個腳本會把專案同步到 `C:\ArkBuild` 這個英文路徑下建置。成功後會產生：
 
+建置時終端機只會顯示簡短英文進度；完整的 robocopy、Visual Studio、CMake 與 MSBuild 輸出會寫到 `build\logs`。同步到 `C:\ArkBuild` 時會略過 `data`、`docs`、Markdown 文件、舊的 `.obj` 測試檔與暫存 build 目錄，避免乾淨環境第一次建置時出現大量不必要的跳過訊息。
+
 ```text
 build\Arknight.exe
 build\ArknightPreload.exe
@@ -81,4 +83,4 @@ Run the game with: .\build\Arknight.exe
 - 找不到 `ArknightPreload.exe`：先執行 `.\build_win.bat`。
 - 找不到 FFmpeg：確認 `ffmpeg.exe` 與 `ffprobe.exe` 在 PATH，或放在 `C:\Program Files\ffmpeg\bin`。
 - 找不到 Visual Studio：重新安裝 Visual Studio 2022 Build Tools，並勾選 `Desktop development with C++`。
-- CMake/MSVC 因路徑失敗：使用 `.\build_win.bat`，它會同步到 `C:\ArkBuild` 建置。
+- CMake/MSVC 因路徑失敗：使用 `.\build_win.bat`，它會同步到 `C:\ArkBuild` 建置；若失敗，先查看 `build\logs` 裡對應的 log。
