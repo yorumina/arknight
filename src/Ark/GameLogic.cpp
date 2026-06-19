@@ -32,9 +32,6 @@ constexpr float DEFAULT_CAMERA_SCALE_Y = PERSPECTIVE_Y_SCALE;
 constexpr float DEFAULT_CAMERA_SKEW_X = PERSPECTIVE_X_SHEAR;
 constexpr float DEFAULT_CAMERA_MIN_ZOOM = 0.7F;
 constexpr float DEFAULT_CAMERA_MAX_ZOOM = 1.8F;
-constexpr const char* STAGE_1_1_FILE = "Operation 1-1/stage";
-constexpr const char* STAGE_1_2_FILE = "Operation 1-2/stage";
-
 const char* GetEnvOption(const char* name) {
     if (const char* value = std::getenv(name);
         value != nullptr && value[0] != '\0') {
@@ -407,18 +404,7 @@ void App::UpdateGame(float dtMs) {
             } else {
                 m_FinishExitTimerMs += dtMs;
                 if (m_FinishExitTimerMs >= FINISH_FADE_OUT_MS) {
-                    if (Ark::ResolveStagePath(STAGE_1_2_FILE).has_value()) {
-                        m_CurrentStageFile = STAGE_1_2_FILE;
-                        // Reload stage JSON (lightweight), then go through LOADING for animations
-                        m_OperatorTemplates = Ark::LoadOperatorsWithFallback();
-                        if (!LoadStageFromJsonModule()) BuildFallbackStage();
-                        ResetDemo();
-                        m_LoadingPhase = 0;
-                        m_LoadingTimerMs = 0.0F;
-                        m_CurrentState = State::LOADING;
-                    } else {
-                        m_CurrentState = State::END;
-                    }
+                    BeginOpeningMenu();
                 }
             }
         }

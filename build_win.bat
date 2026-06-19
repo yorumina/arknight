@@ -18,7 +18,7 @@ if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>&1
 
 echo.
 echo === Arknight Windows Build ===
-echo Detailed logs are saved in %LOG_DIR_TEXT%.
+echo Logs: %LOG_DIR_TEXT%
 echo.
 echo [1/5] Syncing source to C:\ArkBuild...
 robocopy "%WORKSPACE%." "%STAGING%" /E /XD build test_build .git temp_test data docs /XF *.md *.obj .gitignore build_log.txt cmake_output.txt extract.sh imgui.ini /XJD /XJF /R:1 /W:1 /NFL /NDL /NJH /NJS /NP > "%SYNC_LOG%" 2>&1
@@ -68,19 +68,22 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] CMake configuration failed. See %LOG_DIR_TEXT%\build_win_configure.log.
     exit /b 1
 )
-echo CMake summary:
-findstr /B /C:"-- Selecting" /C:"-- Configuring done" /C:"-- Generating done" /C:"-- Build files have been written" "%CONFIG_LOG%"
 
 echo.
 echo [4/5] Building executables...
-cmake --build "%STAGING%\build" --target Arknight --config Debug -- /nologo /v:minimal /clp:NoSummary /p:PreferredUILang=en-US /fl "/flp:LogFile=%BUILD_LOG%;Verbosity=normal"
+cmake --build "%STAGING%\build" --target Arknight --config Debug -- /nologo /v:quiet /clp:ErrorsOnly;NoSummary /p:PreferredUILang=en-US > "%BUILD_LOG%" 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Arknight build failed. See %LOG_DIR_TEXT%\build_win_build.log.
     exit /b 1
 )
-cmake --build "%STAGING%\build" --target ArknightPreload --config Debug -- /nologo /v:minimal /clp:NoSummary /p:PreferredUILang=en-US /fl "/flp:LogFile=%BUILD_LOG%;Append;Verbosity=normal"
+cmake --build "%STAGING%\build" --target ArknightPreload --config Debug -- /nologo /v:quiet /clp:ErrorsOnly;NoSummary /p:PreferredUILang=en-US >> "%BUILD_LOG%" 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] ArknightPreload build failed. See %LOG_DIR_TEXT%\build_win_build.log.
+    exit /b 1
+)
+cmake --build "%STAGING%\build" --target ArknightBuilder --config Debug -- /nologo /v:quiet /clp:ErrorsOnly;NoSummary /p:PreferredUILang=en-US >> "%BUILD_LOG%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] ArknightBuilder build failed. See %LOG_DIR_TEXT%\build_win_build.log.
     exit /b 1
 )
 
@@ -96,8 +99,14 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Failed to copy ArknightPreload.exe. See %LOG_DIR_TEXT%\build_win_copy.log.
     exit /b 1
 )
+copy /Y "%STAGING%\build\Debug\ArknightBuilder.exe" "%BUILD_DIR%\ArknightBuilder.exe" >> "%COPY_LOG%" 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Failed to copy ArknightBuilder.exe. See %LOG_DIR_TEXT%\build_win_copy.log.
+    exit /b 1
+)
 
 echo.
 echo === Build successful ===
 echo Preload: .\run_preload.bat
 echo Run game: .\build\Arknight.exe
+echo Builder: .\build\ArknightBuilder.exe

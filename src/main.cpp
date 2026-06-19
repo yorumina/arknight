@@ -72,6 +72,10 @@ int main(int, char **) {
             app.Start();
             break;
 
+        case App::State::OPENING:
+            app.Opening();
+            break;
+
         case App::State::LOADING:
             app.Loading();
             break;

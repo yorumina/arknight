@@ -68,6 +68,8 @@ ArknightBuilder validate <file>
 ArknightBuilder simulate <file> [--duration <sec>]
 ArknightBuilder show <file>
 ArknightBuilder calibrate [file]
+ArknightBuilder menu-calibrate [image]
+ArknightBuilder opening-calibrate [video] [--target video1|video2] [--frame-sec <sec>] [--start-sec <sec>] [--end-sec <sec>]
 ```
 
 ## 命令說明
@@ -205,6 +207,43 @@ Wave 欄位：
 - `ESC`：關閉校準視窗
 
 相鄰格子的共用角點會一起移動，讓格線保持連續。
+
+### `menu-calibrate`
+
+開啟 loading page 選關按鈕校準 UI。
+
+```bash
+./build/ArknightBuilder menu-calibrate
+```
+
+這個工具預設開啟 `data/loadingpage/loadingpage_3.png`，讓你標定兩個選關按鈕的四角座標，並寫入 `data/loadingpage/menu_buttons.json` 給遊戲 runtime 使用。
+
+- Button 下拉選單：選擇 Operation 1-1 或 Operation 1-2
+- Corner 下拉選單：選擇要設定的角
+- 左鍵點圖：設定目前選擇的角
+- 拖曳黃色點：移動角點
+- 右鍵點圖：選擇滑鼠所在的按鈕
+- Save：儲存按鈕四角座標
+- `ESC`：關閉校準視窗
+
+### `opening-calibrate`
+
+開啟第一段開場影片的點擊區域與有效時間標定工具。
+
+```bash
+./build/ArknightBuilder opening-calibrate
+```
+
+工具會抽出影片預覽畫面，並把兩段影片分開寫入 `data/loadingpage/menu_buttons.json`：`video_1_action` 給第一段影片切換到第二段用，`video_2_awaken` 給第二段影片的開始喚醒按鈕用。工具會依影片檔名判斷目標，也可以用 `--target video1|video2` 強制指定。
+
+- `--target`：選擇 `video1` / `loginpage_1` 或 `video2` / `loginpage_2`
+- `--frame-sec`：用來標定的預覽影格秒數
+- `--start-sec`：最早接受點擊的秒數
+- `--end-sec`：最晚接受點擊的秒數
+- 左鍵點圖：設定目前選擇的角
+- 拖曳黃色點：移動角點
+- Save：儲存影片點擊區域與時間窗
+- `ESC`：關閉校準視窗
 
 ## 完整建立關卡範例
 

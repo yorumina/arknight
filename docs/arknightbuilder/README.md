@@ -68,6 +68,8 @@ ArknightBuilder validate <file>
 ArknightBuilder simulate <file> [--duration <sec>]
 ArknightBuilder show <file>
 ArknightBuilder calibrate [file]
+ArknightBuilder menu-calibrate [image]
+ArknightBuilder opening-calibrate [video] [--target video1|video2] [--frame-sec <sec>] [--start-sec <sec>] [--end-sec <sec>]
 ```
 
 ## Command Details
@@ -205,6 +207,43 @@ Calibration controls:
 - `ESC`: close the calibration window
 
 Connected corners move together, so shared vertices between neighboring cells stay aligned.
+
+### `menu-calibrate`
+
+Opens the loading page menu button calibration UI.
+
+```bash
+./build/ArknightBuilder menu-calibrate
+```
+
+Use this to mark the four corners of the two selectable loading page buttons. The tool opens `data/loadingpage/loadingpage_3.png` by default and writes `data/loadingpage/menu_buttons.json`.
+
+- Button dropdown: choose Operation 1-1 or Operation 1-2
+- Corner dropdown: choose which corner to set
+- Left-click map: set the selected corner
+- Drag yellow point: move a corner
+- Right-click map: select the hovered button
+- Save: persist the button quads used by the game runtime
+- `ESC`: close the calibration window
+
+### `opening-calibrate`
+
+Opens the loading page video click calibration UI for the first startup video.
+
+```bash
+./build/ArknightBuilder opening-calibrate
+```
+
+The tool extracts a preview frame and writes separate calibration records into `data/loadingpage/menu_buttons.json`: `video_1_action` for the first video transition, and `video_2_awaken` for the second video's awaken button. The target is inferred from the video filename, or can be forced with `--target video1|video2`.
+
+- `--target`: choose `video1` for `loginpage_1` or `video2` for `loginpage_2`
+- `--frame-sec`: preview frame to extract for marking the click area
+- `--start-sec`: earliest accepted click time
+- `--end-sec`: latest accepted click time
+- Left-click frame: set the selected corner
+- Drag yellow point: move a corner
+- Save: persist the video click quad and time window
+- `ESC`: close the calibration window
 
 ## Full Stage Creation Example
 

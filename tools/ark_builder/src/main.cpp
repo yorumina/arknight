@@ -37,6 +37,10 @@ auto main(int argc, char** argv) -> int {
             ark_builder::RunShow(args);
         } else if (command == "calibrate") {
             ark_builder::RunCalibrate(args);
+        } else if (command == "menu-calibrate") {
+            ark_builder::RunMenuCalibrate(args);
+        } else if (command == "opening-calibrate") {
+            ark_builder::RunOpeningCalibrate(args);
         } else {
             throw ark_builder::CliError("unknown command: " + command);
         }

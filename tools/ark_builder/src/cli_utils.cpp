@@ -80,6 +80,8 @@ Commands:
   simulate <file> [--duration <sec>]
   show <file>
   calibrate [file]
+  menu-calibrate [image]
+  opening-calibrate [video] [--target video1|video2] [--frame-sec <sec>] [--start-sec <sec>] [--end-sec <sec>]
 
 Tiles:
   empty | road | ground | highground | unusablehighground | spawn | goal

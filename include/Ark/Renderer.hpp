@@ -29,6 +29,7 @@ public:
     void DrawMissionCompleteOverlay(float screenW, float screenH);
     void DrawLoadingScreen();
     void DrawImageCover(const std::string& imagePath, float alpha, bool drawBlackFill);
+    void DrawImageCover(const std::shared_ptr<Util::Image>& image, float alpha, bool drawBlackFill);
     std::shared_ptr<Util::Image> GetTileImage(const std::string& imagePath);
 
 private:

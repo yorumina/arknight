@@ -14,5 +14,7 @@ void RunValidate(const std::vector<std::string>& args);
 void RunSimulate(const std::vector<std::string>& args);
 void RunShow(const std::vector<std::string>& args);
 void RunCalibrate(const std::vector<std::string>& args);
+void RunMenuCalibrate(const std::vector<std::string>& args);
+void RunOpeningCalibrate(const std::vector<std::string>& args);
 
 } // namespace ark_builder

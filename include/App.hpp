@@ -20,20 +20,50 @@ constexpr float PERSPECTIVE_X_SHEAR = 0.0F;
 
 namespace Ark {
 class AppRenderer;
+class OpeningVideoPlayer;
 }
 
 class App {
     friend class Ark::AppRenderer;
 public:
-    enum class State { START, LOADING, UPDATE, END };
+    enum class State { START, OPENING, LOADING, UPDATE, END };
+    App();
+    ~App();
     State GetCurrentState() const { return m_CurrentState; }
 
     void Start();
+    void Opening();
     void Loading();
     void Update();
     void End(); // NOLINT(readability-convert-member-functions-to-static)
 
 private:
+    enum class OpeningPhase {
+        VIDEO_1,
+        VIDEO_1_FADE_OUT,
+        VIDEO_2_FADE_IN,
+        VIDEO_2,
+        VIDEO_2_PAUSED,
+        VIDEO_2_RESUME,
+        MENU_FADE_IN,
+        MENU
+    };
+
+    struct OpeningMenuButton {
+        std::string id;
+        std::string label;
+        std::string stageFile;
+        std::array<glm::vec2, 4> corners{};
+        bool enabled = false;
+    };
+
+    struct OpeningVideoAction {
+        std::array<glm::vec2, 4> corners{};
+        float startMs = 5000.0F;
+        float endMs = 600000.0F;
+        bool enabled = true;
+    };
+
     struct CameraState {
         float projectionScaleX = 1.0F;
         float projectionScaleY = PERSPECTIVE_Y_SCALE;
@@ -54,6 +84,16 @@ private:
     void LoadEnemyAnimations();
     void PreloadEnemyAnimationClips();
     void ResetCameraToStageDefaults();
+    void BeginOpeningSequence();
+    void BeginOpeningMenu();
+    void BeginStageLoading(const std::string& stageFile);
+    void LoadOpeningMenuButtons();
+    void LoadOpeningMenuImage();
+    void LoadOpeningVideoAction();
+    void LoadOpeningVideo2Action();
+    bool HandleOpeningMenuClick(float screenCursorX, float screenCursorY);
+    bool IsOpeningVideo1ActionClicked(float screenCursorX, float screenCursorY) const;
+    bool IsOpeningAwakenButtonClicked(float screenCursorX, float screenCursorY) const;
 
     void UpdateGame(float dt);
     void UpdateWave(float deltaTimeSec);
@@ -145,6 +185,18 @@ private:
     float m_FinishExitTimerMs = 0.0F;
     int   m_LoadingPhase = 0;  // 0=fade in, 1=load assets, 2=hold/fade out
     float m_LoadingTimerMs = 0.0F;
+    OpeningPhase m_OpeningPhase = OpeningPhase::VIDEO_1;
+    float m_OpeningFadeTimerMs = 0.0F;
+    std::string m_OpeningVideo1Path;
+    std::string m_OpeningVideo2Path;
+    std::string m_OpeningMenuImagePath;
+    std::unique_ptr<Ark::OpeningVideoPlayer> m_OpeningVideo;
+    std::shared_ptr<Util::Image> m_OpeningMenuImage;
+    OpeningVideoAction m_OpeningVideo1Action;
+    OpeningVideoAction m_OpeningVideo2Action;
+    std::array<OpeningMenuButton, 2> m_OpeningMenuButtons;
+    bool m_OpeningMouseWasDown = false;
+    bool m_OpeningVideo2Awakened = false;
 
     // Economy
     float m_DP            = 10.0F;

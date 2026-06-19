@@ -274,6 +274,36 @@ void Ark::AppRenderer::DrawImageCover(const std::string& imagePath, float alpha,
     }
 }
 
+void Ark::AppRenderer::DrawImageCover(const std::shared_ptr<Util::Image>& image, float alpha, bool drawBlackFill) {
+    ImDrawList* draw = ImGui::GetBackgroundDrawList();
+    const float screenW = static_cast<float>(PTSD_Config::WINDOW_WIDTH);
+    const float screenH = static_cast<float>(PTSD_Config::WINDOW_HEIGHT);
+
+    if (drawBlackFill) {
+        draw->AddRectFilled({0.0F, 0.0F}, {screenW, screenH}, IM_COL32(0, 0, 0, 255));
+    }
+
+    if (image == nullptr || image->GetTextureId() == 0) return;
+
+    const glm::vec2 imageSize = image->GetSize();
+    if (imageSize.x <= 0.0F || imageSize.y <= 0.0F) return;
+
+    const float scale = std::max(screenW / imageSize.x, screenH / imageSize.y);
+    const float drawW = imageSize.x * scale;
+    const float drawH = imageSize.y * scale;
+    const float x = (screenW - drawW) * 0.5F;
+    const float y = (screenH - drawH) * 0.5F;
+    const int imageAlpha = static_cast<int>(std::clamp(alpha, 0.0F, 1.0F) * 255.0F);
+    draw->AddImage(
+        reinterpret_cast<void*>(static_cast<intptr_t>(image->GetTextureId())),
+        {x, y},
+        {x + drawW, y + drawH},
+        {0.0F, 0.0F},
+        {1.0F, 1.0F},
+        IM_COL32(255, 255, 255, imageAlpha)
+    );
+}
+
 void Ark::AppRenderer::DrawLoadingScreen() {
     DrawImageCover(m_App.m_StageBackgroundPath, m_App.m_StageBackgroundAlpha, true);
 }
