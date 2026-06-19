@@ -1,4 +1,4 @@
-# Arknight Linux
+# Arknight
 
 English | [Traditional Chinese](README_zh-tw.md)
 
